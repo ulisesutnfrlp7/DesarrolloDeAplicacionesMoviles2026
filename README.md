@@ -1,4 +1,4 @@
-# Desarrollo de Aplicaciones Móviles 2026
+# Desarrollo de Aplicaciones Móviles 2026 - Grupo 8
 
 ## Integrantes del Grupo
 
