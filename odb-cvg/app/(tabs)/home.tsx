@@ -21,7 +21,7 @@ export default function HomeScreen() {
 
   // ESTADO TEMPORAL PARA PROBAR LOS ROLES MIENTRAS MI PANA ACTIVA FIREBASE
   // 'alumno', 'profesor' o 'admin' para probars roles
-  const [rolUsuario, setRolUsuario] = useState('profesor'); 
+  const [rolUsuario, setRolUsuario] = useState('admin'); 
 
   const handleCerrarSesion = async () => {
     try {
