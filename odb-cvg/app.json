@@ -21,6 +21,12 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
+    "androidStatusBar": {
+      "hidden": true
+    },
+    "androidNavigationBar": {
+      "visible": "sticky-immersive"
+    },
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
