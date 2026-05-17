@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { signOut } from 'firebase/auth';
-import { auth } from '../../config/firebaseConfig';
-import ModalConfirmacion from '../../components/ui/ModalConfirmacion'; 
+import { signOut, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../config/firebaseConfig';
+import ModalConfirmacion from '../../components/ui/ModalConfirmacion';
 
 // Simulación para ver algo en pantalla (no sirve para despues)
 const NIVELES_ODONTO = [
@@ -19,9 +20,33 @@ export default function HomeScreen() {
   const [niveles] = useState(NIVELES_ODONTO);
   const [modalVisible, setModalVisible] = useState(false);
 
-  // ESTADO TEMPORAL PARA PROBAR LOS ROLES MIENTRAS MI PANA ACTIVA FIREBASE
-  // 'alumno', 'profesor' o 'admin' para probars roles
-  const [rolUsuario, setRolUsuario] = useState('profesor'); 
+  const [rolUsuario, setRolUsuario] = useState(''); 
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const docRef = doc(db, 'usuarios', user.uid);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists()) {
+            setRolUsuario(docSnap.data().rol); // Setear 'alumno' (o lo que diga la BD)
+          } else {
+            console.log("No se encontró el documento del usuario");
+          }
+        } catch (error) {
+          console.error("Error al obtener rol:", error);
+        } finally {
+          setCargando(false);
+        }
+      } else {
+        setCargando(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleCerrarSesion = async () => {
     try {
@@ -33,6 +58,14 @@ export default function HomeScreen() {
       router.replace('/login' as any);
     }
   };
+
+  if (cargando) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#25B471" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

@@ -1,21 +1,28 @@
 //app/registro.tsx
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebaseConfig';
+import ModalAlerta from '../components/ui/ModalAlerta';
 
 export default function RegistroScreen() {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [modalConfig, setModalConfig] = useState({ visible: false, titulo: '', mensaje: '', tipo: 'error' as 'error' | 'exito' });
+
+  const mostrarModal = (titulo: string, mensaje: string, tipo: 'error' | 'exito') => {
+    setModalConfig({ visible: true, titulo, mensaje, tipo });
+  };
 
   const handleRegistro = async () => {
     if (!nombre || !email || !password) {
-      Alert.alert('Error', 'Por favor completá todos los campos.');
+      mostrarModal('Campos incompletos', 'Por favor completá todos los datos solicitados.', 'error');
       return;
     }
+    
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const user = userCredential.user;
@@ -23,14 +30,27 @@ export default function RegistroScreen() {
       await setDoc(doc(db, 'usuarios', user.uid), {
         nombre: nombre,
         email: email.trim(),
-        rol: 'alumno', // Rol asignado por defecto
+        rol: 'alumno',
         fechaRegistro: new Date()
       });
 
-      Alert.alert('Éxito', 'Cuenta creada correctamente.');
-      router.replace('/(tabs)/home' as any);
+      mostrarModal('¡Cuenta Creada!', 'Te registraste exitosamente.', 'exito');
+      setTimeout(() => {
+        setModalConfig({ ...modalConfig, visible: false });
+        router.replace('/(tabs)/home' as any);
+      }, 1500);
+
     } catch (error: any) {
-      Alert.alert('Error al registrarse', error.message);
+      let mensajeError = 'Ocurrió un error inesperado. Intentá nuevamente.';
+      if (error.code === 'auth/email-already-in-use') {
+        mensajeError = 'Este correo ya está registrado. Por favor, iniciá sesión.';
+      } else if (error.code === 'auth/weak-password') {
+        mensajeError = 'La contraseña es muy débil. Debe tener al menos 6 caracteres.';
+      } else if (error.code === 'auth/invalid-email') {
+        mensajeError = 'El formato del correo electrónico no es válido.';
+      }
+
+      mostrarModal('Error al registrarse', mensajeError, 'error');
     }
   };
 
@@ -59,6 +79,13 @@ export default function RegistroScreen() {
           <Text style={styles.linkText}>¿Ya tenés cuenta? Iniciá sesión</Text>
         </TouchableOpacity>
       </View>
+    <ModalAlerta 
+        visible={modalConfig.visible}
+        titulo={modalConfig.titulo}
+        mensaje={modalConfig.mensaje}
+        tipo={modalConfig.tipo}
+        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+      />
     </View>
   );
 }
