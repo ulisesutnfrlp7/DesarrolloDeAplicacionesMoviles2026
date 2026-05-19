@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
@@ -5,24 +6,21 @@ import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import ModalConfirmacion from '../../components/ui/ModalConfirmacion';
-import { Ionicons } from '@expo/vector-icons';
-
-// Simulación para ver algo en pantalla (no sirve para despues)
-const NIVELES_ODONTO = [
-  { id: '1', año: '3ro', nivel: 'Nivel 1', estado: 'Aprobado' },
-  { id: '2', año: '3ro', nivel: 'Nivel 2', estado: 'En curso' },
-  { id: '3', año: '4to', nivel: 'Nivel 3', estado: 'Pendiente' },
-  { id: '4', año: '4to', nivel: 'Nivel 4', estado: 'Pendiente' },
-  { id: '5', año: '5to', nivel: 'Nivel 5', estado: 'Pendiente' },
-  { id: '6', año: '5to', nivel: 'Nivel 6', estado: 'Pendiente' },
-];
+import { Ionicons } from "@expo/vector-icons";
+import ModalAlerta from "../../components/ui/ModalAlerta";
+import ModuloCard from "../../components/ui/ModuloCard";
+import { useModulos } from "../../hooks/useModulos";
+import { useUserRole } from "../../hooks/useUserRole";
 
 export default function HomeScreen() {
-  const [niveles] = useState(NIVELES_ODONTO);
+  
   const [modalVisible, setModalVisible] = useState(false);
-
   const [rolUsuario, setRolUsuario] = useState(''); 
   const [cargando, setCargando] = useState(true);
+    
+  const { rol, loading: loadingRol } = useUserRole();
+  const { modulos, loading: loadingModulos, eliminarModulo } = useModulos();
+    
   console.log(auth.currentUser);
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -46,23 +44,52 @@ export default function HomeScreen() {
       }
     });
 
-    return () => unsubscribe();
-  }, []);
+
+  const [modalSalir, setModalSalir] = useState(false);
+  const [moduloAEliminar, setModuloAEliminar] = useState<string | null>(null);
+  const [alerta, setAlerta] = useState<{
+    visible: boolean;
+    titulo: string;
+    mensaje: string;
+    tipo: "error" | "exito";
+  }>({ visible: false, titulo: "", mensaje: "", tipo: "exito" });
 
   const handleCerrarSesion = async () => {
     try {
-      setModalVisible(false);
+      setModalSalir(false);
       await signOut(auth);
-      router.replace('/login' as any);
+      router.replace("/login" as any);
     } catch (error: any) {
-      Alert.alert('Aviso', 'Sesión cerrada localmente (Firebase arrojó error: ' + error.message + ')');
-      router.replace('/login' as any);
+      Alert.alert("Aviso", "Sesión cerrada localmente.");
+      router.replace("/login" as any);
     }
   };
 
-  if (cargando) {
+  const handleEliminar = async () => {
+    if (!moduloAEliminar) return;
+    try {
+      await eliminarModulo(moduloAEliminar);
+      setModuloAEliminar(null);
+      setAlerta({
+        visible: true,
+        titulo: "Eliminado",
+        mensaje: "Módulo eliminado correctamente.",
+        tipo: "exito",
+      });
+    } catch {
+      setModuloAEliminar(null);
+      setAlerta({
+        visible: true,
+        titulo: "Error",
+        mensaje: "No se pudo eliminar el módulo.",
+        tipo: "error",
+      });
+    }
+  };
+
+  if (loadingRol || loadingModulos) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color="#25B471" />
       </View>
     );
@@ -70,18 +97,17 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.headerTitles}>
           <View style={styles.titleWithBadge}>
             <Text style={styles.headerText}>CVG - Odonto B</Text>
-            
-            {/*  CARTELITOS DE ROL PARA DIFERENCIA ENTRE LOS DISTINTOS TIPOS DE USUARIO */}
-            {rolUsuario === 'admin' && (
+            {rol === "admin" && (
               <View style={[styles.badge, styles.badgeAdmin]}>
                 <Text style={styles.badgeTextAdmin}>Admin</Text>
               </View>
             )}
-            {rolUsuario === 'profesor' && (
+            {rol === "profesor" && (
               <View style={[styles.badge, styles.badgeProfe]}>
                 <Text style={styles.badgeTextProfe}>Profesor</Text>
               </View>
@@ -105,92 +131,142 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={niveles}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card}>
-            <View>
-              <Text style={styles.cardTitle}>{item.nivel} ({item.año} Año)</Text>
-              <Text style={styles.cardStatus}>Estado: {item.estado}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-      />
+      {/* Grid de módulos */}
+      {modulos.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="folder-open-outline" size={52} color="#CBD5E0" />
+          <Text style={styles.emptyText}>
+            {rol === "admin"
+              ? "No hay módulos. Presioná + para agregar el primero."
+              : "No hay módulos disponibles aún."}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={modulos}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => (
+            <ModuloCard
+              titulo={item.titulo}
+              descripcionCorta={item.descripcionCorta}
+              icono={item.icono || "book-outline"}
+              esAdmin={rol === "admin"}
+              onPress={() => router.push(`/modulos/${item.id}` as any)}
+              onEditar={() =>
+                router.push(`/modulos/form?moduloId=${item.id}` as any)
+              }
+              onEliminar={() => setModuloAEliminar(item.id)}
+            />
+          )}
+        />
+      )}
 
-      <ModalConfirmacion 
-        visible={modalVisible}
+      {/* FAB solo para admin */}
+      {rol === "admin" && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => router.push("/modulos/form" as any)}
+        >
+          <Ionicons name="add" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
+
+      {/* Modales */}
+      <ModalConfirmacion
+        visible={modalSalir}
         titulo="Cerrar Sesión"
         mensaje="¿Estás seguro de que deseas cerrar sesión? Tendrás que volver a ingresar tus credenciales la próxima vez."
         textoConfirmar="Sí, salir"
         textoCancelar="Cancelar"
         onConfirm={handleCerrarSesion}
-        onCancel={() => setModalVisible(false)}
+        onCancel={() => setModalSalir(false)}
+      />
+      <ModalConfirmacion
+        visible={moduloAEliminar !== null}
+        titulo="Eliminar Módulo"
+        mensaje="¿Estás seguro? Esta acción eliminará el módulo y todas sus secciones de forma permanente."
+        textoConfirmar="Sí, eliminar"
+        textoCancelar="Cancelar"
+        onConfirm={handleEliminar}
+        onCancel={() => setModuloAEliminar(null)}
+      />
+      <ModalAlerta
+        visible={alerta.visible}
+        titulo={alerta.titulo}
+        mensaje={alerta.mensaje}
+        tipo={alerta.tipo}
+        onClose={() => setAlerta((prev) => ({ ...prev, visible: false }))}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#f0f4f8' },
-  headerRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'flex-start',
-    marginTop: 40,
-    marginBottom: 25 
-  },
-  headerTitles: {
+  container: { flex: 1, backgroundColor: "#F5F5F5" },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  emptyContainer: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
   },
+  emptyText: {
+    marginTop: 14,
+    fontSize: 14,
+    color: "#9CA3AF",
+    textAlign: "center",
+    lineHeight: 21,
+  },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingHorizontal: 20,
+    paddingTop: 48,
+    paddingBottom: 16,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  headerTitles: { flex: 1 },
   titleWithBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
   },
-  headerText: { fontSize: 24, fontWeight: 'bold', color: '#1a202c' },
-  
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeAdmin: {
-    backgroundColor: '#0F4A32',
-    borderWidth: 1,
-    borderColor: '#0F4A32',
-  },
+  headerText: { fontSize: 22, fontWeight: "bold", color: "#11181C" },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  badgeAdmin: { backgroundColor: "#0F4A32" },
   badgeTextAdmin: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "bold",
+    textTransform: "uppercase",
   },
   badgeProfe: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: "#E8F5E9",
     borderWidth: 1,
-    borderColor: '#25B471',
+    borderColor: "#25B471",
   },
   badgeTextProfe: {
-    color: '#0F4A32',
-    fontSize: 12,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
+    color: "#0F4A32",
+    fontSize: 11,
+    fontWeight: "bold",
+    textTransform: "uppercase",
   },
-
-  subHeaderText: { fontSize: 14, color: '#4a5568', marginTop: 4 },
+  subHeaderText: { fontSize: 13, color: "#6B7280", marginTop: 3 },
   logoutButton: {
-    backgroundColor: '#E2E8F0',
-    paddingHorizontal: 15,
+    backgroundColor: "#E2E8F0",
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
-    justifyContent: 'center',
-    minHeight: 48,
     marginLeft: 10,
   },
+
   logoutButtonText: { color: '#4A5568', fontWeight: 'bold', fontSize: 14 },
   card: { backgroundColor: 'white', padding: 20, borderRadius: 12, marginBottom: 15, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 3 },
   cardTitle: { fontSize: 18, fontWeight: '700', color: '#2b6cb0' },
@@ -220,3 +296,24 @@ const styles = StyleSheet.create({
   
 
 });
+
+  listContent: { padding: 16, paddingBottom: 90 },
+  row: { gap: 12, marginBottom: 12 },
+  fab: {
+    position: "absolute",
+    bottom: 28,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#0F4A32",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+});
+
