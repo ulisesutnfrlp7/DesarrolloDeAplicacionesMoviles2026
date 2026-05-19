@@ -33,16 +33,6 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="userManagementScreen"
-        options={{
-          title: 'Usuarios',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-sharp" size={size} color={color} />
-          ),
-        }}
-      />
-
     </Tabs>
   );
 }
