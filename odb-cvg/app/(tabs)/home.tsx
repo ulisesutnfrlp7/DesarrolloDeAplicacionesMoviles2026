@@ -5,6 +5,7 @@ import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import ModalConfirmacion from '../../components/ui/ModalConfirmacion';
+import { Ionicons } from '@expo/vector-icons';
 
 // Simulación para ver algo en pantalla (no sirve para despues)
 const NIVELES_ODONTO = [
@@ -22,7 +23,7 @@ export default function HomeScreen() {
 
   const [rolUsuario, setRolUsuario] = useState(''); 
   const [cargando, setCargando] = useState(true);
-
+  console.log(auth.currentUser);
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -88,6 +89,16 @@ export default function HomeScreen() {
           </View>
           <Text style={styles.subHeaderText}>Facultad de Odontología UNLP</Text>
         </View>
+
+        {/*Boton para ir a pantalla de administracion de usuarios, solo visible para admins*/}
+        {rolUsuario === 'admin' && (
+          <TouchableOpacity
+            style={styles.adminButton}
+            onPress={() => router.push('../pantallasAdmin/userManagementScreen')}
+          >
+            <Ionicons name="person" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+          </TouchableOpacity>
+        )}
         
         <TouchableOpacity style={styles.logoutButton} onPress={() => setModalVisible(true)}>
           <Text style={styles.logoutButtonText}>Salir</Text>
@@ -183,5 +194,29 @@ const styles = StyleSheet.create({
   logoutButtonText: { color: '#4A5568', fontWeight: 'bold', fontSize: 14 },
   card: { backgroundColor: 'white', padding: 20, borderRadius: 12, marginBottom: 15, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 3 },
   cardTitle: { fontSize: 18, fontWeight: '700', color: '#2b6cb0' },
-  cardStatus: { fontSize: 15, color: '#718096', marginTop: 8 }
+  cardStatus: { fontSize: 15, color: '#718096', marginTop: 8 },
+
+  adminButton: {
+  backgroundColor: '#0F4A32',
+  paddingVertical: 14,
+  paddingHorizontal: 18,
+  borderRadius: 12,
+  marginBottom: 20,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  shadowColor: '#000',
+  shadowOpacity: 0.08,
+  shadowRadius: 5,
+  elevation: 3,
+  },
+
+  adminButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  
+
 });
