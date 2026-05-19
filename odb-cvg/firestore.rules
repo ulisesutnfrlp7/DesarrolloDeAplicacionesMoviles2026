@@ -2,13 +2,39 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Reglas de seguridad para la colección 'usuarios'
+
+    // Helpers de rol — leen el documento del usuario autenticado
+    function isAdmin() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
+    }
+
+    function isProfesor() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'profesor';
+    }
+
+    // Colección 'usuarios': solo el propio usuario puede leer/escribir su documento
     match /usuarios/{userId} {
-      // Solo permite leer o escribir si el usuario inició sesión (auth != null)
-      // y si el ID del documento coincide con el UID del usuario logueado.
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-    
+
+    // Colección 'modulos': lectura para todos los autenticados, escritura solo admin
+    match /modulos/{moduloId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isAdmin();
+
+      // Subcollección 'secciones': lectura para todos, escritura para admin y profesor
+      match /secciones/{seccionId} {
+        allow read: if request.auth != null;
+        allow create, update, delete: if isAdmin() || isProfesor();
+
+        // Subcolección 'items': lectura para todos, escritura para admin y profesor
+        match /items/{itemId} {
+          allow read: if request.auth != null;
+          allow create, update, delete: if isAdmin() || isProfesor();
+        }
+      }
+    }
   }
 }
