@@ -16,13 +16,6 @@ export default function LoginScreen() {
 
     const mailFormateado = email.toLowerCase().trim();
 
-    //  PRUEBA MIENTRAS ULI VUELVE (Borrar despues)
-    if (mailFormateado === 'test@unlp.edu.ar' && password === '123456') {
-      Alert.alert('Modo de Prueba', 'Ingresando con usuario temporal...');
-      router.replace('/(tabs)/home' as any); 
-      return;
-    }
-
     try {
       await signInWithEmailAndPassword(auth, mailFormateado, password);
       router.replace('/(tabs)/home' as any);
