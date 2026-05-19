@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { doc, getDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import React, { useEffect, useState } from "react";
 import {
@@ -16,7 +17,7 @@ import {
     View,
 } from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
-import { storage } from "../../config/firebaseConfig";
+import { db, storage } from "../../config/firebaseConfig";
 import type { ItemTipo } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
 import { useUserRole } from "../../hooks/useUserRole";
@@ -29,13 +30,15 @@ const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
 ];
 
 export default function ItemFormScreen() {
-  const { moduloId, seccionId } = useLocalSearchParams<{
+  const { moduloId, seccionId, itemId } = useLocalSearchParams<{
     moduloId: string;
     seccionId: string;
+    itemId?: string;
   }>();
+  const modoEdicion = !!itemId;
 
   const { rol, loading: loadingRol } = useUserRole();
-  const { crearItem } = useItems(moduloId, seccionId);
+  const { crearItem, actualizarItem } = useItems(moduloId, seccionId);
 
   const [tipo, setTipo] = useState<ItemTipo>("texto");
   const [titulo, setTitulo] = useState("");
@@ -44,6 +47,12 @@ export default function ItemFormScreen() {
     uri: string;
     nombre: string;
   } | null>(null);
+  const [archivoExistente, setArchivoExistente] = useState<{
+    nombre: string;
+    url: string;
+    storageRef: string;
+  } | null>(null);
+  const [cargandoDatos, setCargandoDatos] = useState(!!itemId);
   const [subiendo, setSubiendo] = useState(false);
   const [alerta, setAlerta] = useState<{
     visible: boolean;
@@ -59,10 +68,41 @@ export default function ItemFormScreen() {
     cerrarAlSalir: false,
   });
 
-  // Al cambiar de tipo, limpiar el archivo seleccionado
+  // Al cambiar de tipo, limpiar el archivo recién seleccionado (no el existente)
   useEffect(() => {
     setArchivo(null);
   }, [tipo]);
+
+  // Cargar datos del item existente en modo edición
+  useEffect(() => {
+    if (!modoEdicion || !itemId) return;
+    const cargar = async () => {
+      try {
+        const snap = await getDoc(
+          doc(db, "modulos", moduloId, "secciones", seccionId, "items", itemId),
+        );
+        if (snap.exists()) {
+          const data = snap.data();
+          setTipo(data.tipo ?? "texto");
+          setTitulo(data.titulo ?? "");
+          setContenido(data.contenido ?? "");
+          if (data.url) {
+            setArchivoExistente({
+              nombre: data.nombreArchivo ?? "",
+              url: data.url ?? "",
+              storageRef: data.storageRef ?? "",
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error al cargar item:", error);
+      } finally {
+        setCargandoDatos(false);
+      }
+    };
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId]);
 
   const elegirArchivo = async () => {
     if (tipo === "imagen") {
@@ -113,7 +153,7 @@ export default function ItemFormScreen() {
       });
       return;
     }
-    if (tipo !== "texto" && !archivo) {
+    if (tipo !== "texto" && !archivo && !modoEdicion) {
       setAlerta({
         visible: true,
         titulo: "Sin archivo",
@@ -126,52 +166,97 @@ export default function ItemFormScreen() {
 
     setSubiendo(true);
     try {
-      if (tipo === "texto") {
-        if (!contenido.trim() && !titulo.trim()) {
-          setAlerta({
-            visible: true,
-            titulo: "Campos vacíos",
-            mensaje: "Ingresá al menos un título o contenido.",
-            tipo: "error",
-            cerrarAlSalir: false,
+      if (modoEdicion && itemId) {
+        // ── Modo edición ────────────────────────────────────────────────────
+        if (tipo === "texto") {
+          if (!contenido.trim() && !titulo.trim()) {
+            setAlerta({
+              visible: true,
+              titulo: "Campos vacíos",
+              mensaje: "Ingresá al menos un título o contenido.",
+              tipo: "error",
+              cerrarAlSalir: false,
+            });
+            setSubiendo(false);
+            return;
+          }
+          await actualizarItem(itemId, {
+            titulo: titulo.trim() || "Texto",
+            contenido: contenido.trim(),
           });
-          setSubiendo(false);
-          return;
+        } else if (archivo) {
+          // Reemplazar con nuevo archivo
+          const storageRefPath = `modulos/${moduloId}/secciones/${seccionId}/${Date.now()}_${archivo.nombre}`;
+          const fileRef = ref(storage, storageRefPath);
+          const response = await fetch(archivo.uri);
+          const blob = await response.blob();
+          await uploadBytes(fileRef, blob);
+          const url = await getDownloadURL(fileRef);
+          await actualizarItem(itemId, {
+            titulo: titulo.trim() || archivo.nombre,
+            url,
+            storageRef: storageRefPath,
+            nombreArchivo: archivo.nombre,
+          });
+        } else {
+          // Mantener archivo existente, solo actualizar título
+          await actualizarItem(itemId, {
+            titulo: titulo.trim() || archivoExistente?.nombre || "",
+          });
         }
-        await crearItem({
-          tipo: "texto",
-          titulo: titulo.trim() || "Texto",
-          contenido: contenido.trim(),
-          url: "",
-          storageRef: "",
-          nombreArchivo: "",
+        setAlerta({
+          visible: true,
+          titulo: "Actualizado",
+          mensaje: "El elemento fue actualizado correctamente.",
+          tipo: "exito",
+          cerrarAlSalir: true,
         });
       } else {
-        // Subir archivo a Firebase Storage
-        const storageRefPath = `modulos/${moduloId}/secciones/${seccionId}/${Date.now()}_${archivo!.nombre}`;
-        const fileRef = ref(storage, storageRefPath);
-        const response = await fetch(archivo!.uri);
-        const blob = await response.blob();
-        await uploadBytes(fileRef, blob);
-        const url = await getDownloadURL(fileRef);
-
-        await crearItem({
-          tipo,
-          titulo: titulo.trim() || archivo!.nombre,
-          contenido: "",
-          url,
-          storageRef: storageRefPath,
-          nombreArchivo: archivo!.nombre,
+        // ── Modo creación ───────────────────────────────────────────────────
+        if (tipo === "texto") {
+          if (!contenido.trim() && !titulo.trim()) {
+            setAlerta({
+              visible: true,
+              titulo: "Campos vacíos",
+              mensaje: "Ingresá al menos un título o contenido.",
+              tipo: "error",
+              cerrarAlSalir: false,
+            });
+            setSubiendo(false);
+            return;
+          }
+          await crearItem({
+            tipo: "texto",
+            titulo: titulo.trim() || "Texto",
+            contenido: contenido.trim(),
+            url: "",
+            storageRef: "",
+            nombreArchivo: "",
+          });
+        } else {
+          const storageRefPath = `modulos/${moduloId}/secciones/${seccionId}/${Date.now()}_${archivo!.nombre}`;
+          const fileRef = ref(storage, storageRefPath);
+          const response = await fetch(archivo!.uri);
+          const blob = await response.blob();
+          await uploadBytes(fileRef, blob);
+          const url = await getDownloadURL(fileRef);
+          await crearItem({
+            tipo,
+            titulo: titulo.trim() || archivo!.nombre,
+            contenido: "",
+            url,
+            storageRef: storageRefPath,
+            nombreArchivo: archivo!.nombre,
+          });
+        }
+        setAlerta({
+          visible: true,
+          titulo: "Guardado",
+          mensaje: "El elemento fue agregado correctamente.",
+          tipo: "exito",
+          cerrarAlSalir: true,
         });
       }
-
-      setAlerta({
-        visible: true,
-        titulo: "Guardado",
-        mensaje: "El elemento fue agregado correctamente.",
-        tipo: "exito",
-        cerrarAlSalir: true,
-      });
     } catch {
       setAlerta({
         visible: true,
@@ -191,7 +276,7 @@ export default function ItemFormScreen() {
     if (debeVolver) router.back();
   };
 
-  if (loadingRol) {
+  if (loadingRol || cargandoDatos) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#25B471" />
@@ -221,13 +306,17 @@ export default function ItemFormScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Stack.Screen options={{ title: "Agregar elemento" }} />
+      <Stack.Screen
+        options={{
+          title: modoEdicion ? "Editar elemento" : "Agregar elemento",
+        }}
+      />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Selector de tipo */}
+        {/* Selector de tipo — bloqueado en modo edición */}
         <Text style={styles.label}>Tipo de contenido</Text>
         <View style={styles.tipoGrid}>
           {TIPOS.map((t) => (
@@ -236,8 +325,10 @@ export default function ItemFormScreen() {
               style={[
                 styles.tipoOption,
                 tipo === t.key && styles.tipoOptionSelected,
+                modoEdicion && tipo !== t.key && styles.tipoOptionDisabled,
               ]}
-              onPress={() => setTipo(t.key)}
+              onPress={() => !modoEdicion && setTipo(t.key)}
+              activeOpacity={modoEdicion ? 1 : 0.7}
             >
               <Ionicons
                 name={t.icono as any}
@@ -294,8 +385,21 @@ export default function ItemFormScreen() {
         {tipo !== "texto" && (
           <>
             <Text style={styles.label}>
-              Archivo <Text style={styles.required}>*</Text>
+              Archivo{!modoEdicion && <Text style={styles.required}> *</Text>}
             </Text>
+            {modoEdicion && archivoExistente && !archivo && (
+              <View style={styles.archivoActualContainer}>
+                <Ionicons
+                  name="document-attach-outline"
+                  size={18}
+                  color="#25B471"
+                />
+                <Text style={styles.archivoActualText} numberOfLines={1}>
+                  {archivoExistente.nombre}
+                </Text>
+                <Text style={styles.archivoActualBadge}>Actual</Text>
+              </View>
+            )}
             <TouchableOpacity
               style={styles.filePickerBtn}
               onPress={elegirArchivo}
@@ -315,7 +419,11 @@ export default function ItemFormScreen() {
                 ]}
                 numberOfLines={1}
               >
-                {archivo ? archivo.nombre : "Seleccionar archivo"}
+                {archivo
+                  ? archivo.nombre
+                  : modoEdicion
+                    ? "Reemplazar archivo (opcional)"
+                    : "Seleccionar archivo"}
               </Text>
             </TouchableOpacity>
           </>
@@ -333,7 +441,9 @@ export default function ItemFormScreen() {
               <Text style={styles.saveBtnText}>Subiendo...</Text>
             </View>
           ) : (
-            <Text style={styles.saveBtnText}>Agregar</Text>
+            <Text style={styles.saveBtnText}>
+              {modoEdicion ? "Guardar cambios" : "Agregar"}
+            </Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -408,6 +518,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F4A32",
     borderColor: "#0F4A32",
   },
+  tipoOptionDisabled: {
+    opacity: 0.35,
+  },
   tipoLabel: {
     fontSize: 14,
     fontWeight: "600",
@@ -461,4 +574,30 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   volverBtnText: { color: "#FFFFFF", fontWeight: "600", fontSize: 15 },
+  archivoActualContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#F0FFF4",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  archivoActualText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#374151",
+  },
+  archivoActualBadge: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#25B471",
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
 });
