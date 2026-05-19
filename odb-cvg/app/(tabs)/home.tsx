@@ -1,26 +1,49 @@
+
+import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { router } from 'expo-router';
+import { signOut, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../config/firebaseConfig';
+import ModalConfirmacion from '../../components/ui/ModalConfirmacion';
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { signOut } from "firebase/auth";
-import React, { useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
-import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ModuloCard from "../../components/ui/ModuloCard";
-import { auth } from "../../config/firebaseConfig";
 import { useModulos } from "../../hooks/useModulos";
 import { useUserRole } from "../../hooks/useUserRole";
 
 export default function HomeScreen() {
+  
+  const [modalVisible, setModalVisible] = useState(false);
+  const [rolUsuario, setRolUsuario] = useState(''); 
+  const [cargando, setCargando] = useState(true);
+    
   const { rol, loading: loadingRol } = useUserRole();
   const { modulos, loading: loadingModulos, eliminarModulo } = useModulos();
+    
+  console.log(auth.currentUser);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const docRef = doc(db, 'usuarios', user.uid);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists()) {
+            setRolUsuario(docSnap.data().rol); // Setear 'alumno' (o lo que diga la BD)
+          } else {
+            console.log("No se encontró el documento del usuario");
+          }
+        } catch (error) {
+          console.error("Error al obtener rol:", error);
+        } finally {
+          setCargando(false);
+        }
+      } else {
+        setCargando(false);
+      }
+    });
+
 
   const [modalSalir, setModalSalir] = useState(false);
   const [moduloAEliminar, setModuloAEliminar] = useState<string | null>(null);
@@ -92,10 +115,18 @@ export default function HomeScreen() {
           </View>
           <Text style={styles.subHeaderText}>Facultad de Odontología UNLP</Text>
         </View>
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={() => setModalSalir(true)}
-        >
+
+        {/*Boton para ir a pantalla de administracion de usuarios, solo visible para admins*/}
+        {rolUsuario === 'admin' && (
+          <TouchableOpacity
+            style={styles.adminButton}
+            onPress={() => router.push('../pantallasAdmin/userManagementScreen')}
+          >
+            <Ionicons name="person" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+          </TouchableOpacity>
+        )}
+        
+        <TouchableOpacity style={styles.logoutButton} onPress={() => setModalVisible(true)}>
           <Text style={styles.logoutButtonText}>Salir</Text>
         </TouchableOpacity>
       </View>
@@ -235,7 +266,37 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginLeft: 10,
   },
-  logoutButtonText: { color: "#4A5568", fontWeight: "bold", fontSize: 14 },
+
+  logoutButtonText: { color: '#4A5568', fontWeight: 'bold', fontSize: 14 },
+  card: { backgroundColor: 'white', padding: 20, borderRadius: 12, marginBottom: 15, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 3 },
+  cardTitle: { fontSize: 18, fontWeight: '700', color: '#2b6cb0' },
+  cardStatus: { fontSize: 15, color: '#718096', marginTop: 8 },
+
+  adminButton: {
+  backgroundColor: '#0F4A32',
+  paddingVertical: 14,
+  paddingHorizontal: 18,
+  borderRadius: 12,
+  marginBottom: 20,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  shadowColor: '#000',
+  shadowOpacity: 0.08,
+  shadowRadius: 5,
+  elevation: 3,
+  },
+
+  adminButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  
+
+});
+
   listContent: { padding: 16, paddingBottom: 90 },
   row: { gap: 12, marginBottom: 12 },
   fab: {
@@ -255,3 +316,4 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
   },
 });
+
