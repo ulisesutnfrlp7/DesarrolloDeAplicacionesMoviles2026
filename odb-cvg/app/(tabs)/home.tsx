@@ -1,14 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
-import { signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../../config/firebaseConfig';
-import ModalConfirmacion from '../../components/ui/ModalConfirmacion';
 import { Ionicons } from "@expo/vector-icons";
+import { router } from 'expo-router';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ModalAlerta from "../../components/ui/ModalAlerta";
+import ModalConfirmacion from '../../components/ui/ModalConfirmacion';
 import ModuloCard from "../../components/ui/ModuloCard";
+import { auth, db } from '../../config/firebaseConfig';
 import { useModulos } from "../../hooks/useModulos";
 import { useUserRole } from "../../hooks/useUserRole";
 
@@ -44,6 +44,8 @@ export default function HomeScreen() {
       }
     });
 
+    return unsubscribe;
+  }, []);
 
   const [modalSalir, setModalSalir] = useState(false);
   const [moduloAEliminar, setModuloAEliminar] = useState<string | null>(null);
@@ -292,11 +294,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-
-  
-
-});
-
   listContent: { padding: 16, paddingBottom: 90 },
   row: { gap: 12, marginBottom: 12 },
   fab: {
