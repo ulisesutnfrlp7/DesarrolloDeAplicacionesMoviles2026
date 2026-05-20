@@ -1,3 +1,4 @@
+//app/modulos/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -219,6 +220,14 @@ export default function ModuloDetalleScreen() {
             </TouchableOpacity>
           ))
         )}
+        {/* Botón explícito para volver atrás */}
+        <TouchableOpacity 
+          style={styles.volverBottomBtn} 
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={20} color="#4B5563" />
+          <Text style={styles.volverBottomBtnText}>Volver atrás</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <ModalConfirmacion
@@ -326,5 +335,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 14,
     marginLeft: 8,
+  },
+  volverBottomBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 24,
+    marginBottom: 20, // Para dar espacio antes del final del scroll
+    paddingVertical: 14,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 10,
+  },
+  volverBottomBtnText: {
+    color: "#4B5563",
+    fontWeight: "600",
+    fontSize: 15,
   },
 });

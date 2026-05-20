@@ -1,3 +1,4 @@
+//app/secciones/form.tsx
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -243,19 +244,33 @@ export default function SeccionFormScreen() {
           maxLength={100}
         />
 
-        <TouchableOpacity
-          style={[styles.saveBtn, guardando && styles.saveBtnDisabled]}
-          onPress={handleGuardar}
-          disabled={guardando}
-        >
-          {guardando ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.saveBtnText}>
-              {modoEdicion ? "Guardar Cambios" : "Crear Sección"}
-            </Text>
-          )}
-        </TouchableOpacity>
+        {/* Botones de acción */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            onPress={handleAtras}
+            disabled={guardando} // Usar 'guardando' en modulos/secciones y 'subiendo' en items
+          >
+            <Text style={styles.cancelBtnText}>Cancelar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.saveBtn, (guardando) && styles.saveBtnDisabled]}
+            onPress={handleGuardar}
+            disabled={guardando}
+          >
+            {(guardando) ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <ActivityIndicator color="#FFFFFF" />
+                <Text style={styles.saveBtnText}>Guardando...</Text>
+              </View>
+            ) : (
+              <Text style={styles.saveBtnText}>
+                {modoEdicion ? "Guardar Cambios" : "Confirmar"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <ModalAlerta
@@ -312,12 +327,34 @@ const styles = StyleSheet.create({
     minHeight: 180,
     paddingTop: 12,
   },
+  actionButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 28,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    paddingVertical: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnText: {
+    color: "#6B7280",
+    fontSize: 16,
+    fontWeight: "700",
+  },
   saveBtn: {
-    backgroundColor: "#0F4A32",
+    flex: 1,
+    backgroundColor: "#25B471", // O "#0F4A32" dependiendo del archivo
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
-    marginTop: 28,
+    justifyContent: "center",
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },

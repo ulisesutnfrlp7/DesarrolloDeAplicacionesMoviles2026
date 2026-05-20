@@ -1,3 +1,4 @@
+//app/secciones/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -149,6 +150,14 @@ export default function SeccionDetalleScreen() {
               />
             ))
           )}
+          {/* Botón explícito para volver atrás */}
+        <TouchableOpacity 
+          style={styles.volverBottomBtn} 
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={20} color="#4B5563" />
+          <Text style={styles.volverBottomBtnText}>Volver atrás</Text>
+        </TouchableOpacity>
         </ScrollView>
 
         {puedeGestionar && (
@@ -395,6 +404,22 @@ const styles = StyleSheet.create({
     marginTop: 10,
     backgroundColor: "#F3F4F6",
   },
+  volverBottomBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 24,
+    marginBottom: 20, // Para dar espacio antes del final del scroll
+    paddingVertical: 14,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 10,
+  },
+  volverBottomBtnText: {
+    color: "#4B5563",
+    fontWeight: "600",
+    fontSize: 15,
+  },
 });
 
 const markdownStyles = {
@@ -426,4 +451,5 @@ const markdownStyles = {
     borderRadius: 4,
     fontSize: 13,
   },
+
 };

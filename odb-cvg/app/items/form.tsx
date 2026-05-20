@@ -1,3 +1,4 @@
+//app/items/form.tsx
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -496,23 +497,33 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
           </>
         )}
 
-        {/* Botón guardar */}
-        <TouchableOpacity
-          style={[styles.saveBtn, subiendo && styles.saveBtnDisabled]}
-          onPress={handleGuardar}
-          disabled={subiendo}
-        >
-          {subiendo ? (
-            <View style={styles.saveBtnLoading}>
-              <ActivityIndicator color="#FFFFFF" />
-              <Text style={styles.saveBtnText}>Subiendo...</Text>
-            </View>
-          ) : (
-            <Text style={styles.saveBtnText}>
-              {modoEdicion ? "Guardar Cambios" : "Agregar"}
-            </Text>
-          )}
-        </TouchableOpacity>
+        {/* Botones de acción */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            onPress={handleAtras}
+            disabled={ subiendo} // Usar 'guardando' en modulos/secciones y 'subiendo' en items
+          >
+            <Text style={styles.cancelBtnText}>Cancelar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.saveBtn, (subiendo) && styles.saveBtnDisabled]}
+            onPress={handleGuardar}
+            disabled={subiendo}
+          >
+            {(subiendo) ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <ActivityIndicator color="#FFFFFF" />
+                <Text style={styles.saveBtnText}>Guardando...</Text>
+              </View>
+            ) : (
+              <Text style={styles.saveBtnText}>
+                {modoEdicion ? "Guardar Cambios" : "Confirmar"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <ModalAlerta
@@ -629,12 +640,34 @@ const styles = StyleSheet.create({
     color: "#11181C",
     fontWeight: "500",
   },
-  saveBtn: {
+  actionButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
     marginTop: 28,
-    backgroundColor: "#25B471",
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    paddingVertical: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnText: {
+    color: "#6B7280",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  saveBtn: {
+    flex: 1,
+    backgroundColor: "#25B471", // O "#0F4A32" dependiendo del archivo
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
+    justifyContent: "center",
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnLoading: { flexDirection: "row", gap: 10, alignItems: "center" },
