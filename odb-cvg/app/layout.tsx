@@ -1,8 +1,26 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React from "react";
+import React, { useEffect } from "react";
+import { Platform } from "react-native";
+import * as NavigationBar from 'expo-navigation-bar';
 
 export default function RootLayout() {
+  
+  useEffect(() => {
+    const hideNavigationBar = async () => {
+      if (Platform.OS === 'android') {
+        try {
+          await NavigationBar.setBehaviorAsync('overlay-swipe');
+          await NavigationBar.setVisibilityAsync('hidden');
+        } catch (error) {
+          console.log("Error configurando la barra de navegación:", error);
+        }
+      }
+    };
+
+    hideNavigationBar();
+  }, []);
+
   return (
     <>
       <StatusBar hidden={true} />

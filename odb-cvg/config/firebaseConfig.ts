@@ -3,8 +3,10 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+
 // @ts-ignore
-import { initializeAuth } from "firebase/auth";
+import { initializeAuth, getReactNativePersistence } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_API_KEY,
@@ -22,8 +24,9 @@ export const analytics = isSupported().then((yes) =>
   yes ? getAnalytics(app) : null,
 );
 
+// Inicializamos Auth con la persistencia para React Native
 export const auth = initializeAuth(app, {
-  // persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+   persistence: getReactNativePersistence(ReactNativeAsyncStorage),
 });
 
 export const db = getFirestore(app);

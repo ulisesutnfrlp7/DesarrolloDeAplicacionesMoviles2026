@@ -1,4 +1,3 @@
-
 import { Ionicons } from "@expo/vector-icons";
 import { router } from 'expo-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -20,7 +19,6 @@ export default function HomeScreen() {
   const { rol, loading: loadingRol } = useUserRole();
   const { modulos, loading: loadingModulos, eliminarModulo } = useModulos();
     
-  console.log(auth.currentUser);
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {

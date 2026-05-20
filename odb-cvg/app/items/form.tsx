@@ -1,39 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import {
-  router,
-  Stack,
-  useFocusEffect,
-  useLocalSearchParams,
-} from "expo-router";
+import { router, Stack, useFocusEffect, useLocalSearchParams,} from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  BackHandler,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
-import { db, storage } from "../../config/firebaseConfig";
+import { db } from "../../config/firebaseConfig";
 import type { ItemTipo } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
 import { useUserRole } from "../../hooks/useUserRole";
 
 const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "texto", label: "Texto", icono: "document-text-outline" },
+  { key: "enlace", label: "Enlace", icono: "link-outline" },
   { key: "pdf", label: "PDF", icono: "document-outline" },
   { key: "imagen", label: "Imagen", icono: "image-outline" },
-  { key: "documento", label: "Documento", icono: "attach-outline" },
+  { key: "video", label: "Video", icono: "videocam-outline" },
+  { key: "documento", label: "Doc.", icono: "attach-outline" },
 ];
 
 export default function ItemFormScreen() {
@@ -50,6 +35,7 @@ export default function ItemFormScreen() {
   const [tipo, setTipo] = useState<ItemTipo>("texto");
   const [titulo, setTitulo] = useState("");
   const [contenido, setContenido] = useState("");
+  const [urlEnlace, setUrlEnlace] = useState("");
   const [archivo, setArchivo] = useState<{
     uri: string;
     nombre: string;
@@ -95,6 +81,9 @@ export default function ItemFormScreen() {
           setTipo(data.tipo ?? "texto");
           setTitulo(data.titulo ?? "");
           setContenido(data.contenido ?? "");
+          if (data.tipo === "enlace") {
+            setUrlEnlace(data.url ?? "");
+          }
           if (data.url) {
             setArchivoExistente({
               nombre: data.nombreArchivo ?? "",
@@ -113,30 +102,75 @@ export default function ItemFormScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId]);
 
+const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => {
+  const data = new FormData();
+  
+  let resourceType = 'raw'; // raw sirve para PDFs, Documentos, etc.
+  if (tipo === 'imagen') {
+    resourceType = 'image';
+  } else if (tipo === 'video') {
+    resourceType = 'video';
+  }
+
+// === VARIABLES DESDE EL .ENV ===
+  const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || ''; 
+  const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
+
+  data.append('upload_preset', UPLOAD_PRESET);
+
+  try {
+    const fileResponse = await fetch(uri);
+    const blob = await fileResponse.blob();
+    data.append('file', blob, nombre);
+  } catch (error) {
+    data.append('file', {
+      uri,
+      name: nombre,
+      type: tipo === 'pdf' ? 'application/pdf' : 'application/octet-stream'
+    } as any);
+  }
+
+  const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    body: data,
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  const result = await response.json();
+  
+  if (!response.ok) {
+    console.error("Cloudinary Error Detallado:", result);
+    throw new Error(result.error?.message || "Error al subir el archivo");
+  }
+
+  return {
+    url: result.secure_url,
+    publicId: result.public_id,
+  };
+};
+
   const elegirArchivo = async () => {
-    if (tipo === "imagen") {
+    if (tipo === "imagen" || tipo === "video") {
       const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permiso.granted) {
-        setAlerta({
-          visible: true,
-          titulo: "Permiso denegado",
-          mensaje: "Se necesita acceso a la galería para seleccionar imágenes.",
-          tipo: "error",
-          cerrarAlSalir: false,
-        });
+        setAlerta({ visible: true, titulo: "Permiso denegado", mensaje: "Se necesita acceso a la galería.", tipo: "error", cerrarAlSalir: false });
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: tipo === "imagen" ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: false,
         quality: 0.85,
       });
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
-        const extension = asset.uri.split(".").pop() ?? "jpg";
+        const extension = asset.uri.split(".").pop() ?? (tipo === "video" ? "mp4" : "jpg");
         setArchivo({
           uri: asset.uri,
-          nombre: `imagen_${Date.now()}.${extension}`,
+          nombre: `${tipo}_${Date.now()}.${extension}`,
         });
         setHayCambios(true);
       }
@@ -155,127 +189,60 @@ export default function ItemFormScreen() {
 
   const handleGuardar = async () => {
     if (!titulo.trim() && tipo !== "texto") {
-      setAlerta({
-        visible: true,
-        titulo: "Campo requerido",
-        mensaje: "El título no puede estar vacío.",
-        tipo: "error",
-        cerrarAlSalir: false,
-      });
+      setAlerta({ visible: true, titulo: "Campo requerido", mensaje: "El título no puede estar vacío.", tipo: "error", cerrarAlSalir: false });
       return;
     }
-    if (tipo !== "texto" && !archivo && !modoEdicion) {
-      setAlerta({
-        visible: true,
-        titulo: "Sin archivo",
-        mensaje: "Por favor seleccioná un archivo antes de guardar.",
-        tipo: "error",
-        cerrarAlSalir: false,
-      });
+    if (tipo === "enlace" && !urlEnlace.trim()) {
+      setAlerta({ visible: true, titulo: "Campo requerido", mensaje: "Por favor ingresá un enlace válido.", tipo: "error", cerrarAlSalir: false });
+      return;
+    }
+    if (tipo !== "texto" && tipo !== "enlace" && !archivo && !modoEdicion) {
+      setAlerta({ visible: true, titulo: "Sin archivo", mensaje: "Por favor seleccioná un archivo.", tipo: "error", cerrarAlSalir: false });
       return;
     }
 
     setSubiendo(true);
     try {
       if (modoEdicion && itemId) {
-        // ── Modo edición ────────────────────────────────────────────────────
         if (tipo === "texto") {
-          if (!contenido.trim() && !titulo.trim()) {
-            setAlerta({
-              visible: true,
-              titulo: "Campos vacíos",
-              mensaje: "Ingresá al menos un título o contenido.",
-              tipo: "error",
-              cerrarAlSalir: false,
-            });
-            setSubiendo(false);
-            return;
-          }
-          await actualizarItem(itemId, {
-            titulo: titulo.trim() || "Texto",
-            contenido: contenido.trim(),
-          });
+          await actualizarItem(itemId, { titulo: titulo.trim() || "Texto", contenido: contenido.trim() });
+        } else if (tipo === "enlace") {
+          await actualizarItem(itemId, { titulo: titulo.trim() || "Enlace", url: urlEnlace.trim() });
         } else if (archivo) {
-          // Reemplazar con nuevo archivo
-          const storageRefPath = `modulos/${moduloId}/secciones/${seccionId}/${Date.now()}_${archivo.nombre}`;
-          const fileRef = ref(storage, storageRefPath);
-          const response = await fetch(archivo.uri);
-          const blob = await response.blob();
-          await uploadBytes(fileRef, blob);
-          const url = await getDownloadURL(fileRef);
+          const cloudRes = await uploadToCloudinary(archivo.uri, tipo, archivo.nombre);
+          
           await actualizarItem(itemId, {
             titulo: titulo.trim() || archivo.nombre,
-            url,
-            storageRef: storageRefPath,
+            url: cloudRes.url,
+            storageRef: cloudRes.publicId,
             nombreArchivo: archivo.nombre,
           });
         } else {
-          // Mantener archivo existente, solo actualizar título
-          await actualizarItem(itemId, {
-            titulo: titulo.trim() || archivoExistente?.nombre || "",
-          });
+          await actualizarItem(itemId, { titulo: titulo.trim() || archivoExistente?.nombre || "" });
         }
-        setAlerta({
-          visible: true,
-          titulo: "Actualizado",
-          mensaje: "El elemento fue actualizado correctamente.",
-          tipo: "exito",
-          cerrarAlSalir: true,
-        });
+        setAlerta({ visible: true, titulo: "Actualizado", mensaje: "El elemento fue actualizado correctamente.", tipo: "exito", cerrarAlSalir: true });
       } else {
-        // ── Modo creación ───────────────────────────────────────────────────
         if (tipo === "texto") {
-          if (!contenido.trim() && !titulo.trim()) {
-            setAlerta({
-              visible: true,
-              titulo: "Campos vacíos",
-              mensaje: "Ingresá al menos un título o contenido.",
-              tipo: "error",
-              cerrarAlSalir: false,
-            });
-            setSubiendo(false);
-            return;
-          }
-          await crearItem({
-            tipo: "texto",
-            titulo: titulo.trim() || "Texto",
-            contenido: contenido.trim(),
-            url: "",
-            storageRef: "",
-            nombreArchivo: "",
-          });
+           await crearItem({ tipo: "texto", titulo: titulo.trim() || "Texto", contenido: contenido.trim(), url: "", storageRef: "", nombreArchivo: "" });
+        } else if (tipo === "enlace") {
+           await crearItem({ tipo: "enlace", titulo: titulo.trim() || "Enlace", contenido: "", url: urlEnlace.trim(), storageRef: "", nombreArchivo: "" });
         } else {
-          const storageRefPath = `modulos/${moduloId}/secciones/${seccionId}/${Date.now()}_${archivo!.nombre}`;
-          const fileRef = ref(storage, storageRefPath);
-          const response = await fetch(archivo!.uri);
-          const blob = await response.blob();
-          await uploadBytes(fileRef, blob);
-          const url = await getDownloadURL(fileRef);
+          const cloudRes = await uploadToCloudinary(archivo!.uri, tipo, archivo!.nombre);
+          
           await crearItem({
             tipo,
             titulo: titulo.trim() || archivo!.nombre,
             contenido: "",
-            url,
-            storageRef: storageRefPath,
+            url: cloudRes.url,
+            storageRef: cloudRes.publicId,
             nombreArchivo: archivo!.nombre,
           });
         }
-        setAlerta({
-          visible: true,
-          titulo: "Guardado",
-          mensaje: "El elemento fue agregado correctamente.",
-          tipo: "exito",
-          cerrarAlSalir: true,
-        });
+        setAlerta({ visible: true, titulo: "Guardado", mensaje: "El elemento fue agregado correctamente.", tipo: "exito", cerrarAlSalir: true });
       }
-    } catch {
-      setAlerta({
-        visible: true,
-        titulo: "Error",
-        mensaje: "No se pudo guardar. Intentá nuevamente.",
-        tipo: "error",
-        cerrarAlSalir: false,
-      });
+    } catch (error) {
+      console.error(error);
+      setAlerta({ visible: true, titulo: "Error", mensaje: "No se pudo guardar el archivo. Intentá nuevamente.", tipo: "error", cerrarAlSalir: false });
     } finally {
       setSubiendo(false);
     }
@@ -463,8 +430,26 @@ export default function ItemFormScreen() {
           </>
         )}
 
-        {/* Selector de archivo para tipos no-texto */}
-        {tipo !== "texto" && (
+        {tipo === "enlace" && (
+          <>
+            <Text style={styles.label}>URL del Enlace *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="https://www.youtube.com/..."
+              placeholderTextColor="#9CA3AF"
+              value={urlEnlace}
+              onChangeText={(v) => {
+                setUrlEnlace(v);
+                setHayCambios(true);
+              }}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+          </>
+        )}
+
+        {/* Selector de archivo para tipos que NO son texto y NO son enlace */}
+        {(tipo !== "texto" && tipo !== "enlace") && (
           <>
             <Text style={styles.label}>
               Archivo{!modoEdicion && <Text style={styles.required}> *</Text>}
