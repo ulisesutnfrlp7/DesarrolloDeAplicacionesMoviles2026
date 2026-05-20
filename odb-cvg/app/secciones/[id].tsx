@@ -208,6 +208,8 @@ function ItemCard({
     imagen: "image-outline",
     documento: "attach-outline",
     texto: "document-text-outline",
+    video: "videocam-outline",
+    enlace: "link-outline",
   };
 
   const acciones = puedeGestionar ? (

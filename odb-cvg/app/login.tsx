@@ -1,8 +1,8 @@
+//app/login.tsx
 import { router } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import React, { useState } from "react";
 import {
-  Alert,
   StyleSheet,
   Text,
   TextInput,
@@ -14,10 +14,13 @@ import { auth } from "../config/firebaseConfig";
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [errorMensaje, setErrorMensaje] = useState("");
 
   const handleLogin = async () => {
+    setErrorMensaje("");
+
     if (!email || !password) {
-      Alert.alert("Error", "Por favor completá todos los campos.");
+      setErrorMensaje("Por favor, completá todos los campos.");
       return;
     }
 
@@ -27,11 +30,13 @@ export default function LoginScreen() {
       await signInWithEmailAndPassword(auth, mailFormateado, password);
       router.replace("/(tabs)/home" as any);
     } catch (error: any) {
-      Alert.alert(
-        "Acceso denegado",
-        "Credenciales incorrectas o Firebase no habilitado. Detalle: " +
-          error.message,
-      );
+      if (error.code === 'auth/invalid-credential') {
+        setErrorMensaje("El correo o la contraseña son incorrectos.");
+      } else if (error.code === 'auth/invalid-email') {
+        setErrorMensaje("El formato del correo electrónico no es válido.");
+      } else {
+        setErrorMensaje("Ocurrió un error al intentar iniciar sesión.");
+      }
     }
   };
 
@@ -45,10 +50,13 @@ export default function LoginScreen() {
       <View style={styles.formContainer}>
         <Text style={styles.label}>Correo Electrónico</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errorMensaje ? styles.inputError : null]} // Borde rojo si hay error
           placeholder="Ej: alumno@unlp.edu.ar"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(text) => {
+            setEmail(text);
+            setErrorMensaje("");
+          }}
           keyboardType="email-address"
           autoCapitalize="none"
           placeholderTextColor="#666"
@@ -56,13 +64,20 @@ export default function LoginScreen() {
 
         <Text style={styles.label}>Contraseña</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errorMensaje ? styles.inputError : null]}
           placeholder="********"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(text) => {
+            setPassword(text);
+            setErrorMensaje("");
+          }}
           secureTextEntry
           placeholderTextColor="#666"
         />
+
+        {errorMensaje ? (
+          <Text style={styles.errorText}>{errorMensaje}</Text>
+        ) : null}
 
         <TouchableOpacity style={styles.primaryButton} onPress={handleLogin}>
           <Text style={styles.primaryButtonText}>Iniciar Sesión</Text>
@@ -130,13 +145,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#000",
   },
+  inputError: {
+    borderColor: "#DC2626",
+    backgroundColor: "#FEF2F2",
+  },
+  errorText: {
+    color: "#DC2626",
+    fontSize: 13,
+    marginBottom: 12,
+    marginTop: -8,
+    textAlign: "center",
+  },
   primaryButton: {
     backgroundColor: "#25B471",
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     minHeight: 48,
-    marginTop: 10,
+    marginTop: 4,
   },
   primaryButtonText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 16 },
   linkButton: {

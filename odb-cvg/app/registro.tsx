@@ -1,25 +1,24 @@
 //app/registro.tsx
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebaseConfig';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import ModalAlerta from '../components/ui/ModalAlerta';
+import { auth, db } from '../config/firebaseConfig';
 
 export default function RegistroScreen() {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [modalConfig, setModalConfig] = useState({ visible: false, titulo: '', mensaje: '', tipo: 'error' as 'error' | 'exito' });
-
-  const mostrarModal = (titulo: string, mensaje: string, tipo: 'error' | 'exito') => {
-    setModalConfig({ visible: true, titulo, mensaje, tipo });
-  };
+  const [errorMensaje, setErrorMensaje] = useState("");
+  const [modalExito, setModalExito] = useState(false);
 
   const handleRegistro = async () => {
+    setErrorMensaje("");
+
     if (!nombre || !email || !password) {
-      mostrarModal('Campos incompletos', 'Por favor completá todos los datos solicitados.', 'error');
+      setErrorMensaje("Por favor, completá todos los datos solicitados.");
       return;
     }
     
@@ -34,25 +33,26 @@ export default function RegistroScreen() {
         fechaRegistro: new Date()
       });
 
-      mostrarModal('¡Cuenta Creada!', 'Te registraste exitosamente.', 'exito');
+      setModalExito(true);
       setTimeout(() => {
-        setModalConfig({ ...modalConfig, visible: false });
+        setModalExito(false);
         router.replace('/(tabs)/home' as any);
       }, 1500);
 
     } catch (error: any) {
-      let mensajeError = 'Ocurrió un error inesperado. Intentá nuevamente.';
       if (error.code === 'auth/email-already-in-use') {
-        mensajeError = 'Este correo ya está registrado. Por favor, iniciá sesión.';
+        setErrorMensaje('Este correo ya está registrado. Por favor, iniciá sesión.');
       } else if (error.code === 'auth/weak-password') {
-        mensajeError = 'La contraseña es muy débil. Debe tener al menos 6 caracteres.';
+        setErrorMensaje('La contraseña es muy débil. Debe tener al menos 6 caracteres.');
       } else if (error.code === 'auth/invalid-email') {
-        mensajeError = 'El formato del correo electrónico no es válido.';
+        setErrorMensaje('El formato del correo electrónico no es válido.');
+      } else {
+        setErrorMensaje('Ocurrió un error inesperado al registrarse.');
       }
-
-      mostrarModal('Error al registrarse', mensajeError, 'error');
     }
   };
+
+  const limpiarError = () => setErrorMensaje("");
 
   return (
     <View style={styles.container}>
@@ -61,17 +61,43 @@ export default function RegistroScreen() {
 
       <View style={styles.formContainer}>
         <Text style={styles.label}>Nombre y Apellido</Text>
-        <TextInput style={styles.input} placeholder="Ej: Juan Perez" value={nombre} onChangeText={setNombre} placeholderTextColor="#666" />
+        <TextInput 
+          style={styles.input} 
+          placeholder="Ej: Juan Perez" 
+          value={nombre} 
+          onChangeText={(text) => { setNombre(text); limpiarError(); }} 
+          placeholderTextColor="#666" 
+        />
 
         <Text style={styles.label}>Correo Electrónico</Text>
-        <TextInput style={styles.input} placeholder="Ej: alumno@unlp.edu.ar" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#666" />
+        <TextInput 
+          style={[styles.input, errorMensaje ? styles.inputError : null]} 
+          placeholder="Ej: alumno@unlp.edu.ar" 
+          value={email} 
+          onChangeText={(text) => { setEmail(text); limpiarError(); }} 
+          keyboardType="email-address" 
+          autoCapitalize="none" 
+          placeholderTextColor="#666" 
+        />
         
         <Text style={styles.label}>Contraseña</Text>
-        <TextInput style={styles.input} placeholder="Mínimo 6 caracteres" value={password} onChangeText={setPassword} secureTextEntry placeholderTextColor="#666" />
+        <TextInput 
+          style={[styles.input, errorMensaje ? styles.inputError : null]} 
+          placeholder="Mínimo 6 caracteres" 
+          value={password} 
+          onChangeText={(text) => { setPassword(text); limpiarError(); }} 
+          secureTextEntry 
+          placeholderTextColor="#666" 
+        />
+
+        {errorMensaje ? (
+          <Text style={styles.errorText}>{errorMensaje}</Text>
+        ) : null}
 
         <TouchableOpacity style={styles.primaryButton} onPress={handleRegistro}>
           <Text style={styles.primaryButtonText}>Registrarme</Text>
         </TouchableOpacity>
+
         <TouchableOpacity 
           style={styles.linkButton} 
           onPress={() => router.replace('/login' as any)}
@@ -79,12 +105,13 @@ export default function RegistroScreen() {
           <Text style={styles.linkText}>¿Ya tenés cuenta? Iniciá sesión</Text>
         </TouchableOpacity>
       </View>
-    <ModalAlerta 
-        visible={modalConfig.visible}
-        titulo={modalConfig.titulo}
-        mensaje={modalConfig.mensaje}
-        tipo={modalConfig.tipo}
-        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+
+      <ModalAlerta 
+        visible={modalExito}
+        titulo="¡Cuenta Creada!"
+        mensaje="Te registraste exitosamente."
+        tipo="exito"
+        onClose={() => setModalExito(false)}
       />
     </View>
   );
@@ -99,6 +126,8 @@ const styles = StyleSheet.create({
   formContainer: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
   label: { fontSize: 14, fontWeight: '700', color: '#000000', marginBottom: 8 },
   input: { backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, minHeight: 48, marginBottom: 20, fontSize: 16, color: '#000' },
-  primaryButton: { backgroundColor: '#25B471', borderRadius: 8, alignItems: 'center', justifyContent: 'center', minHeight: 48, marginTop: 10 },
+  inputError: { borderColor: "#DC2626", backgroundColor: "#FEF2F2" },
+  errorText: { color: "#DC2626", fontSize: 13, marginBottom: 12, marginTop: -8, textAlign: "center" },
+  primaryButton: { backgroundColor: '#25B471', borderRadius: 8, alignItems: 'center', justifyContent: 'center', minHeight: 48, marginTop: 4 },
   primaryButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
 });
