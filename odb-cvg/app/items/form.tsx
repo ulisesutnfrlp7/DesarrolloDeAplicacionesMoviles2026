@@ -108,27 +108,41 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
   const data = new FormData();
   
   let resourceType = 'raw'; // raw sirve para PDFs, Documentos, etc.
+  let mimeType = 'application/octet-stream';
+
+  // Asignamos el recurso y el mimetype correcto
   if (tipo === 'imagen') {
     resourceType = 'image';
+    const ext = nombre.split('.').pop()?.toLowerCase() || 'jpg';
+    mimeType = `image/${ext === 'png' ? 'png' : 'jpeg'}`;
   } else if (tipo === 'video') {
     resourceType = 'video';
+    const ext = nombre.split('.').pop()?.toLowerCase() || 'mp4';
+    mimeType = `video/${ext}`;
+  } else if (tipo === 'pdf') {
+    mimeType = 'application/pdf';
   }
 
-// === VARIABLES DESDE EL .ENV ===
+  // === VARIABLES DESDE EL .ENV ===
   const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || ''; 
   const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
 
   data.append('upload_preset', UPLOAD_PRESET);
 
-  try {
-    const fileResponse = await fetch(uri);
-    const blob = await fileResponse.blob();
-    data.append('file', blob, nombre);
-  } catch (error) {
+  if (Platform.OS === 'web') {
+    try {
+      const fileResponse = await fetch(uri);
+      const blob = await fileResponse.blob();
+      data.append('file', blob, nombre);
+    } catch (error) {
+      console.error("Error convirtiendo a Blob en Web:", error);
+    }
+  } else {
+    // EN CELULAR: Pasamos el objeto nativo con el mimeType correcto (esto evita el Network Error)
     data.append('file', {
-      uri,
+      uri: uri,
       name: nombre,
-      type: tipo === 'pdf' ? 'application/pdf' : 'application/octet-stream'
+      type: mimeType
     } as any);
   }
 
@@ -162,11 +176,13 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
         setAlerta({ visible: true, titulo: "Permiso denegado", mensaje: "Se necesita acceso a la galería.", tipo: "error", cerrarAlSalir: false });
         return;
       }
+      
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: tipo === "imagen" ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
+        mediaTypes: tipo === "imagen" ? ['images'] : ['videos'],
         allowsEditing: false,
         quality: 0.85,
       });
+      
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
         const extension = asset.uri.split(".").pop() ?? (tipo === "video" ? "mp4" : "jpg");

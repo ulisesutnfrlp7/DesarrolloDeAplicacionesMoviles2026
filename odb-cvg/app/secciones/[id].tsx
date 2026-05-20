@@ -50,10 +50,8 @@ export default function SeccionDetalleScreen() {
   const handleEliminarItem = async () => {
     if (!itemAEliminar) return;
     try {
-      await eliminarItem(
-        itemAEliminar.id,
-        itemAEliminar.storageRef || undefined,
-      );
+      await eliminarItem(itemAEliminar);
+      
       setItemAEliminar(null);
       setAlerta({
         visible: true,
