@@ -1,22 +1,29 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import {
+  router,
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+} from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  BackHandler,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
+import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { db, storage } from "../../config/firebaseConfig";
 import type { ItemTipo } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
@@ -54,6 +61,8 @@ export default function ItemFormScreen() {
   } | null>(null);
   const [cargandoDatos, setCargandoDatos] = useState(!!itemId);
   const [subiendo, setSubiendo] = useState(false);
+  const [hayCambios, setHayCambios] = useState(false);
+  const [modalDescartar, setModalDescartar] = useState(false);
   const [alerta, setAlerta] = useState<{
     visible: boolean;
     titulo: string;
@@ -129,6 +138,7 @@ export default function ItemFormScreen() {
           uri: asset.uri,
           nombre: `imagen_${Date.now()}.${extension}`,
         });
+        setHayCambios(true);
       }
     } else {
       const result = await DocumentPicker.getDocumentAsync({
@@ -138,6 +148,7 @@ export default function ItemFormScreen() {
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
         setArchivo({ uri: asset.uri, nombre: asset.name });
+        setHayCambios(true);
       }
     }
   };
@@ -276,28 +287,83 @@ export default function ItemFormScreen() {
     if (debeVolver) router.back();
   };
 
+  const handleAtras = () => {
+    if (hayCambios) {
+      setModalDescartar(true);
+    } else {
+      router.back();
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (hayCambios) {
+          setModalDescartar(true);
+          return true;
+        }
+        return false;
+      };
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress,
+      );
+      return () => subscription.remove();
+    }, [hayCambios]),
+  );
+
   if (loadingRol || cargandoDatos) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#25B471" />
-      </View>
+      <>
+        <Stack.Screen
+          options={{
+            title: "",
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={{ marginLeft: 4 }}
+              >
+                <Ionicons name="arrow-back" size={24} color="#0F4A32" />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#25B471" />
+        </View>
+      </>
     );
   }
 
   if (rol !== "admin" && rol !== "profesor") {
     return (
-      <View style={styles.centered}>
-        <Ionicons name="lock-closed-outline" size={48} color="#CBD5E0" />
-        <Text style={styles.sinPermisoText}>
-          No tenés permiso para acceder a esta pantalla.
-        </Text>
-        <TouchableOpacity
-          style={styles.volverBtn}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.volverBtnText}>Volver</Text>
-        </TouchableOpacity>
-      </View>
+      <>
+        <Stack.Screen
+          options={{
+            title: "",
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={{ marginLeft: 4 }}
+              >
+                <Ionicons name="arrow-back" size={24} color="#0F4A32" />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+        <View style={styles.centered}>
+          <Ionicons name="lock-closed-outline" size={48} color="#CBD5E0" />
+          <Text style={styles.sinPermisoText}>
+            No tenés permiso para acceder a esta pantalla.
+          </Text>
+          <TouchableOpacity
+            style={styles.volverBtn}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.volverBtnText}>Volver</Text>
+          </TouchableOpacity>
+        </View>
+      </>
     );
   }
 
@@ -309,6 +375,11 @@ export default function ItemFormScreen() {
       <Stack.Screen
         options={{
           title: modoEdicion ? "Editar elemento" : "Agregar elemento",
+          headerLeft: () => (
+            <TouchableOpacity onPress={handleAtras} style={{ marginLeft: 4 }}>
+              <Ionicons name="arrow-back" size={24} color="#0F4A32" />
+            </TouchableOpacity>
+          ),
         }}
       />
       <ScrollView
@@ -317,7 +388,7 @@ export default function ItemFormScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* Selector de tipo — bloqueado en modo edición */}
-        <Text style={styles.label}>Tipo de contenido</Text>
+        <Text style={styles.label}>Tipo de Contenido</Text>
         <View style={styles.tipoGrid}>
           {TIPOS.map((t) => (
             <TouchableOpacity
@@ -327,7 +398,12 @@ export default function ItemFormScreen() {
                 tipo === t.key && styles.tipoOptionSelected,
                 modoEdicion && tipo !== t.key && styles.tipoOptionDisabled,
               ]}
-              onPress={() => !modoEdicion && setTipo(t.key)}
+              onPress={() => {
+                if (!modoEdicion) {
+                  setTipo(t.key);
+                  setHayCambios(true);
+                }
+              }}
               activeOpacity={modoEdicion ? 1 : 0.7}
             >
               <Ionicons
@@ -358,7 +434,10 @@ export default function ItemFormScreen() {
           }
           placeholderTextColor="#9CA3AF"
           value={titulo}
-          onChangeText={setTitulo}
+          onChangeText={(v) => {
+            setTitulo(v);
+            setHayCambios(true);
+          }}
           maxLength={100}
         />
 
@@ -374,7 +453,10 @@ export default function ItemFormScreen() {
               placeholder="Escribí el texto aquí..."
               placeholderTextColor="#9CA3AF"
               value={contenido}
-              onChangeText={setContenido}
+              onChangeText={(v) => {
+                setContenido(v);
+                setHayCambios(true);
+              }}
               multiline
               textAlignVertical="top"
             />
@@ -442,7 +524,7 @@ export default function ItemFormScreen() {
             </View>
           ) : (
             <Text style={styles.saveBtnText}>
-              {modoEdicion ? "Guardar cambios" : "Agregar"}
+              {modoEdicion ? "Guardar Cambios" : "Agregar"}
             </Text>
           )}
         </TouchableOpacity>
@@ -454,6 +536,18 @@ export default function ItemFormScreen() {
         mensaje={alerta.mensaje}
         tipo={alerta.tipo}
         onClose={handleCerrarAlerta}
+      />
+      <ModalConfirmacion
+        visible={modalDescartar}
+        titulo="¿Descartar cambios?"
+        mensaje="Tenés cambios sin guardar. Si salís ahora, perderás el progreso."
+        textoConfirmar="Descartar cambios"
+        textoCancelar="Mantenerme"
+        onConfirm={() => {
+          setModalDescartar(false);
+          router.back();
+        }}
+        onCancel={() => setModalDescartar(false)}
       />
     </KeyboardAvoidingView>
   );

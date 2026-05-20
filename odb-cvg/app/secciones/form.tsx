@@ -1,19 +1,26 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import {
+  router,
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+} from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  BackHandler,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
+import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { db } from "../../config/firebaseConfig";
 import { useSecciones } from "../../hooks/useSecciones";
 import { useUserRole } from "../../hooks/useUserRole";
@@ -31,6 +38,8 @@ export default function SeccionFormScreen() {
   const [titulo, setTitulo] = useState("");
   const [cargandoDatos, setCargandoDatos] = useState(modoEdicion);
   const [guardando, setGuardando] = useState(false);
+  const [hayCambios, setHayCambios] = useState(false);
+  const [modalDescartar, setModalDescartar] = useState(false);
   const [alerta, setAlerta] = useState<{
     visible: boolean;
     titulo: string;
@@ -119,28 +128,83 @@ export default function SeccionFormScreen() {
     if (debeVolver) router.back();
   };
 
+  const handleAtras = () => {
+    if (hayCambios) {
+      setModalDescartar(true);
+    } else {
+      router.back();
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (hayCambios) {
+          setModalDescartar(true);
+          return true;
+        }
+        return false;
+      };
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress,
+      );
+      return () => subscription.remove();
+    }, [hayCambios]),
+  );
+
   if (loadingRol || cargandoDatos) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#25B471" />
-      </View>
+      <>
+        <Stack.Screen
+          options={{
+            title: "",
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={{ marginLeft: 4 }}
+              >
+                <Ionicons name="arrow-back" size={24} color="#0F4A32" />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#25B471" />
+        </View>
+      </>
     );
   }
 
   if (rol !== "admin" && rol !== "profesor") {
     return (
-      <View style={styles.centered}>
-        <Ionicons name="lock-closed-outline" size={48} color="#CBD5E0" />
-        <Text style={styles.sinPermisoText}>
-          No tenés permiso para acceder a esta pantalla.
-        </Text>
-        <TouchableOpacity
-          style={styles.volverBtn}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.volverBtnText}>Volver</Text>
-        </TouchableOpacity>
-      </View>
+      <>
+        <Stack.Screen
+          options={{
+            title: "",
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={{ marginLeft: 4 }}
+              >
+                <Ionicons name="arrow-back" size={24} color="#0F4A32" />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+        <View style={styles.centered}>
+          <Ionicons name="lock-closed-outline" size={48} color="#CBD5E0" />
+          <Text style={styles.sinPermisoText}>
+            No tenés permiso para acceder a esta pantalla.
+          </Text>
+          <TouchableOpacity
+            style={styles.volverBtn}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.volverBtnText}>Volver</Text>
+          </TouchableOpacity>
+        </View>
+      </>
     );
   }
 
@@ -150,7 +214,14 @@ export default function SeccionFormScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <Stack.Screen
-        options={{ title: modoEdicion ? "Editar Sección" : "Nueva Sección" }}
+        options={{
+          title: modoEdicion ? "Editar Sección" : "Nueva Sección",
+          headerLeft: () => (
+            <TouchableOpacity onPress={handleAtras} style={{ marginLeft: 4 }}>
+              <Ionicons name="arrow-back" size={24} color="#0F4A32" />
+            </TouchableOpacity>
+          ),
+        }}
       />
       <ScrollView
         style={styles.container}
@@ -165,7 +236,10 @@ export default function SeccionFormScreen() {
           placeholder="Ej: Introducción"
           placeholderTextColor="#9CA3AF"
           value={titulo}
-          onChangeText={setTitulo}
+          onChangeText={(v) => {
+            setTitulo(v);
+            setHayCambios(true);
+          }}
           maxLength={100}
         />
 
@@ -178,7 +252,7 @@ export default function SeccionFormScreen() {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.saveBtnText}>
-              {modoEdicion ? "Guardar cambios" : "Crear sección"}
+              {modoEdicion ? "Guardar Cambios" : "Crear Sección"}
             </Text>
           )}
         </TouchableOpacity>
@@ -190,6 +264,18 @@ export default function SeccionFormScreen() {
         mensaje={alerta.mensaje}
         tipo={alerta.tipo}
         onClose={handleCerrarAlerta}
+      />
+      <ModalConfirmacion
+        visible={modalDescartar}
+        titulo="¿Descartar cambios?"
+        mensaje="Tenés cambios sin guardar. Si salís ahora, perderás el progreso."
+        textoConfirmar="Descartar cambios"
+        textoCancelar="Mantenerme"
+        onConfirm={() => {
+          setModalDescartar(false);
+          router.back();
+        }}
+        onCancel={() => setModalDescartar(false)}
       />
     </KeyboardAvoidingView>
   );
