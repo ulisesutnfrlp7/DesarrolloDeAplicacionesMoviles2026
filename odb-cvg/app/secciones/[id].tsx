@@ -84,25 +84,39 @@ export default function SeccionDetalleScreen() {
 
   const puedeGestionar = rol === "admin" || rol === "profesor";
 
+  const backButton = () => (
+    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 4 }}>
+      <Ionicons name="arrow-back" size={24} color="#0F4A32" />
+    </TouchableOpacity>
+  );
+
   if (loadingSeccion) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#25B471" />
-      </View>
+      <>
+        <Stack.Screen options={{ title: "", headerLeft: backButton }} />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#25B471" />
+        </View>
+      </>
     );
   }
 
   if (!seccion) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>Sección no encontrada.</Text>
-      </View>
+      <>
+        <Stack.Screen options={{ title: "", headerLeft: backButton }} />
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>Sección no encontrada.</Text>
+        </View>
+      </>
     );
   }
 
   return (
     <>
-      <Stack.Screen options={{ title: seccion.titulo }} />
+      <Stack.Screen
+        options={{ title: seccion.titulo, headerLeft: backButton }}
+      />
       <View style={styles.wrapper}>
         <ScrollView
           style={styles.container}

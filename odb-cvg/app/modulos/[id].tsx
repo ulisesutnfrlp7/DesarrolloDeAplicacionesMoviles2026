@@ -71,19 +71,31 @@ export default function ModuloDetalleScreen() {
 
   const puedeGestionarSecciones = rol === "admin" || rol === "profesor";
 
+  const backButton = () => (
+    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 4 }}>
+      <Ionicons name="arrow-back" size={24} color="#0F4A32" />
+    </TouchableOpacity>
+  );
+
   if (loadingModulo) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#25B471" />
-      </View>
+      <>
+        <Stack.Screen options={{ title: "", headerLeft: backButton }} />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#25B471" />
+        </View>
+      </>
     );
   }
 
   if (!modulo) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>Módulo no encontrado.</Text>
-      </View>
+      <>
+        <Stack.Screen options={{ title: "", headerLeft: backButton }} />
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>Módulo no encontrado.</Text>
+        </View>
+      </>
     );
   }
 
@@ -92,6 +104,7 @@ export default function ModuloDetalleScreen() {
       <Stack.Screen
         options={{
           title: modulo.titulo,
+          headerLeft: backButton,
           headerRight:
             rol === "admin"
               ? () => (
