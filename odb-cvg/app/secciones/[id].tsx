@@ -1,17 +1,10 @@
+//app/secciones/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
 import Markdown from "react-native-markdown-display";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
@@ -20,6 +13,7 @@ import type { Item } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
 import type { Seccion } from "../../hooks/useSecciones";
 import { useUserRole } from "../../hooks/useUserRole";
+import ScreenHeader from "../../components/ui/ScreenHeader";
 
 export default function SeccionDetalleScreen() {
   const { id, moduloId } = useLocalSearchParams<{
@@ -56,10 +50,8 @@ export default function SeccionDetalleScreen() {
   const handleEliminarItem = async () => {
     if (!itemAEliminar) return;
     try {
-      await eliminarItem(
-        itemAEliminar.id,
-        itemAEliminar.storageRef || undefined,
-      );
+      await eliminarItem(itemAEliminar);
+      
       setItemAEliminar(null);
       setAlerta({
         visible: true,
@@ -84,40 +76,32 @@ export default function SeccionDetalleScreen() {
 
   const puedeGestionar = rol === "admin" || rol === "profesor";
 
-  const backButton = () => (
-    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 4 }}>
-      <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-    </TouchableOpacity>
-  );
-
   if (loadingSeccion) {
     return (
-      <>
-        <Stack.Screen options={{ title: "", headerLeft: backButton }} />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#25B471" />
         </View>
-      </>
+      </View>
     );
   }
 
   if (!seccion) {
     return (
-      <>
-        <Stack.Screen options={{ title: "", headerLeft: backButton }} />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <Text style={styles.errorText}>Sección no encontrada.</Text>
         </View>
-      </>
+      </View>
     );
   }
 
   return (
-    <>
-      <Stack.Screen
-        options={{ title: seccion.titulo, headerLeft: backButton }}
-      />
-      <View style={styles.wrapper}>
+      <View style={{ flex: 1 }}>
+        <ScreenHeader titulo={seccion.titulo} mostrarHome />
+        <View style={styles.wrapper}>
         <ScrollView
           style={styles.container}
           contentContainerStyle={styles.content}
@@ -182,7 +166,7 @@ export default function SeccionDetalleScreen() {
         tipo={alerta.tipo}
         onClose={() => setAlerta((prev) => ({ ...prev, visible: false }))}
       />
-    </>
+    </View>
   );
 }
 
@@ -426,4 +410,5 @@ const markdownStyles = {
     borderRadius: 4,
     fontSize: 13,
   },
+
 };

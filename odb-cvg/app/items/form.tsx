@@ -1,3 +1,4 @@
+//app/items/form.tsx
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -11,6 +12,7 @@ import { db } from "../../config/firebaseConfig";
 import type { ItemTipo } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
 import { useUserRole } from "../../hooks/useUserRole";
+import ScreenHeader from "../../components/ui/ScreenHeader";
 
 const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "texto", label: "Texto", icono: "document-text-outline" },
@@ -106,27 +108,41 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
   const data = new FormData();
   
   let resourceType = 'raw'; // raw sirve para PDFs, Documentos, etc.
+  let mimeType = 'application/octet-stream';
+
+  // Asignamos el recurso y el mimetype correcto
   if (tipo === 'imagen') {
     resourceType = 'image';
+    const ext = nombre.split('.').pop()?.toLowerCase() || 'jpg';
+    mimeType = `image/${ext === 'png' ? 'png' : 'jpeg'}`;
   } else if (tipo === 'video') {
     resourceType = 'video';
+    const ext = nombre.split('.').pop()?.toLowerCase() || 'mp4';
+    mimeType = `video/${ext}`;
+  } else if (tipo === 'pdf') {
+    mimeType = 'application/pdf';
   }
 
-// === VARIABLES DESDE EL .ENV ===
+  // === VARIABLES DESDE EL .ENV ===
   const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || ''; 
   const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
 
   data.append('upload_preset', UPLOAD_PRESET);
 
-  try {
-    const fileResponse = await fetch(uri);
-    const blob = await fileResponse.blob();
-    data.append('file', blob, nombre);
-  } catch (error) {
+  if (Platform.OS === 'web') {
+    try {
+      const fileResponse = await fetch(uri);
+      const blob = await fileResponse.blob();
+      data.append('file', blob, nombre);
+    } catch (error) {
+      console.error("Error convirtiendo a Blob en Web:", error);
+    }
+  } else {
+    // EN CELULAR: Pasamos el objeto nativo con el mimeType correcto (esto evita el Network Error)
     data.append('file', {
-      uri,
+      uri: uri,
       name: nombre,
-      type: tipo === 'pdf' ? 'application/pdf' : 'application/octet-stream'
+      type: mimeType
     } as any);
   }
 
@@ -160,11 +176,13 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
         setAlerta({ visible: true, titulo: "Permiso denegado", mensaje: "Se necesita acceso a la galería.", tipo: "error", cerrarAlSalir: false });
         return;
       }
+      
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: tipo === "imagen" ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
+        mediaTypes: tipo === "imagen" ? ['images'] : ['videos'],
         allowsEditing: false,
         quality: 0.85,
       });
+      
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
         const extension = asset.uri.split(".").pop() ?? (tipo === "video" ? "mp4" : "jpg");
@@ -281,79 +299,38 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
 
   if (loadingRol || cargandoDatos) {
     return (
-      <>
-        <Stack.Screen
-          options={{
-            title: "",
-            headerLeft: () => (
-              <TouchableOpacity
-                onPress={() => router.back()}
-                style={{ marginLeft: 4 }}
-              >
-                <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-              </TouchableOpacity>
-            ),
-          }}
-        />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#25B471" />
         </View>
-      </>
+      </View>
     );
   }
 
   if (rol !== "admin" && rol !== "profesor") {
     return (
-      <>
-        <Stack.Screen
-          options={{
-            title: "",
-            headerLeft: () => (
-              <TouchableOpacity
-                onPress={() => router.back()}
-                style={{ marginLeft: 4 }}
-              >
-                <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-              </TouchableOpacity>
-            ),
-          }}
-        />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <Ionicons name="lock-closed-outline" size={48} color="#CBD5E0" />
-          <Text style={styles.sinPermisoText}>
-            No tenés permiso para acceder a esta pantalla.
-          </Text>
-          <TouchableOpacity
-            style={styles.volverBtn}
-            onPress={() => router.back()}
-          >
+          <Text style={styles.sinPermisoText}>No tenés permiso para acceder a esta pantalla.</Text>
+          <TouchableOpacity style={styles.volverBtn} onPress={() => router.back()}>
             <Text style={styles.volverBtnText}>Volver</Text>
           </TouchableOpacity>
         </View>
-      </>
+      </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <Stack.Screen
-        options={{
-          title: modoEdicion ? "Editar elemento" : "Agregar elemento",
-          headerLeft: () => (
-            <TouchableOpacity onPress={handleAtras} style={{ marginLeft: 4 }}>
-              <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScreenHeader
+          titulo={modoEdicion ? "Editar elemento" : "Agregar elemento"}
+          onBack={handleAtras}
+          mostrarHome
+        />
+        <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* Selector de tipo — bloqueado en modo edición */}
         <Text style={styles.label}>Tipo de Contenido</Text>
         <View style={styles.tipoGrid}>
@@ -496,23 +473,33 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
           </>
         )}
 
-        {/* Botón guardar */}
-        <TouchableOpacity
-          style={[styles.saveBtn, subiendo && styles.saveBtnDisabled]}
-          onPress={handleGuardar}
-          disabled={subiendo}
-        >
-          {subiendo ? (
-            <View style={styles.saveBtnLoading}>
-              <ActivityIndicator color="#FFFFFF" />
-              <Text style={styles.saveBtnText}>Subiendo...</Text>
-            </View>
-          ) : (
-            <Text style={styles.saveBtnText}>
-              {modoEdicion ? "Guardar Cambios" : "Agregar"}
-            </Text>
-          )}
-        </TouchableOpacity>
+        {/* Botones de acción */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            onPress={handleAtras}
+            disabled={ subiendo}
+          >
+            <Text style={styles.cancelBtnText}>Cancelar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.saveBtn, (subiendo) && styles.saveBtnDisabled]}
+            onPress={handleGuardar}
+            disabled={subiendo}
+          >
+            {(subiendo) ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <ActivityIndicator color="#FFFFFF" />
+                <Text style={styles.saveBtnText}>Guardando...</Text>
+              </View>
+            ) : (
+              <Text style={styles.saveBtnText}>
+                {modoEdicion ? "Guardar Cambios" : "Confirmar"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <ModalAlerta
@@ -629,12 +616,34 @@ const styles = StyleSheet.create({
     color: "#11181C",
     fontWeight: "500",
   },
-  saveBtn: {
+  actionButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
     marginTop: 28,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    paddingVertical: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnText: {
+    color: "#6B7280",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  saveBtn: {
+    flex: 1,
     backgroundColor: "#25B471",
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
+    justifyContent: "center",
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnLoading: { flexDirection: "row", gap: 10, alignItems: "center" },

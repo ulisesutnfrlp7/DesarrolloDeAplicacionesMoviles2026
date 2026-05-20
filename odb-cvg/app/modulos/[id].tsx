@@ -1,21 +1,16 @@
+//app/modulos/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { db } from "../../config/firebaseConfig";
 import type { Modulo } from "../../hooks/useModulos";
 import { useSecciones } from "../../hooks/useSecciones";
 import { useUserRole } from "../../hooks/useUserRole";
+import ScreenHeader from "../../components/ui/ScreenHeader";
 
 export default function ModuloDetalleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -71,55 +66,44 @@ export default function ModuloDetalleScreen() {
 
   const puedeGestionarSecciones = rol === "admin" || rol === "profesor";
 
-  const backButton = () => (
-    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 4 }}>
-      <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-    </TouchableOpacity>
-  );
-
   if (loadingModulo) {
     return (
-      <>
-        <Stack.Screen options={{ title: "", headerLeft: backButton }} />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#25B471" />
         </View>
-      </>
+      </View>
     );
   }
 
   if (!modulo) {
     return (
-      <>
-        <Stack.Screen options={{ title: "", headerLeft: backButton }} />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <Text style={styles.errorText}>Módulo no encontrado.</Text>
         </View>
-      </>
+      </View>
     );
   }
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          title: modulo.titulo,
-          headerLeft: backButton,
-          headerRight:
-            rol === "admin"
-              ? () => (
-                  <TouchableOpacity
-                    onPress={() =>
-                      router.push(`/modulos/form?moduloId=${id}` as any)
-                    }
-                    style={{ marginRight: 4 }}
-                  >
-                    <Ionicons name="pencil-outline" size={22} color="#0F4A32" />
-                  </TouchableOpacity>
-                )
-              : undefined,
-        }}
-      />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader
+          titulo={modulo.titulo}
+          mostrarHome
+          accionDerecha={
+            rol === "admin" ? (
+              <TouchableOpacity
+                onPress={() => router.push(`/modulos/form?moduloId=${id}` as any)}
+                style={styles.headerActionBtn}
+              >
+                <Ionicons name="pencil-outline" size={18} color="#0F4A32" />
+              </TouchableOpacity>
+            ) : undefined
+          }
+        />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -237,7 +221,7 @@ export default function ModuloDetalleScreen() {
         tipo={alerta.tipo}
         onClose={() => setAlerta((prev) => ({ ...prev, visible: false }))}
       />
-    </>
+    </View>
   );
 }
 
@@ -326,5 +310,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 14,
     marginLeft: 8,
+  },
+  headerActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#E8F5E9",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

@@ -26,7 +26,7 @@ export const analytics = isSupported().then((yes) =>
 
 // Inicializamos Auth con la persistencia para React Native
 export const auth = initializeAuth(app, {
-   persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+   //persistence: getReactNativePersistence(ReactNativeAsyncStorage),
 });
 
 export const db = getFirestore(app);

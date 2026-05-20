@@ -1,29 +1,15 @@
+//app/modulos/form.tsx
 import { Ionicons } from "@expo/vector-icons";
-import {
-  router,
-  Stack,
-  useFocusEffect,
-  useLocalSearchParams,
-} from "expo-router";
+import { router, Stack, useFocusEffect, useLocalSearchParams,} from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  BackHandler,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { db } from "../../config/firebaseConfig";
 import { useModulos } from "../../hooks/useModulos";
 import { useUserRole } from "../../hooks/useUserRole";
+import ScreenHeader from "../../components/ui/ScreenHeader";
 
 const ICONOS_DISPONIBLES = [
   "book-outline",
@@ -193,79 +179,38 @@ export default function ModuloFormScreen() {
 
   if (loadingRol || cargandoDatos) {
     return (
-      <>
-        <Stack.Screen
-          options={{
-            title: "",
-            headerLeft: () => (
-              <TouchableOpacity
-                onPress={() => router.back()}
-                style={{ marginLeft: 4 }}
-              >
-                <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-              </TouchableOpacity>
-            ),
-          }}
-        />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#25B471" />
         </View>
-      </>
+      </View>
     );
   }
 
   if (rol !== "admin") {
     return (
-      <>
-        <Stack.Screen
-          options={{
-            title: "",
-            headerLeft: () => (
-              <TouchableOpacity
-                onPress={() => router.back()}
-                style={{ marginLeft: 4 }}
-              >
-                <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-              </TouchableOpacity>
-            ),
-          }}
-        />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <Ionicons name="lock-closed-outline" size={48} color="#CBD5E0" />
-          <Text style={styles.sinPermisoText}>
-            No tenés permiso para acceder a esta pantalla.
-          </Text>
-          <TouchableOpacity
-            style={styles.volverBtn}
-            onPress={() => router.back()}
-          >
+          <Text style={styles.sinPermisoText}>No tenés permiso para acceder a esta pantalla.</Text>
+          <TouchableOpacity style={styles.volverBtn} onPress={() => router.back()}>
             <Text style={styles.volverBtnText}>Volver</Text>
           </TouchableOpacity>
         </View>
-      </>
+      </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <Stack.Screen
-        options={{
-          title: modoEdicion ? "Editar Módulo" : "Nuevo Módulo",
-          headerLeft: () => (
-            <TouchableOpacity onPress={handleAtras} style={{ marginLeft: 4 }}>
-              <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScreenHeader
+          titulo={modoEdicion ? "Editar Módulo" : "Nuevo Módulo"}
+          onBack={handleAtras}
+          mostrarHome
+        />
+        <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>
           Título <Text style={styles.required}>*</Text>
         </Text>
@@ -319,19 +264,33 @@ export default function ModuloFormScreen() {
           ))}
         </View>
 
-        <TouchableOpacity
-          style={[styles.saveBtn, guardando && styles.saveBtnDisabled]}
-          onPress={handleGuardar}
-          disabled={guardando}
-        >
-          {guardando ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.saveBtnText}>
-              {modoEdicion ? "Guardar Cambios" : "Crear Módulo"}
-            </Text>
-          )}
-        </TouchableOpacity>
+        {/* Botones de acción */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            onPress={handleAtras}
+            disabled={guardando}
+          >
+            <Text style={styles.cancelBtnText}>Cancelar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.saveBtn, (guardando) && styles.saveBtnDisabled]}
+            onPress={handleGuardar}
+            disabled={guardando}
+          >
+            {(guardando) ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <ActivityIndicator color="#FFFFFF" />
+                <Text style={styles.saveBtnText}>Guardando...</Text>
+              </View>
+            ) : (
+              <Text style={styles.saveBtnText}>
+                {modoEdicion ? "Guardar Cambios" : "Confirmar"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <ModalAlerta
@@ -408,12 +367,34 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F4A32",
     borderColor: "#0F4A32",
   },
+  actionButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 28,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    paddingVertical: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnText: {
+    color: "#6B7280",
+    fontSize: 16,
+    fontWeight: "700",
+  },
   saveBtn: {
-    backgroundColor: "#0F4A32",
+    flex: 1,
+    backgroundColor: "#25B471",
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
-    marginTop: 28,
+    justifyContent: "center",
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },

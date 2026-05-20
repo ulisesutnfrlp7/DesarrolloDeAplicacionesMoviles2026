@@ -1,17 +1,10 @@
+//app/(tabs)/home.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ModuloCard from "../../components/ui/ModuloCard";
@@ -131,11 +124,9 @@ export default function HomeScreen() {
         {rolUsuario === "admin" && (
           <TouchableOpacity
             style={styles.adminButton}
-            onPress={() =>
-              router.push("../pantallasAdmin/userManagementScreen")
-            }
+            onPress={() => router.push("../pantallasAdmin/userManagementScreen")}
           >
-            <Ionicons name="person" size={15} color="#FFFFFF" />
+            <Ionicons name="people-outline" size={18} color="#0F4A32" />
           </TouchableOpacity>
         )}
 
@@ -275,15 +266,16 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   subHeaderText: { fontSize: 13, color: "#6B7280", marginTop: 3 },
-  logoutButton: {
-    backgroundColor: "#E2E8F0",
+logoutButton: {
+    backgroundColor: '#E8F5E9',
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginLeft: 10,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginLeft: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-
-  logoutButtonText: { color: "#4A5568", fontWeight: "bold", fontSize: 20 },
+  logoutButtonText: { color: '#0F4A32', fontWeight: '700', fontSize: 14 },
   card: {
     backgroundColor: "white",
     padding: 20,
@@ -298,18 +290,12 @@ const styles = StyleSheet.create({
   cardStatus: { fontSize: 15, color: "#718096", marginTop: 8 },
 
   adminButton: {
-    backgroundColor: "#0F4A32",
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 12,
-    marginBottom: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    elevation: 3,
+    backgroundColor: '#E8F5E9',
+    padding: 10,
+    borderRadius: 10,
+    marginLeft: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   adminButtonText: {
