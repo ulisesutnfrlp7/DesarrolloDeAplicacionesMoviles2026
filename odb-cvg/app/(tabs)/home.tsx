@@ -14,7 +14,6 @@ import { useUserRole } from "../../hooks/useUserRole";
 
 export default function HomeScreen() {
   
-  const [modalVisible, setModalVisible] = useState(false);
   const [rolUsuario, setRolUsuario] = useState(''); 
   const [cargando, setCargando] = useState(true);
     
@@ -56,14 +55,15 @@ export default function HomeScreen() {
     tipo: "error" | "exito";
   }>({ visible: false, titulo: "", mensaje: "", tipo: "exito" });
 
+
   const handleCerrarSesion = async () => {
     try {
       setModalSalir(false);
       await signOut(auth);
-      router.replace("/login" as any);
+      router.replace('/login' as any);
     } catch (error: any) {
-      Alert.alert("Aviso", "Sesión cerrada localmente.");
-      router.replace("/login" as any);
+      Alert.alert('Aviso', 'Sesión cerrada localmente (Firebase arrojó error: ' + error.message + ')');
+      router.replace('/login' as any);
     }
   };
 
@@ -128,7 +128,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
         
-        <TouchableOpacity style={styles.logoutButton} onPress={() => setModalVisible(true)}>
+        <TouchableOpacity style={styles.logoutButton} onPress={() => setModalSalir(true)}>
           <Text style={styles.logoutButtonText}>Salir</Text>
         </TouchableOpacity>
       </View>
