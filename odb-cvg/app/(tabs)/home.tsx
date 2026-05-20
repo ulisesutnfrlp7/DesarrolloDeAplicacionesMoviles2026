@@ -1,31 +1,38 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from 'expo-router';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router } from "expo-router";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
-import ModalConfirmacion from '../../components/ui/ModalConfirmacion';
+import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ModuloCard from "../../components/ui/ModuloCard";
-import { auth, db } from '../../config/firebaseConfig';
+import { auth, db } from "../../config/firebaseConfig";
 import { useModulos } from "../../hooks/useModulos";
 import { useUserRole } from "../../hooks/useUserRole";
 
 export default function HomeScreen() {
-  
-  const [rolUsuario, setRolUsuario] = useState(''); 
+  const [rolUsuario, setRolUsuario] = useState("");
   const [cargando, setCargando] = useState(true);
-    
+
   const { rol, loading: loadingRol } = useUserRole();
   const { modulos, loading: loadingModulos, eliminarModulo } = useModulos();
-    
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          const docRef = doc(db, 'usuarios', user.uid);
+          const docRef = doc(db, "usuarios", user.uid);
           const docSnap = await getDoc(docRef);
-          
+
           if (docSnap.exists()) {
             setRolUsuario(docSnap.data().rol); // Setear 'alumno' (o lo que diga la BD)
           } else {
@@ -53,15 +60,19 @@ export default function HomeScreen() {
     tipo: "error" | "exito";
   }>({ visible: false, titulo: "", mensaje: "", tipo: "exito" });
 
-
   const handleCerrarSesion = async () => {
     try {
       setModalSalir(false);
       await signOut(auth);
-      router.replace('/login' as any);
+      router.replace("/login" as any);
     } catch (error: any) {
-      Alert.alert('Aviso', 'Sesión cerrada localmente (Firebase arrojó error: ' + error.message + ')');
-      router.replace('/login' as any);
+      Alert.alert(
+        "Aviso",
+        "Sesión cerrada localmente (Firebase arrojó error: " +
+          error.message +
+          ")",
+      );
+      router.replace("/login" as any);
     }
   };
 
@@ -117,16 +128,21 @@ export default function HomeScreen() {
         </View>
 
         {/*Boton para ir a pantalla de administracion de usuarios, solo visible para admins*/}
-        {rolUsuario === 'admin' && (
+        {rolUsuario === "admin" && (
           <TouchableOpacity
             style={styles.adminButton}
-            onPress={() => router.push('../pantallasAdmin/userManagementScreen')}
+            onPress={() =>
+              router.push("../pantallasAdmin/userManagementScreen")
+            }
           >
-            <Ionicons name="person" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+            <Ionicons name="person" size={15} color="#FFFFFF" />
           </TouchableOpacity>
         )}
-        
-        <TouchableOpacity style={styles.logoutButton} onPress={() => setModalSalir(true)}>
+
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={() => setModalSalir(true)}
+        >
           <Text style={styles.logoutButtonText}>Salir</Text>
         </TouchableOpacity>
       </View>
@@ -267,30 +283,39 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
 
-  logoutButtonText: { color: '#4A5568', fontWeight: 'bold', fontSize: 14 },
-  card: { backgroundColor: 'white', padding: 20, borderRadius: 12, marginBottom: 15, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 3 },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: '#2b6cb0' },
-  cardStatus: { fontSize: 15, color: '#718096', marginTop: 8 },
+  logoutButtonText: { color: "#4A5568", fontWeight: "bold", fontSize: 20 },
+  card: {
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 15,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  cardTitle: { fontSize: 18, fontWeight: "700", color: "#2b6cb0" },
+  cardStatus: { fontSize: 15, color: "#718096", marginTop: 8 },
 
   adminButton: {
-  backgroundColor: '#0F4A32',
-  paddingVertical: 14,
-  paddingHorizontal: 18,
-  borderRadius: 12,
-  marginBottom: 20,
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  shadowColor: '#000',
-  shadowOpacity: 0.08,
-  shadowRadius: 5,
-  elevation: 3,
+    backgroundColor: "#0F4A32",
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    marginBottom: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    elevation: 3,
   },
 
   adminButtonText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   listContent: { padding: 16, paddingBottom: 90 },
   row: { gap: 12, marginBottom: 12 },
@@ -311,4 +336,3 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
   },
 });
-
