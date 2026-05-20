@@ -12,6 +12,7 @@ import { db } from "../../config/firebaseConfig";
 import type { ItemTipo } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
 import { useUserRole } from "../../hooks/useUserRole";
+import ScreenHeader from "../../components/ui/ScreenHeader";
 
 const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "texto", label: "Texto", icono: "document-text-outline" },
@@ -282,79 +283,38 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
 
   if (loadingRol || cargandoDatos) {
     return (
-      <>
-        <Stack.Screen
-          options={{
-            title: "",
-            headerLeft: () => (
-              <TouchableOpacity
-                onPress={() => router.back()}
-                style={{ marginLeft: 4 }}
-              >
-                <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-              </TouchableOpacity>
-            ),
-          }}
-        />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#25B471" />
         </View>
-      </>
+      </View>
     );
   }
 
   if (rol !== "admin" && rol !== "profesor") {
     return (
-      <>
-        <Stack.Screen
-          options={{
-            title: "",
-            headerLeft: () => (
-              <TouchableOpacity
-                onPress={() => router.back()}
-                style={{ marginLeft: 4 }}
-              >
-                <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-              </TouchableOpacity>
-            ),
-          }}
-        />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <Ionicons name="lock-closed-outline" size={48} color="#CBD5E0" />
-          <Text style={styles.sinPermisoText}>
-            No tenés permiso para acceder a esta pantalla.
-          </Text>
-          <TouchableOpacity
-            style={styles.volverBtn}
-            onPress={() => router.back()}
-          >
+          <Text style={styles.sinPermisoText}>No tenés permiso para acceder a esta pantalla.</Text>
+          <TouchableOpacity style={styles.volverBtn} onPress={() => router.back()}>
             <Text style={styles.volverBtnText}>Volver</Text>
           </TouchableOpacity>
         </View>
-      </>
+      </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <Stack.Screen
-        options={{
-          title: modoEdicion ? "Editar elemento" : "Agregar elemento",
-          headerLeft: () => (
-            <TouchableOpacity onPress={handleAtras} style={{ marginLeft: 4 }}>
-              <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScreenHeader
+          titulo={modoEdicion ? "Editar elemento" : "Agregar elemento"}
+          onBack={handleAtras}
+          mostrarHome
+        />
+        <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* Selector de tipo — bloqueado en modo edición */}
         <Text style={styles.label}>Tipo de Contenido</Text>
         <View style={styles.tipoGrid}>
@@ -502,7 +462,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
           <TouchableOpacity
             style={styles.cancelBtn}
             onPress={handleAtras}
-            disabled={ subiendo} // Usar 'guardando' en modulos/secciones y 'subiendo' en items
+            disabled={ subiendo}
           >
             <Text style={styles.cancelBtnText}>Cancelar</Text>
           </TouchableOpacity>
@@ -663,7 +623,7 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     flex: 1,
-    backgroundColor: "#25B471", // O "#0F4A32" dependiendo del archivo
+    backgroundColor: "#25B471",
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",

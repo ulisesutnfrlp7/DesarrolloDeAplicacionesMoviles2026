@@ -4,15 +4,7 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
 import Markdown from "react-native-markdown-display";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
@@ -21,6 +13,7 @@ import type { Item } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
 import type { Seccion } from "../../hooks/useSecciones";
 import { useUserRole } from "../../hooks/useUserRole";
+import ScreenHeader from "../../components/ui/ScreenHeader";
 
 export default function SeccionDetalleScreen() {
   const { id, moduloId } = useLocalSearchParams<{
@@ -85,40 +78,32 @@ export default function SeccionDetalleScreen() {
 
   const puedeGestionar = rol === "admin" || rol === "profesor";
 
-  const backButton = () => (
-    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 4 }}>
-      <Ionicons name="arrow-back" size={24} color="#0F4A32" />
-    </TouchableOpacity>
-  );
-
   if (loadingSeccion) {
     return (
-      <>
-        <Stack.Screen options={{ title: "", headerLeft: backButton }} />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#25B471" />
         </View>
-      </>
+      </View>
     );
   }
 
   if (!seccion) {
     return (
-      <>
-        <Stack.Screen options={{ title: "", headerLeft: backButton }} />
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <Text style={styles.errorText}>Sección no encontrada.</Text>
         </View>
-      </>
+      </View>
     );
   }
 
   return (
-    <>
-      <Stack.Screen
-        options={{ title: seccion.titulo, headerLeft: backButton }}
-      />
-      <View style={styles.wrapper}>
+      <View style={{ flex: 1 }}>
+        <ScreenHeader titulo={seccion.titulo} mostrarHome />
+        <View style={styles.wrapper}>
         <ScrollView
           style={styles.container}
           contentContainerStyle={styles.content}
@@ -150,14 +135,6 @@ export default function SeccionDetalleScreen() {
               />
             ))
           )}
-          {/* Botón explícito para volver atrás */}
-        <TouchableOpacity 
-          style={styles.volverBottomBtn} 
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={20} color="#4B5563" />
-          <Text style={styles.volverBottomBtnText}>Volver atrás</Text>
-        </TouchableOpacity>
         </ScrollView>
 
         {puedeGestionar && (
@@ -191,7 +168,7 @@ export default function SeccionDetalleScreen() {
         tipo={alerta.tipo}
         onClose={() => setAlerta((prev) => ({ ...prev, visible: false }))}
       />
-    </>
+    </View>
   );
 }
 
@@ -403,22 +380,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 10,
     backgroundColor: "#F3F4F6",
-  },
-  volverBottomBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 24,
-    marginBottom: 20, // Para dar espacio antes del final del scroll
-    paddingVertical: 14,
-    backgroundColor: "#E5E7EB",
-    borderRadius: 10,
-  },
-  volverBottomBtnText: {
-    color: "#4B5563",
-    fontWeight: "600",
-    fontSize: 15,
   },
 });
 
