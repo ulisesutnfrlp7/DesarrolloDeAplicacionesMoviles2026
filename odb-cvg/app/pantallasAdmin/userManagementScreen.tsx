@@ -1,28 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  Modal,
-  Alert,
   ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
-import { router, useRootNavigationState } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { router, useRootNavigationState } from 'expo-router';
 
+import ModalConfirmacion from '../../components/ui/ModalConfirmacion';
 import { auth, db } from '../../config/firebaseConfig';
 
 import {
+  collection,
+  deleteDoc,
   doc,
   getDoc,
-  collection,
   getDocs,
   updateDoc,
-  deleteDoc,
 } from 'firebase/firestore';
 
 type Rol = 'alumno' | 'profesor' | 'admin';
@@ -41,6 +42,7 @@ export default function UserManagementScreen() {
   const [loading, setLoading] = useState(true);
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [usuarioAEliminarId, setUsuarioAEliminarId] = useState<string | null>(null);
 
   const [usuarioActual, setUsuarioActual] = useState<Usuario | null>(null);
 
@@ -186,41 +188,27 @@ export default function UserManagementScreen() {
   // =========================
 
   const eliminarUsuario = (id: string) => {
+    setUsuarioAEliminarId(id);
+  };
 
-    Alert.alert(
-      'Eliminar usuario',
-      '¿Estás seguro de eliminar este usuario?',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
+  const confirmarEliminarUsuario = async () => {
+    if (!usuarioAEliminarId) return;
 
-          onPress: async () => {
+    try {
+      await deleteDoc(doc(db, 'usuarios', usuarioAEliminarId));
 
-            try {
+      setUsuarios((prev) => prev.filter((u) => u.id !== usuarioAEliminarId));
+      setUsuarioAEliminarId(null);
 
-              await deleteDoc(doc(db, 'usuarios', id));
+      Alert.alert('Éxito', 'Usuario eliminado');
+    } catch (error) {
+      console.log(error);
+      Alert.alert('Error', 'No se pudo eliminar');
+    }
+  };
 
-              setUsuarios((prev) =>
-                prev.filter((u) => u.id !== id)
-              );
-
-              Alert.alert('Éxito', 'Usuario eliminado');
-
-            } catch (error) {
-
-              console.log(error);
-
-              Alert.alert('Error', 'No se pudo eliminar');
-            }
-          },
-        },
-      ]
-    );
+  const cancelarEliminarUsuario = () => {
+    setUsuarioAEliminarId(null);
   };
 
   // =========================
@@ -416,6 +404,16 @@ export default function UserManagementScreen() {
         </View>
 
       </Modal>
+
+      <ModalConfirmacion
+        visible={usuarioAEliminarId !== null}
+        titulo="Eliminar usuario"
+        mensaje="¿Estás seguro de eliminar este usuario?"
+        textoConfirmar="Eliminar"
+        textoCancelar="Cancelar"
+        onConfirm={confirmarEliminarUsuario}
+        onCancel={cancelarEliminarUsuario}
+      />
 
     </View>
   );
