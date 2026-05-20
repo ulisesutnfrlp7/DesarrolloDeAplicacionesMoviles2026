@@ -4,13 +4,13 @@ import * as WebBrowser from "expo-web-browser";
 import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 import ModalAlerta from "../../components/ui/ModalAlerta";
@@ -168,7 +168,7 @@ export default function SeccionDetalleScreen() {
 
       <ModalConfirmacion
         visible={itemAEliminar !== null}
-        titulo="Eliminar elemento"
+        titulo="Eliminar Elemento"
         mensaje="¿Estás seguro de que deseas eliminar este elemento? Esta acción es permanente."
         textoConfirmar="Sí, eliminar"
         textoCancelar="Cancelar"
