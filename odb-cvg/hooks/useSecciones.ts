@@ -18,9 +18,14 @@ export interface Seccion {
   creadoPor: string;
   fechaCreacion: any;
   fechaActualizacion: any;
+  esRestringida?: boolean;
+  codigoAcceso?: string | null;
 }
 
-export type SeccionInput = Pick<Seccion, "titulo">;
+export type SeccionInput = Pick<Seccion, "titulo"> & {
+  esRestringida?: boolean;
+  codigoAcceso?: string | null;
+};
 
 export function useSecciones(moduloId: string) {
   const [secciones, setSecciones] = useState<Seccion[]>([]);

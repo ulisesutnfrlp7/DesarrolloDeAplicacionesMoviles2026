@@ -36,5 +36,27 @@ service cloud.firestore {
         }
       }
     }
+
+    // Colección 'inscripciones': gestión de matrículas por cursada
+    match /inscripciones/{inscripcionId} {
+      // El propio alumno o el admin pueden leer
+      allow read: if request.auth != null &&
+        (resource.data.alumnoId == request.auth.uid || isAdmin());
+
+      // Auto-matriculación por código: el alumno crea la propia inscripción
+      // y el código debe coincidir con el almacenado en la sección
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.alumnoId
+        && request.resource.data.tipo == 'codigo'
+        && get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId))
+            .data.codigoAcceso == request.resource.data.codigoUsado;
+
+      // Asignación manual y eliminación: solo admin
+      allow create: if isAdmin() && request.resource.data.tipo == 'manual';
+      allow delete: if isAdmin();
+
+      // Las inscripciones son inmutables (el admin elimina y recrea si es necesario)
+      allow update: if false;
+    }
   }
 }

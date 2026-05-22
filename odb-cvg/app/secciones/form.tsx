@@ -3,10 +3,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, Stack, useFocusEffect, useLocalSearchParams,} from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
+import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, Share, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { db } from "../../config/firebaseConfig";
+import { generarCodigoAleatorio } from "../../hooks/useInscripciones";
 import { useSecciones } from "../../hooks/useSecciones";
 import { useUserRole } from "../../hooks/useUserRole";
 import ScreenHeader from "../../components/ui/ScreenHeader";
@@ -22,6 +23,8 @@ export default function SeccionFormScreen() {
   const { crearSeccion, actualizarSeccion } = useSecciones(moduloId);
 
   const [titulo, setTitulo] = useState("");
+  const [esRestringida, setEsRestringida] = useState(false);
+  const [codigoAcceso, setCodigoAcceso] = useState("");
   const [cargandoDatos, setCargandoDatos] = useState(modoEdicion);
   const [guardando, setGuardando] = useState(false);
   const [hayCambios, setHayCambios] = useState(false);
@@ -50,6 +53,8 @@ export default function SeccionFormScreen() {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setTitulo(data.titulo ?? "");
+          setEsRestringida(data.esRestringida ?? false);
+          setCodigoAcceso(data.codigoAcceso ?? "");
         }
       } catch (error) {
         console.error("Error al cargar sección:", error);
@@ -73,8 +78,15 @@ export default function SeccionFormScreen() {
     }
     setGuardando(true);
     try {
+      const esCursada = titulo.trim().toLowerCase().startsWith("cursada -");
       const data = {
         titulo: titulo.trim(),
+        ...(esCursada && {
+          esRestringida,
+          codigoAcceso: esRestringida
+            ? (codigoAcceso || generarCodigoAleatorio())
+            : null,
+        }),
       };
       if (modoEdicion && seccionId) {
         await actualizarSeccion(seccionId, data);
@@ -184,9 +196,66 @@ export default function SeccionFormScreen() {
           onChangeText={(v) => {
             setTitulo(v);
             setHayCambios(true);
+            // Si el título ya no empieza con "Cursada -", limpiar los campos de acceso
+            if (!v.trim().toLowerCase().startsWith("cursada -")) {
+              setEsRestringida(false);
+              setCodigoAcceso("");
+            }
           }}
           maxLength={100}
         />
+
+        {/* Control de acceso — solo para secciones "Cursada - XXXX" */}
+        {titulo.trim().toLowerCase().startsWith("cursada -") && (
+          <View style={styles.cursadaSection}>
+            <Text style={styles.cursadaSectionTitulo}>Control de acceso</Text>
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.switchLabel}>Requerir código de inscripción</Text>
+                <Text style={styles.switchHint}>
+                  Los alumnos deberán ingresar un código para acceder.
+                </Text>
+              </View>
+              <Switch
+                value={esRestringida}
+                onValueChange={(v) => {
+                  setEsRestringida(v);
+                  if (v && !codigoAcceso) {
+                    setCodigoAcceso(generarCodigoAleatorio());
+                  }
+                  if (!v) setCodigoAcceso("");
+                  setHayCambios(true);
+                }}
+                trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {esRestringida && codigoAcceso ? (
+              <View style={styles.codigoContainer}>
+                <Text style={styles.codigoLabel}>Código de acceso actual</Text>
+                <View style={styles.codigoRow}>
+                  <Text style={styles.codigoText}>{codigoAcceso}</Text>
+                  <TouchableOpacity
+                    style={styles.compartirBtn}
+                    onPress={() =>
+                      Share.share({
+                        message: `Código de acceso para ${titulo.trim()}: ${codigoAcceso}`,
+                      })
+                    }
+                  >
+                    <Ionicons name="share-outline" size={16} color="#0F4A32" />
+                    <Text style={styles.compartirBtnText}>Compartir</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.codigoHint}>
+                  Compartí este código con los alumnos. Para rotarlo, usá el
+                  panel de administración de cursadas.
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        )}
 
         {/* Botones de acción */}
         <View style={styles.actionButtons}>
@@ -316,4 +385,82 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   volverBtnText: { color: "#FFFFFF", fontWeight: "700" },
+  cursadaSection: {
+    marginTop: 24,
+    backgroundColor: "#F0FDF4",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  cursadaSectionTitulo: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F4A32",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  switchLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  switchHint: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  codigoContainer: {
+    marginTop: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  codigoLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#9CA3AF",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  codigoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  codigoText: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0F4A32",
+    letterSpacing: 4,
+  },
+  compartirBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#E8F5E9",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  compartirBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0F4A32",
+  },
+  codigoHint: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 8,
+    lineHeight: 18,
+  },
 });
