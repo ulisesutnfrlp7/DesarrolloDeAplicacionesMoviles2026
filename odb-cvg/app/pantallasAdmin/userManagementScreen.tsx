@@ -9,6 +9,7 @@ import { auth, db } from '../../config/firebaseConfig';
 import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import ScreenHeader from '../../components/ui/ScreenHeader';
 import { inscribirManualmente, revocarInscripcion, regenerarCodigo, useInscripcionesPorSeccion, type Inscripcion } from '../../hooks/useInscripciones';
+import { useModulos } from '../../hooks/useModulos';
 
 type Rol = 'alumno' | 'profesor' | 'admin';
 
@@ -54,6 +55,7 @@ export default function UserManagementScreen() {
   const [asignando, setAsignando] = useState(false);
   const { inscripciones: inscripcionesExpandida, loading: loadingInscripciones } =
     useInscripcionesPorSeccion(cursadaExpandida?.id ?? null);
+  const { modulos, loading: loadingModulos } = useModulos();
 
   const rootNavigationState = useRootNavigationState();
 
@@ -104,6 +106,9 @@ export default function UserManagementScreen() {
   // Mapa uid→nombre para mostrar en inscripciones
   const usuariosMap: Record<string, string> = {};
   usuarios.forEach(u => { usuariosMap[u.id] = u.nombre || u.email; });
+
+  const modulosMap: Record<string, string> = {};
+  modulos.forEach(m => { modulosMap[m.id] = m.titulo; });
 
   const abrirEditar = (user: Usuario) => {
     setUsuarioActual(user);
@@ -274,13 +279,16 @@ export default function UserManagementScreen() {
               <Ionicons name="school-outline" size={48} color="#CBD5E0" />
               <Text style={styles.emptyText}>No hay cursadas con acceso restringido.</Text>
               <Text style={[styles.emptyText, { fontSize: 12, marginTop: 4 }]}>
-                Activá el control de acceso al editar una sección "Cursada - XXXX".
+                Activá el control de acceso al editar una sección &quot;Cursada - XXXX&quot;.
               </Text>
             </View>
           ) : (
             cursadas.map((cursada) => {
               const expandida = cursadaExpandida?.id === cursada.id;
               const inscritos = expandida ? inscripcionesExpandida : [];
+              const moduloTitulo = loadingModulos
+                ? 'Cargando módulo...'
+                : (modulosMap[cursada.moduloId] ?? 'Módulo no encontrado');
               const alumnosSinInscribir = usuarios.filter(u =>
                 u.rol === 'alumno' && !inscritos.some(i => i.alumnoId === u.id)
               );
@@ -297,7 +305,7 @@ export default function UserManagementScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cursadaTitulo}>{cursada.titulo}</Text>
-                      <Text style={styles.cursadaSubtitulo}>Módulo: {cursada.moduloId}</Text>
+                      <Text style={styles.cursadaSubtitulo}>Módulo: {moduloTitulo}</Text>
                     </View>
                     <Ionicons
                       name={expandida ? 'chevron-up-outline' : 'chevron-down-outline'}

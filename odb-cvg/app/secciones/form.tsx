@@ -78,15 +78,12 @@ export default function SeccionFormScreen() {
     }
     setGuardando(true);
     try {
-      const esCursada = titulo.trim().toLowerCase().startsWith("cursada -");
       const data = {
         titulo: titulo.trim(),
-        ...(esCursada && {
-          esRestringida,
-          codigoAcceso: esRestringida
-            ? (codigoAcceso || generarCodigoAleatorio())
-            : null,
-        }),
+        esRestringida,
+        codigoAcceso: esRestringida
+          ? (codigoAcceso || generarCodigoAleatorio())
+          : null,
       };
       if (modoEdicion && seccionId) {
         await actualizarSeccion(seccionId, data);
@@ -196,66 +193,59 @@ export default function SeccionFormScreen() {
           onChangeText={(v) => {
             setTitulo(v);
             setHayCambios(true);
-            // Si el título ya no empieza con "Cursada -", limpiar los campos de acceso
-            if (!v.trim().toLowerCase().startsWith("cursada -")) {
-              setEsRestringida(false);
-              setCodigoAcceso("");
-            }
           }}
           maxLength={100}
         />
 
-        {/* Control de acceso — solo para secciones "Cursada - XXXX" */}
-        {titulo.trim().toLowerCase().startsWith("cursada -") && (
-          <View style={styles.cursadaSection}>
-            <Text style={styles.cursadaSectionTitulo}>Control de acceso</Text>
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.switchLabel}>Requerir código de inscripción</Text>
-                <Text style={styles.switchHint}>
-                  Los alumnos deberán ingresar un código para acceder.
-                </Text>
-              </View>
-              <Switch
-                value={esRestringida}
-                onValueChange={(v) => {
-                  setEsRestringida(v);
-                  if (v && !codigoAcceso) {
-                    setCodigoAcceso(generarCodigoAleatorio());
-                  }
-                  if (!v) setCodigoAcceso("");
-                  setHayCambios(true);
-                }}
-                trackColor={{ false: "#E5E7EB", true: "#25B471" }}
-                thumbColor="#FFFFFF"
-              />
+        {/* Control de acceso */}
+        <View style={styles.cursadaSection}>
+          <Text style={styles.cursadaSectionTitulo}>Control de acceso</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Requerir código de inscripción</Text>
+              <Text style={styles.switchHint}>
+                Los alumnos deberán ingresar un código para acceder.
+              </Text>
             </View>
-
-            {esRestringida && codigoAcceso ? (
-              <View style={styles.codigoContainer}>
-                <Text style={styles.codigoLabel}>Código de acceso actual</Text>
-                <View style={styles.codigoRow}>
-                  <Text style={styles.codigoText}>{codigoAcceso}</Text>
-                  <TouchableOpacity
-                    style={styles.compartirBtn}
-                    onPress={() =>
-                      Share.share({
-                        message: `Código de acceso para ${titulo.trim()}: ${codigoAcceso}`,
-                      })
-                    }
-                  >
-                    <Ionicons name="share-outline" size={16} color="#0F4A32" />
-                    <Text style={styles.compartirBtnText}>Compartir</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.codigoHint}>
-                  Compartí este código con los alumnos. Para rotarlo, usá el
-                  panel de administración de cursadas.
-                </Text>
-              </View>
-            ) : null}
+            <Switch
+              value={esRestringida}
+              onValueChange={(v) => {
+                setEsRestringida(v);
+                if (v && !codigoAcceso) {
+                  setCodigoAcceso(generarCodigoAleatorio());
+                }
+                if (!v) setCodigoAcceso("");
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
           </View>
-        )}
+
+          {esRestringida && codigoAcceso ? (
+            <View style={styles.codigoContainer}>
+              <Text style={styles.codigoLabel}>Código de acceso actual</Text>
+              <View style={styles.codigoRow}>
+                <Text style={styles.codigoText}>{codigoAcceso}</Text>
+                <TouchableOpacity
+                  style={styles.compartirBtn}
+                  onPress={() =>
+                    Share.share({
+                      message: `Código de acceso para ${titulo.trim()}: ${codigoAcceso}`,
+                    })
+                  }
+                >
+                  <Ionicons name="share-outline" size={16} color="#0F4A32" />
+                  <Text style={styles.compartirBtnText}>Compartir</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.codigoHint}>
+                Compartí este código con los alumnos. Para rotarlo, usá el
+                panel de administración de cursadas.
+              </Text>
+            </View>
+          ) : null}
+        </View>
 
         {/* Botones de acción */}
         <View style={styles.actionButtons}>
