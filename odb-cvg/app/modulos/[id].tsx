@@ -1,13 +1,16 @@
 //app/modulos/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
+import MatriculacionModal from "../../components/ui/MatriculacionModal";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
-import { db } from "../../config/firebaseConfig";
+import { auth, db } from "../../config/firebaseConfig";
+import { useMisInscripciones } from "../../hooks/useInscripciones";
 import type { Modulo } from "../../hooks/useModulos";
+import type { Seccion } from "../../hooks/useSecciones";
 import { useSecciones } from "../../hooks/useSecciones";
 import { useUserRole } from "../../hooks/useUserRole";
 import ScreenHeader from "../../components/ui/ScreenHeader";
@@ -24,6 +27,7 @@ export default function ModuloDetalleScreen() {
   const [modulo, setModulo] = useState<Modulo | null>(null);
   const [loadingModulo, setLoadingModulo] = useState(true);
   const [seccionAEliminar, setSeccionAEliminar] = useState<string | null>(null);
+  const [seccionMatricular, setSeccionMatricular] = useState<Seccion | null>(null);
   const [alerta, setAlerta] = useState<{
     visible: boolean;
     titulo: string;
@@ -65,6 +69,11 @@ export default function ModuloDetalleScreen() {
   };
 
   const puedeGestionarSecciones = rol === "admin" || rol === "profesor";
+
+  const uid = auth.currentUser?.uid ?? null;
+  const { seccionesInscritas } = useMisInscripciones(
+    puedeGestionarSecciones ? null : uid,
+  );
 
   if (loadingModulo) {
     return (
@@ -148,21 +157,36 @@ export default function ModuloDetalleScreen() {
               : "No hay secciones disponibles."}
           </Text>
         ) : (
-          secciones.map((seccion) => (
+          secciones.map((seccion) => {
+            const bloqueada =
+              !!seccion.esRestringida &&
+              !puedeGestionarSecciones &&
+              !seccionesInscritas.has(seccion.id);
+            return (
             <TouchableOpacity
               key={seccion.id}
-              style={styles.seccionCard}
-              onPress={() =>
-                router.push(`/secciones/${seccion.id}?moduloId=${id}` as any)
-              }
+              style={[styles.seccionCard, bloqueada && styles.seccionCardBloqueada]}
+              onPress={() => {
+                if (bloqueada) {
+                  setSeccionMatricular(seccion);
+                } else {
+                  router.push(`/secciones/${seccion.id}?moduloId=${id}` as any);
+                }
+              }}
               activeOpacity={0.8}
             >
               <View style={styles.seccionRow}>
                 <View style={styles.seccionLeft}>
-                  <View style={styles.seccionIconBg}>
-                    <Ionicons name="folder-outline" size={18} color="#0F4A32" />
+                  <View style={[styles.seccionIconBg, bloqueada && styles.seccionIconBgBloqueada]}>
+                    <Ionicons
+                      name={bloqueada ? "lock-closed-outline" : "folder-outline"}
+                      size={18}
+                      color={bloqueada ? "#9CA3AF" : "#0F4A32"}
+                    />
                   </View>
-                  <Text style={styles.seccionTitulo}>{seccion.titulo}</Text>
+                  <Text style={[styles.seccionTitulo, bloqueada && styles.seccionTituloBloqueada]}>
+                    {seccion.titulo}
+                  </Text>
                 </View>
                 <View style={styles.seccionRight}>
                   {puedeGestionarSecciones && (
@@ -193,6 +217,18 @@ export default function ModuloDetalleScreen() {
                       </TouchableOpacity>
                     </>
                   )}
+                  {!puedeGestionarSecciones && seccion.esRestringida && (
+                    <View style={[styles.badgeAcceso, bloqueada ? styles.badgeBloqueado : styles.badgeAccedido]}>
+                      <Ionicons
+                        name={bloqueada ? "lock-closed-outline" : "checkmark-circle-outline"}
+                        size={11}
+                        color={bloqueada ? "#9CA3AF" : "#0F4A32"}
+                      />
+                      <Text style={[styles.badgeAccesoText, bloqueada ? styles.badgeBloqueadoText : styles.badgeAccedidoText]}>
+                        {bloqueada ? "Bloqueado" : "Inscripto"}
+                      </Text>
+                    </View>
+                  )}
                   <Ionicons
                     name="chevron-forward-outline"
                     size={16}
@@ -201,9 +237,24 @@ export default function ModuloDetalleScreen() {
                 </View>
               </View>
             </TouchableOpacity>
-          ))
+            );
+          })
         )}
       </ScrollView>
+
+      <MatriculacionModal
+        visible={seccionMatricular !== null}
+        onClose={() => setSeccionMatricular(null)}
+        onSuccess={() => {
+          const s = seccionMatricular;
+          setSeccionMatricular(null);
+          if (s) router.push(`/secciones/${s.id}?moduloId=${id}` as any);
+        }}
+        moduloId={id ?? ""}
+        seccionId={seccionMatricular?.id ?? ""}
+        seccionTitulo={seccionMatricular?.titulo ?? ""}
+        codigoActual={seccionMatricular?.codigoAcceso ?? ""}
+      />
 
       <ModalConfirmacion
         visible={seccionAEliminar !== null}
@@ -285,7 +336,19 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: "#25B471",
   },
+  seccionCardBloqueada: { borderLeftColor: "#E5E7EB" },
   seccionTitulo: { fontSize: 15, fontWeight: "600", color: "#11181C", flex: 1 },
+  seccionTituloBloqueada: { color: "#9CA3AF" },
+  seccionIconBgBloqueada: { backgroundColor: "#F3F4F6" },
+  badgeAcceso: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8,
+  },
+  badgeBloqueado: { backgroundColor: "#F3F4F6" },
+  badgeAccedido: { backgroundColor: "#E8F5E9" },
+  badgeAccesoText: { fontSize: 10, fontWeight: "600" },
+  badgeBloqueadoText: { color: "#9CA3AF" },
+  badgeAccedidoText: { color: "#0F4A32" },
   seccionRow: {
     flexDirection: "row",
     justifyContent: "space-between",

@@ -8,9 +8,10 @@ import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacit
 import Markdown from "react-native-markdown-display";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
-import { db } from "../../config/firebaseConfig";
+import { auth, db } from "../../config/firebaseConfig";
 import type { Item } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
+import { useMisInscripciones } from "../../hooks/useInscripciones";
 import type { Seccion } from "../../hooks/useSecciones";
 import { useUserRole } from "../../hooks/useUserRole";
 import ScreenHeader from "../../components/ui/ScreenHeader";
@@ -76,6 +77,16 @@ export default function SeccionDetalleScreen() {
 
   const puedeGestionar = rol === "admin" || rol === "profesor";
 
+  const uid = auth.currentUser?.uid ?? null;
+  const { seccionesInscritas } = useMisInscripciones(
+    puedeGestionar ? null : uid,
+  );
+
+  const noInscripto =
+    !!seccion?.esRestringida &&
+    !puedeGestionar &&
+    !seccionesInscritas.has(id ?? "");
+
   if (loadingSeccion) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
@@ -93,6 +104,28 @@ export default function SeccionDetalleScreen() {
         <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <Text style={styles.errorText}>Sección no encontrada.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (noInscripto) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo={seccion.titulo} mostrarHome />
+        <View style={styles.centered}>
+          <Ionicons name="lock-closed-outline" size={52} color="#CBD5E0" />
+          <Text style={styles.accesoDenegadoTitulo}>Acceso restringido</Text>
+          <Text style={styles.accesoDenegadoTexto}>
+            No estás inscripto en esta cursada.{"\n"}Ingresá el código desde la
+            pantalla anterior.
+          </Text>
+          <TouchableOpacity
+            style={styles.volverBtn}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.volverBtnText}>Volver</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -296,8 +329,19 @@ const styles = StyleSheet.create({
   wrapper: { flex: 1 },
   container: { flex: 1, backgroundColor: "#F5F5F5" },
   content: { padding: 16, paddingBottom: 100 },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 32 },
   errorText: { fontSize: 15, color: "#6B7280" },
+  accesoDenegadoTitulo: {
+    fontSize: 18, fontWeight: "700", color: "#374151", marginTop: 14, marginBottom: 8,
+  },
+  accesoDenegadoTexto: {
+    fontSize: 14, color: "#9CA3AF", textAlign: "center", lineHeight: 22,
+  },
+  volverBtn: {
+    marginTop: 24, backgroundColor: "#0F4A32",
+    paddingHorizontal: 28, paddingVertical: 12, borderRadius: 10,
+  },
+  volverBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
   emptyContainer: {
     flex: 1,
     alignItems: "center",

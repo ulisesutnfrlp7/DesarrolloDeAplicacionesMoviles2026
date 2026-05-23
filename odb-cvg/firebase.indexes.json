@@ -46,6 +46,31 @@
   //     ]
   //   },
   // ]
-  "indexes": [],
+{
+  "indexes": [
+    {
+      "collectionGroup": "secciones",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "esRestringida", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inscripciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "alumnoId", "order": "ASCENDING" },
+        { "fieldPath": "seccionId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inscripciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "seccionId", "order": "ASCENDING" },
+        { "fieldPath": "fechaInscripcion", "order": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

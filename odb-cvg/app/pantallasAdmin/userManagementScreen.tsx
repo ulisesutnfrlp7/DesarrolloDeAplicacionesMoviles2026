@@ -1,13 +1,14 @@
 //app/pantallasAdmin/userManagementScreen.tsx
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View,} from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useRootNavigationState } from 'expo-router';
 import ModalConfirmacion from '../../components/ui/ModalConfirmacion';
 import ModalAlerta from '../../components/ui/ModalAlerta';
 import { auth, db } from '../../config/firebaseConfig';
-import { collection, deleteDoc, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import ScreenHeader from '../../components/ui/ScreenHeader';
+import { inscribirManualmente, revocarInscripcion, regenerarCodigo, useInscripcionesPorSeccion, type Inscripcion } from '../../hooks/useInscripciones';
 
 type Rol = 'alumno' | 'profesor' | 'admin';
 
@@ -18,7 +19,18 @@ interface Usuario {
   rol: Rol;
 }
 
+interface CursadaRestringida {
+  id: string;      // seccionId
+  moduloId: string;
+  titulo: string;
+  codigoAcceso: string;
+}
+
 export default function UserManagementScreen() {
+  // ─── Pestaña activa ──────────────────────────────────────────────────────
+  const [tabActiva, setTabActiva] = useState<'usuarios' | 'cursadas'>('usuarios');
+
+  // ─── Estado Usuarios ─────────────────────────────────────────────────────
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalEditar, setModalEditar] = useState(false);
@@ -31,6 +43,17 @@ export default function UserManagementScreen() {
   const [alerta, setAlerta] = useState<{
     visible: boolean; titulo: string; mensaje: string; tipo: 'error' | 'exito';
   }>({ visible: false, titulo: '', mensaje: '', tipo: 'exito' });
+
+  // ─── Estado Cursadas ─────────────────────────────────────────────────────
+  const [cursadas, setCursadas] = useState<CursadaRestringida[]>([]);
+  const [loadingCursadas, setLoadingCursadas] = useState(true);
+  const [cursadaExpandida, setCursadaExpandida] = useState<CursadaRestringida | null>(null);
+  const [cursadaARegenerear, setCursadaARegenerar] = useState<CursadaRestringida | null>(null);
+  const [regenerando, setRegenerando] = useState(false);
+  const [modalAsignar, setModalAsignar] = useState(false);
+  const [asignando, setAsignando] = useState(false);
+  const { inscripciones: inscripcionesExpandida, loading: loadingInscripciones } =
+    useInscripcionesPorSeccion(cursadaExpandida?.id ?? null);
 
   const rootNavigationState = useRootNavigationState();
 
@@ -59,6 +82,28 @@ export default function UserManagementScreen() {
     });
     return unsubscribe;
   }, [rootNavigationState]);
+
+  // Cargar cursadas restringidas via collectionGroup
+  useEffect(() => {
+    const q = query(
+      collectionGroup(db, 'secciones'),
+      where('esRestringida', '==', true),
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setCursadas(snapshot.docs.map(d => ({
+        id: d.id,
+        moduloId: d.ref.parent.parent?.id ?? '',
+        titulo: d.data().titulo ?? '',
+        codigoAcceso: d.data().codigoAcceso ?? '',
+      })));
+      setLoadingCursadas(false);
+    }, () => setLoadingCursadas(false));
+    return () => unsubscribe();
+  }, []);
+
+  // Mapa uid→nombre para mostrar en inscripciones
+  const usuariosMap: Record<string, string> = {};
+  usuarios.forEach(u => { usuariosMap[u.id] = u.nombre || u.email; });
 
   const abrirEditar = (user: Usuario) => {
     setUsuarioActual(user);
@@ -91,6 +136,42 @@ export default function UserManagementScreen() {
       setAlerta({ visible: true, titulo: 'Eliminado', mensaje: 'El usuario fue eliminado.', tipo: 'exito' });
     } catch {
       setAlerta({ visible: true, titulo: 'Error', mensaje: 'No se pudo eliminar el usuario.', tipo: 'error' });
+    }
+  };
+
+  const handleRegenerarCodigo = async () => {
+    if (!cursadaARegenerear) return;
+    setRegenerando(true);
+    try {
+      await regenerarCodigo(cursadaARegenerear.moduloId, cursadaARegenerear.id);
+      setCursadaARegenerar(null);
+      setAlerta({ visible: true, titulo: 'Código regenerado', mensaje: 'El nuevo código está activo. Todos los alumnos anteriores perdieron acceso.', tipo: 'exito' });
+    } catch {
+      setAlerta({ visible: true, titulo: 'Error', mensaje: 'No se pudo regenerar el código.', tipo: 'error' });
+    } finally {
+      setRegenerando(false);
+    }
+  };
+
+  const handleRevocarInscripcion = async (insc: Inscripcion) => {
+    try {
+      await revocarInscripcion(insc.id);
+    } catch {
+      setAlerta({ visible: true, titulo: 'Error', mensaje: 'No se pudo revocar el acceso.', tipo: 'error' });
+    }
+  };
+
+  const handleAsignarAlumno = async (alumnoId: string) => {
+    if (!cursadaExpandida) return;
+    setAsignando(true);
+    try {
+      await inscribirManualmente(cursadaExpandida.moduloId, cursadaExpandida.id, alumnoId);
+      setModalAsignar(false);
+      setAlerta({ visible: true, titulo: 'Alumno asignado', mensaje: 'El alumno fue inscripto manualmente en la cursada.', tipo: 'exito' });
+    } catch (e: any) {
+      setAlerta({ visible: true, titulo: 'Error', mensaje: e.message || 'No se pudo asignar al alumno.', tipo: 'error' });
+    } finally {
+      setAsignando(false);
     }
   };
 
@@ -127,39 +208,215 @@ export default function UserManagementScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <ScreenHeader titulo="Administración de Usuarios" mostrarHome />
-      <View style={styles.container}>
-        <FlatList
-          data={usuarios}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="people-outline" size={48} color="#CBD5E0" />
-              <Text style={styles.emptyText}>No hay usuarios registrados.</Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.cardInfo}>
-                <Text style={styles.cardNombre}>{item.nombre}</Text>
-                <Text style={styles.cardEmail}>{item.email}</Text>
-                {renderBadge(item.rol)}
-              </View>
-              <View style={styles.cardActions}>
-                <TouchableOpacity style={styles.editBtn} onPress={() => abrirEditar(item)}>
-                  <Ionicons name="pencil-outline" size={16} color="#0F4A32" />
-                  <Text style={styles.editBtnText}>Editar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => setUsuarioAEliminarId(item.id)}>
-                  <Ionicons name="trash-outline" size={16} color="#DC2626" />
-                  <Text style={styles.deleteBtnText}>Eliminar</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        />
+      <ScreenHeader titulo="Administración" mostrarHome />
+
+      {/* ─── Selector de pestañas ─────────────────────────────────────────── */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabBtn, tabActiva === 'usuarios' && styles.tabBtnActive]}
+          onPress={() => setTabActiva('usuarios')}
+        >
+          <Ionicons name="people-outline" size={16} color={tabActiva === 'usuarios' ? '#0F4A32' : '#9CA3AF'} />
+          <Text style={[styles.tabBtnText, tabActiva === 'usuarios' && styles.tabBtnTextActive]}>Usuarios</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBtn, tabActiva === 'cursadas' && styles.tabBtnActive]}
+          onPress={() => setTabActiva('cursadas')}
+        >
+          <Ionicons name="school-outline" size={16} color={tabActiva === 'cursadas' ? '#0F4A32' : '#9CA3AF'} />
+          <Text style={[styles.tabBtnText, tabActiva === 'cursadas' && styles.tabBtnTextActive]}>Cursadas</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* ─── Pestaña Usuarios ─────────────────────────────────────────────── */}
+      {tabActiva === 'usuarios' && (
+        <View style={styles.container}>
+          <FlatList
+            data={usuarios}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="people-outline" size={48} color="#CBD5E0" />
+                <Text style={styles.emptyText}>No hay usuarios registrados.</Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <View style={styles.card}>
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardNombre}>{item.nombre}</Text>
+                  <Text style={styles.cardEmail}>{item.email}</Text>
+                  {renderBadge(item.rol)}
+                </View>
+                <View style={styles.cardActions}>
+                  <TouchableOpacity style={styles.editBtn} onPress={() => abrirEditar(item)}>
+                    <Ionicons name="pencil-outline" size={16} color="#0F4A32" />
+                    <Text style={styles.editBtnText}>Editar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.deleteBtn} onPress={() => setUsuarioAEliminarId(item.id)}>
+                    <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                    <Text style={styles.deleteBtnText}>Eliminar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          />
+        </View>
+      )}
+
+      {/* ─── Pestaña Cursadas ─────────────────────────────────────────────── */}
+      {tabActiva === 'cursadas' && (
+        <ScrollView style={styles.container} contentContainerStyle={styles.listContent}>
+          {loadingCursadas ? (
+            <ActivityIndicator color="#25B471" style={{ marginTop: 32 }} />
+          ) : cursadas.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="school-outline" size={48} color="#CBD5E0" />
+              <Text style={styles.emptyText}>No hay cursadas con acceso restringido.</Text>
+              <Text style={[styles.emptyText, { fontSize: 12, marginTop: 4 }]}>
+                Activá el control de acceso al editar una sección "Cursada - XXXX".
+              </Text>
+            </View>
+          ) : (
+            cursadas.map((cursada) => {
+              const expandida = cursadaExpandida?.id === cursada.id;
+              const inscritos = expandida ? inscripcionesExpandida : [];
+              const alumnosSinInscribir = usuarios.filter(u =>
+                u.rol === 'alumno' && !inscritos.some(i => i.alumnoId === u.id)
+              );
+
+              return (
+                <View key={cursada.id} style={styles.cursadaCard}>
+                  <TouchableOpacity
+                    style={styles.cursadaCardHeader}
+                    onPress={() => setCursadaExpandida(expandida ? null : cursada)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.cursadaIconBg}>
+                      <Ionicons name="school-outline" size={20} color="#0F4A32" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cursadaTitulo}>{cursada.titulo}</Text>
+                      <Text style={styles.cursadaSubtitulo}>Módulo: {cursada.moduloId}</Text>
+                    </View>
+                    <Ionicons
+                      name={expandida ? 'chevron-up-outline' : 'chevron-down-outline'}
+                      size={18}
+                      color="#9CA3AF"
+                    />
+                  </TouchableOpacity>
+
+                  {expandida && (
+                    <View style={styles.cursadaPanel}>
+                      {/* Código actual */}
+                      <Text style={styles.panelLabel}>Código de acceso</Text>
+                      <View style={styles.codigoRow}>
+                        <Text style={styles.codigoTexto}>{cursada.codigoAcceso || '—'}</Text>
+                        <TouchableOpacity
+                          style={styles.regenerarBtn}
+                          onPress={() => setCursadaARegenerar(cursada)}
+                        >
+                          <Ionicons name="refresh-outline" size={14} color="#DC2626" />
+                          <Text style={styles.regenerarBtnText}>Regenerar</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.codigoHint}>
+                        Al regenerar, todos los alumnos inscriptos perderán el acceso.
+                      </Text>
+
+                      {/* Lista de inscriptos */}
+                      <View style={styles.inscriptosHeader}>
+                        <Text style={styles.panelLabel}>
+                          Inscriptos ({expandida ? inscritos.length : '…'})
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.asignarBtn}
+                          onPress={() => setModalAsignar(true)}
+                        >
+                          <Ionicons name="person-add-outline" size={14} color="#0F4A32" />
+                          <Text style={styles.asignarBtnText}>Asignar</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {loadingInscripciones ? (
+                        <ActivityIndicator color="#25B471" size="small" style={{ marginTop: 8 }} />
+                      ) : inscritos.length === 0 ? (
+                        <Text style={styles.emptyText}>Sin inscriptos aún.</Text>
+                      ) : (
+                        inscritos.map((insc) => (
+                          <View key={insc.id} style={styles.inscriptoRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.inscriptoNombre}>
+                                {usuariosMap[insc.alumnoId] || insc.alumnoId}
+                              </Text>
+                              <View style={styles.inscriptoMeta}>
+                                <View style={[styles.tipoBadge, insc.tipo === 'manual' ? styles.tipoBadgeManual : styles.tipoBadgeCodigo]}>
+                                  <Text style={styles.tipoBadgeText}>
+                                    {insc.tipo === 'manual' ? 'Manual' : 'Código'}
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                            <TouchableOpacity
+                              style={styles.revocarBtn}
+                              onPress={() => handleRevocarInscripcion(insc)}
+                            >
+                              <Ionicons name="close-circle-outline" size={18} color="#DC2626" />
+                            </TouchableOpacity>
+                          </View>
+                        ))
+                      )}
+
+                      {/* Modal asignar alumno */}
+                      <Modal visible={modalAsignar} transparent animationType="slide">
+                        <View style={styles.modalOverlay}>
+                          <View style={styles.modalContent}>
+                            <View style={styles.modalHeader}>
+                              <Text style={styles.modalTitle}>Asignar alumno</Text>
+                              <TouchableOpacity onPress={() => setModalAsignar(false)}>
+                                <Ionicons name="close" size={22} color="#6B7280" />
+                              </TouchableOpacity>
+                            </View>
+                            {alumnosSinInscribir.length === 0 ? (
+                              <Text style={[styles.emptyText, { marginTop: 16 }]}>
+                                Todos los alumnos ya están inscriptos.
+                              </Text>
+                            ) : (
+                              <ScrollView style={{ maxHeight: 320 }}>
+                                {alumnosSinInscribir.map(u => (
+                                  <TouchableOpacity
+                                    key={u.id}
+                                    style={styles.alumnoPickerRow}
+                                    onPress={() => handleAsignarAlumno(u.id)}
+                                    disabled={asignando}
+                                  >
+                                    <View style={styles.alumnoPickerIcon}>
+                                      <Ionicons name="person-outline" size={16} color="#0F4A32" />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={styles.alumnoPickerNombre}>{u.nombre}</Text>
+                                      <Text style={styles.alumnoPickerEmail}>{u.email}</Text>
+                                    </View>
+                                    {asignando ? (
+                                      <ActivityIndicator size="small" color="#25B471" />
+                                    ) : (
+                                      <Ionicons name="add-circle-outline" size={20} color="#25B471" />
+                                    )}
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
+                            )}
+                          </View>
+                        </View>
+                      </Modal>
+                    </View>
+                  )}
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
+      )}
 
       {/* Modal Editar */}
       <Modal visible={modalEditar} animationType="slide" transparent>
@@ -228,6 +485,15 @@ export default function UserManagementScreen() {
         onConfirm={confirmarEliminar}
         onCancel={() => setUsuarioAEliminarId(null)}
       />
+      <ModalConfirmacion
+        visible={cursadaARegenerear !== null}
+        titulo="Regenerar código"
+        mensaje={`¿Regenerar el código de "${cursadaARegenerear?.titulo}"?\n\nTodos los alumnos inscriptos perderán el acceso y deberán volver a ingresar con el nuevo código.`}
+        textoConfirmar={regenerando ? 'Regenerando…' : 'Sí, regenerar'}
+        textoCancelar="Cancelar"
+        onConfirm={handleRegenerarCodigo}
+        onCancel={() => setCursadaARegenerar(null)}
+      />
       <ModalAlerta
         visible={alerta.visible}
         titulo={alerta.titulo}
@@ -244,8 +510,28 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   listContent: { padding: 16, paddingBottom: 40 },
   emptyContainer: { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyText: { fontSize: 14, color: '#9CA3AF', fontStyle: 'italic' },
+  emptyText: { fontSize: 14, color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center' },
 
+  // ─── Tabs ────────────────────────────────────────────────────────────────
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  tabBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+  },
+  tabBtnActive: { backgroundColor: '#E8F5E9' },
+  tabBtnText: { fontSize: 14, fontWeight: '600', color: '#9CA3AF' },
+  tabBtnTextActive: { color: '#0F4A32' },
+
+  // ─── Usuarios ────────────────────────────────────────────────────────────
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -286,7 +572,70 @@ const styles = StyleSheet.create({
   badgeAlumno: { backgroundColor: '#E2E8F0' },
   badgeTextAlumno: { color: '#4A5568', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' },
 
-  // Modal
+  // ─── Cursadas ─────────────────────────────────────────────────────────────
+  cursadaCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    borderLeftWidth: 3,
+    borderLeftColor: '#25B471',
+  },
+  cursadaCardHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14,
+  },
+  cursadaIconBg: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center',
+  },
+  cursadaTitulo: { fontSize: 15, fontWeight: '700', color: '#11181C' },
+  cursadaSubtitulo: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  cursadaPanel: {
+    borderTopWidth: 1, borderTopColor: '#F3F4F6', padding: 14, gap: 4,
+  },
+  panelLabel: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8, marginBottom: 6 },
+  codigoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  codigoTexto: { fontSize: 22, fontWeight: '800', color: '#0F4A32', letterSpacing: 4 },
+  regenerarBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FEF2F2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+  },
+  regenerarBtnText: { fontSize: 13, fontWeight: '600', color: '#DC2626' },
+  codigoHint: { fontSize: 11, color: '#9CA3AF', marginBottom: 4 },
+  inscriptosHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  asignarBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+  },
+  asignarBtnText: { fontSize: 13, fontWeight: '600', color: '#0F4A32' },
+  inscriptoRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F9F9F9',
+  },
+  inscriptoNombre: { fontSize: 14, fontWeight: '600', color: '#11181C' },
+  inscriptoMeta: { flexDirection: 'row', gap: 6, marginTop: 3 },
+  tipoBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
+  tipoBadgeCodigo: { backgroundColor: '#EFF6FF' },
+  tipoBadgeManual: { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' },
+  tipoBadgeText: { fontSize: 10, fontWeight: '700', color: '#374151' },
+  revocarBtn: { padding: 4 },
+  alumnoPickerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+  },
+  alumnoPickerIcon: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center',
+  },
+  alumnoPickerNombre: { fontSize: 14, fontWeight: '600', color: '#11181C' },
+  alumnoPickerEmail: { fontSize: 12, color: '#9CA3AF' },
+
+  // ─── Modal ────────────────────────────────────────────────────────────────
   modalOverlay: {
     flex: 1, backgroundColor: '#00000066',
     justifyContent: 'flex-end',
