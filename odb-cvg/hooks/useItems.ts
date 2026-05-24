@@ -55,7 +55,53 @@ const deleteFromCloudinary = async (publicId: string, tipo: ItemTipo) => {
   }
 };
 
-export function useItems(moduloId: string, seccionId: string) {
+const getItemsCollection = (
+  moduloId: string,
+  seccionId: string,
+  subseccionPath?: string,
+) => {
+  const subseccionSegments = (subseccionPath ?? "")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .flatMap((id) => ["subsecciones", id]);
+
+  return collection(
+    db,
+    "modulos",
+    moduloId,
+    "secciones",
+    seccionId,
+    ...subseccionSegments,
+    "items",
+  );
+};
+
+const getItemDoc = (
+  moduloId: string,
+  seccionId: string,
+  itemId: string,
+  subseccionPath?: string,
+) => {
+  const subseccionSegments = (subseccionPath ?? "")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .flatMap((id) => ["subsecciones", id]);
+
+  return doc(
+    db,
+    "modulos",
+    moduloId,
+    "secciones",
+    seccionId,
+    ...subseccionSegments,
+    "items",
+    itemId,
+  );
+};
+
+export function useItems(moduloId: string, seccionId: string, subseccionPath?: string) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,7 +111,7 @@ export function useItems(moduloId: string, seccionId: string) {
       return;
     }
     const q = query(
-      collection(db, "modulos", moduloId, "secciones", seccionId, "items"),
+      getItemsCollection(moduloId, seccionId, subseccionPath),
       orderBy("fechaCreacion", "asc"),
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -76,12 +122,12 @@ export function useItems(moduloId: string, seccionId: string) {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [moduloId, seccionId]);
+  }, [moduloId, seccionId, subseccionPath]);
 
   const crearItem = async (data: ItemInput) => {
     const user = auth.currentUser;
     if (!user) throw new Error("No autenticado");
-    await addDoc(collection(db, "modulos", moduloId, "secciones", seccionId, "items"), {
+    await addDoc(getItemsCollection(moduloId, seccionId, subseccionPath), {
       ...data,
       creadoPor: user.uid,
       fechaCreacion: serverTimestamp(),
@@ -90,7 +136,7 @@ export function useItems(moduloId: string, seccionId: string) {
   };
 
   const actualizarItem = async (itemId: string, data: Partial<ItemInput>) => {
-    await updateDoc(doc(db, "modulos", moduloId, "secciones", seccionId, "items", itemId), {
+    await updateDoc(getItemDoc(moduloId, seccionId, itemId, subseccionPath), {
       ...data,
       fechaActualizacion: serverTimestamp(),
     });
@@ -108,7 +154,7 @@ export function useItems(moduloId: string, seccionId: string) {
       }
     }
 
-    await deleteDoc(doc(db, "modulos", moduloId, "secciones", seccionId, "items", item.id));
+    await deleteDoc(getItemDoc(moduloId, seccionId, item.id, subseccionPath));
     console.log("[ELIMINAR] Documento borrado de la base de datos con éxito.");
   };
 

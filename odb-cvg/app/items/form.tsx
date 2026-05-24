@@ -24,15 +24,18 @@ const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
 ];
 
 export default function ItemFormScreen() {
-  const { moduloId, seccionId, itemId } = useLocalSearchParams<{
+  const { moduloId, seccionId, subseccionId, subseccionPath, itemId } = useLocalSearchParams<{
     moduloId: string;
     seccionId: string;
+    subseccionId?: string;
+    subseccionPath?: string;
     itemId?: string;
   }>();
   const modoEdicion = !!itemId;
+  const currentSubseccionPath = subseccionPath ?? subseccionId;
 
   const { rol, loading: loadingRol } = useUserRole();
-  const { crearItem, actualizarItem } = useItems(moduloId, seccionId);
+  const { crearItem, actualizarItem } = useItems(moduloId, seccionId, currentSubseccionPath);
 
   const [tipo, setTipo] = useState<ItemTipo>("texto");
   const [titulo, setTitulo] = useState("");
@@ -75,8 +78,13 @@ export default function ItemFormScreen() {
     if (!modoEdicion || !itemId) return;
     const cargar = async () => {
       try {
+        const subseccionSegments = (currentSubseccionPath ?? "")
+          .split("/")
+          .map((segment) => segment.trim())
+          .filter(Boolean)
+          .flatMap((id) => ["subsecciones", id]);
         const snap = await getDoc(
-          doc(db, "modulos", moduloId, "secciones", seccionId, "items", itemId),
+          doc(db, "modulos", moduloId, "secciones", seccionId, ...subseccionSegments, "items", itemId),
         );
         if (snap.exists()) {
           const data = snap.data();
@@ -102,7 +110,7 @@ export default function ItemFormScreen() {
     };
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemId]);
+  }, [itemId, currentSubseccionPath]);
 
 const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => {
   const data = new FormData();
