@@ -23,7 +23,7 @@ export default function SubseccionDetalleScreen() {
     seccionId: string;
     subseccionPath?: string;
   }>();
-  const { rol } = useUserRole();
+  const { rol, loading: loadingRol } = useUserRole();
   const currentSubseccionPath = subseccionPath ?? id;
   const { items, loading: loadingItems, eliminarItem } = useItems(moduloId, seccionId, currentSubseccionPath);
   const {
@@ -112,7 +112,7 @@ export default function SubseccionDetalleScreen() {
     await WebBrowser.openBrowserAsync(url);
   };
 
-  if (loadingSubseccion) {
+  if (loadingSubseccion || loadingRol) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />

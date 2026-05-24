@@ -20,6 +20,12 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // Consulta collectionGroup('secciones') usada por Administracion > Cursadas.
+    // La lectura normal de secciones sigue definida dentro de modulos.
+    match /{path=**}/secciones/{seccionId} {
+      allow read: if isAdmin();
+    }
+
     // Colección 'modulos': lectura para todos los autenticados, escritura solo admin
     match /modulos/{moduloId} {
       allow read: if request.auth != null;

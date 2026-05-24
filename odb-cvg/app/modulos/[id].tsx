@@ -17,7 +17,7 @@ import ScreenHeader from "../../components/ui/ScreenHeader";
 
 export default function ModuloDetalleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { rol } = useUserRole();
+  const { rol, loading: loadingRol } = useUserRole();
   const {
     secciones,
     loading: loadingSecciones,
@@ -71,11 +71,11 @@ export default function ModuloDetalleScreen() {
   const puedeGestionarSecciones = rol === "admin" || rol === "profesor";
 
   const uid = auth.currentUser?.uid ?? null;
-  const { seccionesInscritas } = useMisInscripciones(
-    puedeGestionarSecciones ? null : uid,
+  const { seccionesInscritas, loading: loadingInscripciones } = useMisInscripciones(
+    !loadingRol && !puedeGestionarSecciones ? uid : null,
   );
 
-  if (loadingModulo) {
+  if (loadingModulo || loadingRol) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />
@@ -148,7 +148,7 @@ export default function ModuloDetalleScreen() {
           )}
         </View>
 
-        {loadingSecciones ? (
+        {loadingSecciones || (!puedeGestionarSecciones && loadingInscripciones) ? (
           <ActivityIndicator color="#25B471" style={{ marginTop: 16 }} />
         ) : secciones.length === 0 ? (
           <Text style={styles.sinSecciones}>

@@ -87,6 +87,9 @@ export default function UserManagementScreen() {
 
   // Cargar cursadas restringidas via collectionGroup
   useEffect(() => {
+    if (!esAdmin) return;
+
+    setLoadingCursadas(true);
     const q = query(
       collectionGroup(db, 'secciones'),
       where('esRestringida', '==', true),
@@ -99,9 +102,13 @@ export default function UserManagementScreen() {
         codigoAcceso: d.data().codigoAcceso ?? '',
       })));
       setLoadingCursadas(false);
-    }, () => setLoadingCursadas(false));
+    }, (error) => {
+      console.error('cursadas restringidas error:', error);
+      setCursadas([]);
+      setLoadingCursadas(false);
+    });
     return () => unsubscribe();
-  }, []);
+  }, [esAdmin]);
 
   // Mapa uid→nombre para mostrar en inscripciones
   const usuariosMap: Record<string, string> = {};
@@ -279,7 +286,7 @@ export default function UserManagementScreen() {
               <Ionicons name="school-outline" size={48} color="#CBD5E0" />
               <Text style={styles.emptyText}>No hay cursadas con acceso restringido.</Text>
               <Text style={[styles.emptyText, { fontSize: 12, marginTop: 4 }]}>
-                Activá el control de acceso al editar una sección &quot;Cursada - XXXX&quot;.
+                Activá el control de acceso al crear o editar una sección para verla en este listado.
               </Text>
             </View>
           ) : (

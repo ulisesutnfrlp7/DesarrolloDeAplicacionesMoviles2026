@@ -23,7 +23,7 @@ export default function SeccionDetalleScreen() {
     id: string;
     moduloId: string;
   }>();
-  const { rol } = useUserRole();
+  const { rol, loading: loadingRol } = useUserRole();
   const { items, loading: loadingItems, eliminarItem } = useItems(moduloId, id);
   const {
     subsecciones,
@@ -108,8 +108,8 @@ export default function SeccionDetalleScreen() {
   const puedeGestionar = rol === "admin" || rol === "profesor";
 
   const uid = auth.currentUser?.uid ?? null;
-  const { seccionesInscritas } = useMisInscripciones(
-    puedeGestionar ? null : uid,
+  const { seccionesInscritas, loading: loadingInscripciones } = useMisInscripciones(
+    !loadingRol && !puedeGestionar ? uid : null,
   );
 
   const noInscripto =
@@ -117,7 +117,7 @@ export default function SeccionDetalleScreen() {
     !puedeGestionar &&
     !seccionesInscritas.has(id ?? "");
 
-  if (loadingSeccion) {
+  if (loadingSeccion || loadingRol) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />
@@ -134,6 +134,17 @@ export default function SeccionDetalleScreen() {
         <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
           <Text style={styles.errorText}>Sección no encontrada.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (seccion.esRestringida && !puedeGestionar && loadingInscripciones) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo={seccion.titulo} mostrarHome />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#25B471" />
         </View>
       </View>
     );

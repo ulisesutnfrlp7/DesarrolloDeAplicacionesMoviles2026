@@ -1,48 +1,29 @@
 //app/(tabs)/home.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import { signOut } from "firebase/auth";
+import React, { useState } from "react";
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ModuloCard from "../../components/ui/ModuloCard";
-import { auth, db } from "../../config/firebaseConfig";
+import { auth } from "../../config/firebaseConfig";
+import type { Modulo } from "../../hooks/useModulos";
 import { useModulos } from "../../hooks/useModulos";
 import { useUserRole } from "../../hooks/useUserRole";
 
 export default function HomeScreen() {
-  const [rolUsuario, setRolUsuario] = useState("");
-  const [cargando, setCargando] = useState(true);
-
   const { rol, loading: loadingRol } = useUserRole();
-  const { modulos, loading: loadingModulos, eliminarModulo } = useModulos();
+  const {
+    modulos,
+    loading: loadingModulos,
+    eliminarModulo,
+    guardarOrdenModulos,
+  } = useModulos();
+  const [modoOrdenamiento, setModoOrdenamiento] = useState(false);
+  const [modulosOrdenables, setModulosOrdenables] = useState<Modulo[]>([]);
+  const [guardandoOrden, setGuardandoOrden] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        try {
-          const docRef = doc(db, "usuarios", user.uid);
-          const docSnap = await getDoc(docRef);
-
-          if (docSnap.exists()) {
-            setRolUsuario(docSnap.data().rol); // Setear 'alumno' (o lo que diga la BD)
-          } else {
-            console.log("No se encontró el documento del usuario");
-          }
-        } catch (error) {
-          console.error("Error al obtener rol:", error);
-        } finally {
-          setCargando(false);
-        }
-      } else {
-        setCargando(false);
-      }
-    });
-
-    return unsubscribe;
-  }, []);
 
   const [modalSalir, setModalSalir] = useState(false);
   const [moduloAEliminar, setModuloAEliminar] = useState<string | null>(null);
@@ -91,6 +72,55 @@ export default function HomeScreen() {
     }
   };
 
+  const iniciarOrdenamiento = () => {
+    setModulosOrdenables(modulos);
+    setModoOrdenamiento(true);
+  };
+
+  const cancelarOrdenamiento = () => {
+    setModulosOrdenables([]);
+    setModoOrdenamiento(false);
+  };
+
+  const moverModulo = (index: number, direccion: -1 | 1) => {
+    const nuevoIndex = index + direccion;
+    if (nuevoIndex < 0 || nuevoIndex >= modulosOrdenables.length) return;
+
+    setModulosOrdenables((prev) => {
+      const copia = [...prev];
+      const modulo = copia[index];
+      copia[index] = copia[nuevoIndex];
+      copia[nuevoIndex] = modulo;
+      return copia;
+    });
+  };
+
+  const guardarOrden = async () => {
+    setGuardandoOrden(true);
+    try {
+      await guardarOrdenModulos(modulosOrdenables);
+      setModoOrdenamiento(false);
+      setModulosOrdenables([]);
+      setAlerta({
+        visible: true,
+        titulo: "Orden guardado",
+        mensaje: "El orden de los módulos fue actualizado correctamente.",
+        tipo: "exito",
+      });
+    } catch {
+      setAlerta({
+        visible: true,
+        titulo: "Error",
+        mensaje: "No se pudo guardar el orden de los módulos.",
+        tipo: "error",
+      });
+    } finally {
+      setGuardandoOrden(false);
+    }
+  };
+
+  const modulosVisibles = modoOrdenamiento ? modulosOrdenables : modulos;
+
   if (loadingRol || loadingModulos) {
     return (
       <View style={styles.centered}>
@@ -121,7 +151,7 @@ export default function HomeScreen() {
         </View>
 
         {/*Boton para ir a pantalla de administracion de usuarios, solo visible para admins*/}
-        {rolUsuario === "admin" && (
+        {rol === "admin" && (
           <TouchableOpacity
             style={styles.adminButton}
             onPress={() => router.push("../pantallasAdmin/userManagementScreen")}
@@ -139,7 +169,45 @@ export default function HomeScreen() {
       </View>
 
       {/* Grid de módulos */}
-      {modulos.length === 0 ? (
+      {rol === "admin" && modulos.length > 0 && !modoOrdenamiento && (
+        <View style={styles.listActions}>
+          <TouchableOpacity
+            style={styles.orderButton}
+            onPress={iniciarOrdenamiento}
+          >
+            <Ionicons name="swap-vertical-outline" size={18} color="#0F4A32" />
+            <Text style={styles.orderButtonText}>Ordenar</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {modoOrdenamiento && (
+        <View style={styles.orderBar}>
+          <TouchableOpacity
+            style={styles.orderCancelBtn}
+            onPress={cancelarOrdenamiento}
+            disabled={guardandoOrden}
+          >
+            <Text style={styles.orderCancelBtnText}>Cancelar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.orderSaveBtn, guardandoOrden && styles.orderSaveBtnDisabled]}
+            onPress={guardarOrden}
+            disabled={guardandoOrden}
+          >
+            {guardandoOrden ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Ionicons name="save-outline" size={16} color="#FFFFFF" />
+            )}
+            <Text style={styles.orderSaveBtnText}>
+              {guardandoOrden ? "Guardando..." : "Guardar orden"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {modulosVisibles.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="folder-open-outline" size={52} color="#CBD5E0" />
           <Text style={styles.emptyText}>
@@ -150,29 +218,88 @@ export default function HomeScreen() {
         </View>
       ) : (
         <FlatList
-          data={modulos}
+          data={modulosVisibles}
           keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
+          numColumns={modoOrdenamiento ? 1 : 2}
+          key={modoOrdenamiento ? "ordenamiento" : "grilla"}
+          columnWrapperStyle={modoOrdenamiento ? undefined : styles.row}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <ModuloCard
-              titulo={item.titulo}
-              descripcionCorta={item.descripcionCorta}
-              icono={item.icono || "book-outline"}
-              esAdmin={rol === "admin"}
-              onPress={() => router.push(`/modulos/${item.id}` as any)}
-              onEditar={() =>
-                router.push(`/modulos/form?moduloId=${item.id}` as any)
-              }
-              onEliminar={() => setModuloAEliminar(item.id)}
-            />
-          )}
+          renderItem={({ item, index }) =>
+            modoOrdenamiento ? (
+              <View style={styles.orderItem}>
+                <View style={styles.orderItemCard}>
+                  <View style={styles.orderIconContainer}>
+                    <Ionicons
+                      name={(item.icono || "book-outline") as any}
+                      size={28}
+                      color="#0F4A32"
+                    />
+                  </View>
+                  <View style={styles.orderItemText}>
+                    <Text style={styles.orderItemTitle}>{item.titulo}</Text>
+                    <Text style={styles.orderItemDescription} numberOfLines={2}>
+                      {item.descripcionCorta}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.orderControls}>
+                  <TouchableOpacity
+                    style={[styles.orderArrowBtn, index === 0 && styles.orderArrowBtnDisabled]}
+                    onPress={() => moverModulo(index, -1)}
+                    disabled={index === 0 || guardandoOrden}
+                  >
+                    <Ionicons
+                      name="arrow-up-outline"
+                      size={22}
+                      color={index === 0 ? "#CBD5E0" : "#0F4A32"}
+                    />
+                    <Text style={[styles.orderArrowText, index === 0 && styles.orderArrowTextDisabled]}>
+                      Subir
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.orderArrowBtn,
+                      index === modulosOrdenables.length - 1 && styles.orderArrowBtnDisabled,
+                    ]}
+                    onPress={() => moverModulo(index, 1)}
+                    disabled={index === modulosOrdenables.length - 1 || guardandoOrden}
+                  >
+                    <Ionicons
+                      name="arrow-down-outline"
+                      size={22}
+                      color={index === modulosOrdenables.length - 1 ? "#CBD5E0" : "#0F4A32"}
+                    />
+                    <Text
+                      style={[
+                        styles.orderArrowText,
+                        index === modulosOrdenables.length - 1 && styles.orderArrowTextDisabled,
+                      ]}
+                    >
+                      Bajar
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <ModuloCard
+                titulo={item.titulo}
+                descripcionCorta={item.descripcionCorta}
+                icono={item.icono || "book-outline"}
+                esAdmin={rol === "admin"}
+                onPress={() => router.push(`/modulos/${item.id}` as any)}
+                onEditar={() =>
+                  router.push(`/modulos/form?moduloId=${item.id}` as any)
+                }
+                onEliminar={() => setModuloAEliminar(item.id)}
+              />
+            )
+          }
         />
       )}
 
       {/* FAB solo para admin */}
-      {rol === "admin" && (
+      {rol === "admin" && !modoOrdenamiento && (
         <TouchableOpacity
           style={styles.fab}
           onPress={() => router.push("/modulos/form" as any)}
@@ -297,6 +424,20 @@ logoutButton: {
     justifyContent: 'center',
     alignItems: 'center',
   },
+  orderButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#E8F5E9",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  orderButtonText: {
+    color: "#0F4A32",
+    fontSize: 13,
+    fontWeight: "700",
+  },
 
   adminButtonText: {
     color: "#FFFFFF",
@@ -305,6 +446,109 @@ logoutButton: {
   },
   listContent: { padding: 16, paddingBottom: 90 },
   row: { gap: 12, marginBottom: 12 },
+  listActions: {
+    alignItems: "flex-end",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 0,
+  },
+  orderBar: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  orderCancelBtn: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  orderCancelBtnText: {
+    color: "#6B7280",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  orderSaveBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    backgroundColor: "#25B471",
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  orderSaveBtnDisabled: { opacity: 0.65 },
+  orderSaveBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  orderItem: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  orderItemCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  orderIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#E8F5E9",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  orderItemText: { flex: 1 },
+  orderItemTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#11181C",
+  },
+  orderItemDescription: {
+    fontSize: 12,
+    color: "#6B7280",
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  orderControls: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+  },
+  orderArrowBtn: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 10,
+    paddingVertical: 11,
+  },
+  orderArrowBtnDisabled: { backgroundColor: "#F3F4F6" },
+  orderArrowText: {
+    color: "#0F4A32",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  orderArrowTextDisabled: { color: "#CBD5E0" },
   fab: {
     position: "absolute",
     bottom: 28,

@@ -27,13 +27,16 @@ export interface Inscripcion {
 export function useInscripcionesPorSeccion(seccionId: string | null) {
   const [inscripciones, setInscripciones] = useState<Inscripcion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadedSeccionId, setLoadedSeccionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!seccionId) {
       setInscripciones([]);
+      setLoadedSeccionId(null);
       setLoading(false);
       return;
     }
+    setLoading(true);
     const q = query(
       collection(db, "inscripciones"),
       where("seccionId", "==", seccionId),
@@ -44,17 +47,22 @@ export function useInscripcionesPorSeccion(seccionId: string | null) {
         setInscripciones(
           snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Inscripcion),
         );
+        setLoadedSeccionId(seccionId);
         setLoading(false);
       },
       (error) => {
         console.error("useInscripcionesPorSeccion error:", error);
+        setLoadedSeccionId(seccionId);
         setLoading(false);
       },
     );
     return () => unsubscribe();
   }, [seccionId]);
 
-  return { inscripciones, loading };
+  return {
+    inscripciones,
+    loading: loading || (!!seccionId && loadedSeccionId !== seccionId),
+  };
 }
 
 // Hook para alumnos: retorna el set de seccionIds en los que está inscripto el usuario.
@@ -63,13 +71,16 @@ export function useMisInscripciones(uid: string | null) {
     new Set(),
   );
   const [loading, setLoading] = useState(true);
+  const [loadedUid, setLoadedUid] = useState<string | null>(null);
 
   useEffect(() => {
     if (!uid) {
       setSeccionesInscritas(new Set());
+      setLoadedUid(null);
       setLoading(false);
       return;
     }
+    setLoading(true);
     const q = query(
       collection(db, "inscripciones"),
       where("alumnoId", "==", uid),
@@ -80,14 +91,21 @@ export function useMisInscripciones(uid: string | null) {
         setSeccionesInscritas(
           new Set(snapshot.docs.map((d) => d.data().seccionId as string)),
         );
+        setLoadedUid(uid);
         setLoading(false);
       },
-      () => setLoading(false),
+      () => {
+        setLoadedUid(uid);
+        setLoading(false);
+      },
     );
     return () => unsubscribe();
   }, [uid]);
 
-  return { seccionesInscritas, loading };
+  return {
+    seccionesInscritas,
+    loading: loading || (!!uid && loadedUid !== uid),
+  };
 }
 
 // Genera un código alfanumérico aleatorio de 8 caracteres (sin caracteres ambiguos).
