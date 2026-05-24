@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Image,
   View,
 } from "react-native";
 import { auth } from "../config/firebaseConfig";
@@ -43,6 +44,10 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <Image
+          source={require("../assets/images/LogoRecortado.jpg")}
+          style={styles.logo}
+        />
         <Text style={styles.title}>Operatoria Dental B</Text>
         <Text style={styles.subtitle}>Facultad de Odontología - UNLP</Text>
       </View>
@@ -117,6 +122,12 @@ const styles = StyleSheet.create({
     color: "#0F4A32",
     textAlign: "center",
     marginBottom: 8,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 16,
   },
   subtitle: {
     fontSize: 16,
