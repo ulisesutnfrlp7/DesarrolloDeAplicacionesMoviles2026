@@ -1,13 +1,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "secciones",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "esRestringida", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "inscripciones",
       "queryScope": "COLLECTION",
       "fields": [
@@ -24,5 +17,16 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "secciones",
+      "fieldPath": "esRestringida",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    }
+  ]
 }
