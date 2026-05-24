@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { signOut } from "firebase/auth";
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
+import { ActivityIndicator, Image , Alert, FlatList, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ModuloCard from "../../components/ui/ModuloCard";
@@ -135,6 +135,10 @@ export default function HomeScreen() {
       <View style={styles.headerRow}>
         <View style={styles.headerTitles}>
           <View style={styles.titleWithBadge}>
+            <Image
+              source={require("../../assets/images/LogoRecortado.jpg")}
+              style={styles.logo}
+            />
             <Text style={styles.headerText}>CVG - Odonto B</Text>
             {rol === "admin" && (
               <View style={[styles.badge, styles.badgeAdmin]}>
@@ -565,4 +569,12 @@ logoutButton: {
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
   },
+
+   logo: {
+    width: 50,
+    height: 50,
+    borderRadius: 50,
+    marginBottom: 16,
+  },
+
 });
