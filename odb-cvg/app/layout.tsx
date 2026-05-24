@@ -40,6 +40,8 @@ export default function RootLayout() {
         <Stack.Screen name="modulos/form" options={{ headerShown: false }} />
         <Stack.Screen name="secciones/form" options={{ headerShown: false }} />
         <Stack.Screen name="secciones/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="subsecciones/form" options={{ headerShown: false }} />
+        <Stack.Screen name="subsecciones/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="items/form" options={{ headerShown: false }} />
         <Stack.Screen name="pantallasAdmin/userManagementScreen" options={{ headerShown: false }} />
         <Stack.Screen name="items/form" options={{ headerShown: true }} />

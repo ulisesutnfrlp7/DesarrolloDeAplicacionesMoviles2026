@@ -1,38 +1,39 @@
-//app/secciones/[id].tsx
+//app/subsecciones/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Markdown from "react-native-markdown-display";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
-import { auth, db } from "../../config/firebaseConfig";
+import ScreenHeader from "../../components/ui/ScreenHeader";
+import { db } from "../../config/firebaseConfig";
 import type { Item } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
-import { useMisInscripciones } from "../../hooks/useInscripciones";
-import type { Seccion } from "../../hooks/useSecciones";
 import type { Subseccion } from "../../hooks/useSubsecciones";
 import { useSubsecciones } from "../../hooks/useSubsecciones";
 import { useUserRole } from "../../hooks/useUserRole";
-import ScreenHeader from "../../components/ui/ScreenHeader";
 
-export default function SeccionDetalleScreen() {
-  const { id, moduloId } = useLocalSearchParams<{
+export default function SubseccionDetalleScreen() {
+  const { id, moduloId, seccionId, subseccionPath } = useLocalSearchParams<{
     id: string;
     moduloId: string;
+    seccionId: string;
+    subseccionPath?: string;
   }>();
   const { rol } = useUserRole();
-  const { items, loading: loadingItems, eliminarItem } = useItems(moduloId, id);
+  const currentSubseccionPath = subseccionPath ?? id;
+  const { items, loading: loadingItems, eliminarItem } = useItems(moduloId, seccionId, currentSubseccionPath);
   const {
     subsecciones,
     loading: loadingSubsecciones,
     eliminarSubseccion,
-  } = useSubsecciones(moduloId, id);
+  } = useSubsecciones(moduloId, seccionId, currentSubseccionPath);
 
-  const [seccion, setSeccion] = useState<Seccion | null>(null);
-  const [loadingSeccion, setLoadingSeccion] = useState(true);
+  const [subseccion, setSubseccion] = useState<Subseccion | null>(null);
+  const [loadingSubseccion, setLoadingSubseccion] = useState(true);
   const [itemAEliminar, setItemAEliminar] = useState<Item | null>(null);
   const [subseccionAEliminar, setSubseccionAEliminar] = useState<string | null>(null);
   const [alerta, setAlerta] = useState<{
@@ -43,24 +44,30 @@ export default function SeccionDetalleScreen() {
   }>({ visible: false, titulo: "", mensaje: "", tipo: "exito" });
 
   useEffect(() => {
-    if (!id || !moduloId) return;
+    if (!currentSubseccionPath || !moduloId || !seccionId) return;
+    const subseccionSegments = currentSubseccionPath
+      .split("/")
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .flatMap((subId) => ["subsecciones", subId]);
     const unsubscribe = onSnapshot(
-      doc(db, "modulos", moduloId, "secciones", id),
+      doc(db, "modulos", moduloId, "secciones", seccionId, ...subseccionSegments),
       (snap) => {
-        setSeccion(
-          snap.exists() ? ({ id: snap.id, ...snap.data() } as Seccion) : null,
+        setSubseccion(
+          snap.exists() ? ({ id: snap.id, ...snap.data() } as Subseccion) : null,
         );
-        setLoadingSeccion(false);
+        setLoadingSubseccion(false);
       },
     );
     return () => unsubscribe();
-  }, [id, moduloId]);
+  }, [currentSubseccionPath, moduloId, seccionId]);
+
+  const puedeGestionar = rol === "admin" || rol === "profesor";
 
   const handleEliminarItem = async () => {
     if (!itemAEliminar) return;
     try {
       await eliminarItem(itemAEliminar);
-      
       setItemAEliminar(null);
       setAlerta({
         visible: true,
@@ -105,19 +112,7 @@ export default function SeccionDetalleScreen() {
     await WebBrowser.openBrowserAsync(url);
   };
 
-  const puedeGestionar = rol === "admin" || rol === "profesor";
-
-  const uid = auth.currentUser?.uid ?? null;
-  const { seccionesInscritas } = useMisInscripciones(
-    puedeGestionar ? null : uid,
-  );
-
-  const noInscripto =
-    !!seccion?.esRestringida &&
-    !puedeGestionar &&
-    !seccionesInscritas.has(id ?? "");
-
-  if (loadingSeccion) {
+  if (loadingSubseccion) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />
@@ -128,43 +123,21 @@ export default function SeccionDetalleScreen() {
     );
   }
 
-  if (!seccion) {
+  if (!subseccion) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />
         <View style={styles.centered}>
-          <Text style={styles.errorText}>Sección no encontrada.</Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (noInscripto) {
-    return (
-      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
-        <ScreenHeader titulo={seccion.titulo} mostrarHome />
-        <View style={styles.centered}>
-          <Ionicons name="lock-closed-outline" size={52} color="#CBD5E0" />
-          <Text style={styles.accesoDenegadoTitulo}>Acceso restringido</Text>
-          <Text style={styles.accesoDenegadoTexto}>
-            No estás inscripto en esta cursada.{"\n"}Ingresá el código desde la
-            pantalla anterior.
-          </Text>
-          <TouchableOpacity
-            style={styles.volverBtn}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.volverBtnText}>Volver</Text>
-          </TouchableOpacity>
+          <Text style={styles.errorText}>Subsección no encontrada.</Text>
         </View>
       </View>
     );
   }
 
   return (
-      <View style={{ flex: 1 }}>
-        <ScreenHeader titulo={seccion.titulo} mostrarHome />
-        <View style={styles.wrapper}>
+    <View style={{ flex: 1 }}>
+      <ScreenHeader titulo={subseccion.titulo} mostrarHome />
+      <View style={styles.wrapper}>
         <ScrollView
           style={styles.container}
           contentContainerStyle={styles.content}
@@ -191,7 +164,7 @@ export default function SeccionDetalleScreen() {
                 puedeGestionar={puedeGestionar}
                 onEditar={() =>
                   router.push(
-                    `/items/form?moduloId=${moduloId}&seccionId=${id}&itemId=${item.id}` as any,
+                    `/items/form?moduloId=${moduloId}&seccionId=${seccionId}&subseccionPath=${encodeURIComponent(currentSubseccionPath)}&itemId=${item.id}` as any,
                   )
                 }
                 onEliminar={() => setItemAEliminar(item)}
@@ -206,7 +179,9 @@ export default function SeccionDetalleScreen() {
               <TouchableOpacity
                 style={styles.addSubseccionBtn}
                 onPress={() =>
-                  router.push(`/subsecciones/form?moduloId=${moduloId}&seccionId=${id}` as any)
+                  router.push(
+                    `/subsecciones/form?moduloId=${moduloId}&seccionId=${seccionId}&parentPath=${encodeURIComponent(currentSubseccionPath)}` as any,
+                  )
                 }
               >
                 <Ionicons name="add-circle-outline" size={17} color="#0F4A32" />
@@ -224,22 +199,27 @@ export default function SeccionDetalleScreen() {
                 : "No hay subsecciones disponibles."}
             </Text>
           ) : (
-            subsecciones.map((subseccion) => (
-              <SubseccionCard
-                key={subseccion.id}
-                subseccion={subseccion}
-                puedeGestionar={puedeGestionar}
-                onPress={() =>
-                  router.push(`/subsecciones/${subseccion.id}?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any)
-                }
-                onEditar={() =>
-                  router.push(
-                    `/subsecciones/form?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any,
-                  )
-                }
-                onEliminar={() => setSubseccionAEliminar(subseccion.id)}
-              />
-            ))
+            subsecciones.map((subseccionHija) => {
+              const childPath = `${currentSubseccionPath}/${subseccionHija.id}`;
+              return (
+                <SubseccionCard
+                  key={subseccionHija.id}
+                  subseccion={subseccionHija}
+                  puedeGestionar={puedeGestionar}
+                  onPress={() =>
+                    router.push(
+                      `/subsecciones/${subseccionHija.id}?moduloId=${moduloId}&seccionId=${seccionId}&subseccionPath=${encodeURIComponent(childPath)}` as any,
+                    )
+                  }
+                  onEditar={() =>
+                    router.push(
+                      `/subsecciones/form?moduloId=${moduloId}&seccionId=${seccionId}&subseccionPath=${encodeURIComponent(childPath)}` as any,
+                    )
+                  }
+                  onEliminar={() => setSubseccionAEliminar(childPath)}
+                />
+              );
+            })
           )}
         </ScrollView>
 
@@ -248,7 +228,7 @@ export default function SeccionDetalleScreen() {
             style={styles.fab}
             onPress={() =>
               router.push(
-                `/items/form?moduloId=${moduloId}&seccionId=${id}` as any,
+                `/items/form?moduloId=${moduloId}&seccionId=${seccionId}&subseccionPath=${encodeURIComponent(currentSubseccionPath)}` as any,
               )
             }
             activeOpacity={0.85}
@@ -286,8 +266,6 @@ export default function SeccionDetalleScreen() {
     </View>
   );
 }
-
-// ─── Componente de tarjeta por tipo ───────────────────────────────────────────
 
 interface ItemCardProps {
   item: Item;
@@ -382,7 +360,6 @@ function ItemCard({
     </View>
   ) : null;
 
-  // ── Texto ──────────────────────────────────────────────────────────────────
   if (item.tipo === "texto") {
     return (
       <View style={styles.itemCard}>
@@ -402,7 +379,6 @@ function ItemCard({
     );
   }
 
-  // ── Imagen ─────────────────────────────────────────────────────────────────
   if (item.tipo === "imagen") {
     return (
       <View style={styles.itemCard}>
@@ -429,7 +405,6 @@ function ItemCard({
     );
   }
 
-  // ── PDF / Documento ────────────────────────────────────────────────────────
   return (
     <TouchableOpacity
       style={styles.itemCard}
@@ -458,8 +433,6 @@ function ItemCard({
     </TouchableOpacity>
   );
 }
-
-// ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   wrapper: { flex: 1 },
@@ -525,17 +498,6 @@ const styles = StyleSheet.create({
     gap: 14,
     marginLeft: 8,
   },
-  accesoDenegadoTitulo: {
-    fontSize: 18, fontWeight: "700", color: "#374151", marginTop: 14, marginBottom: 8,
-  },
-  accesoDenegadoTexto: {
-    fontSize: 14, color: "#9CA3AF", textAlign: "center", lineHeight: 22,
-  },
-  volverBtn: {
-    marginTop: 24, backgroundColor: "#0F4A32",
-    paddingHorizontal: 28, paddingVertical: 12, borderRadius: 10,
-  },
-  volverBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
   emptyContainer: {
     flex: 1,
     alignItems: "center",
@@ -648,5 +610,4 @@ const markdownStyles = {
     borderRadius: 4,
     fontSize: 13,
   },
-
 };
