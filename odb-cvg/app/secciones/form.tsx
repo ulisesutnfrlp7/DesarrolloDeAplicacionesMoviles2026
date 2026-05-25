@@ -198,6 +198,8 @@ export default function SeccionFormScreen() {
             setHayCambios(true);
           }}
           maxLength={100}
+          autoCorrect={true}
+          autoCapitalize="sentences"
         />
 
         {/* Control de acceso */}

@@ -224,6 +224,8 @@ export default function ModuloFormScreen() {
             setHayCambios(true);
           }}
           maxLength={80}
+          autoCorrect={true}
+          autoCapitalize="sentences"
         />
 
         <Text style={styles.label}>
@@ -239,6 +241,8 @@ export default function ModuloFormScreen() {
             setHayCambios(true);
           }}
           maxLength={150}
+          autoCorrect={true}
+          autoCapitalize="sentences"
         />
 
         <Text style={styles.label}>Ícono</Text>

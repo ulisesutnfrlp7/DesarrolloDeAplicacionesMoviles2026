@@ -497,6 +497,8 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
             setHayCambios(true);
           }}
           maxLength={100}
+          autoCorrect={true}
+          autoCapitalize="sentences"
         />
 
         {/* Contenido para tipo texto */}
@@ -517,6 +519,8 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
               }}
               multiline
               textAlignVertical="top"
+              autoCorrect={true}
+              autoCapitalize="sentences"
             />
           </>
         )}
@@ -533,7 +537,8 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
                 setUrlEnlace(v);
                 setHayCambios(true);
               }}
-              autoCapitalize="none"
+              autoCorrect={true}
+              autoCapitalize="sentences"
               keyboardType="url"
             />
           </>
