@@ -13,6 +13,7 @@ import type { ItemTipo } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
 import { useUserRole } from "../../hooks/useUserRole";
 import ScreenHeader from "../../components/ui/ScreenHeader";
+import * as FileSystem from "expo-file-system";
 
 const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "texto", label: "Texto", icono: "document-text-outline" },
@@ -113,12 +114,9 @@ export default function ItemFormScreen() {
   }, [itemId, currentSubseccionPath]);
 
 const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => {
-  const data = new FormData();
-  
-  let resourceType = 'raw'; // raw sirve para PDFs, Documentos, etc.
+  let resourceType = 'raw'; 
   let mimeType = 'application/octet-stream';
 
-  // Asignamos el recurso y el mimetype correcto
   if (tipo === 'imagen') {
     resourceType = 'image';
     const ext = nombre.split('.').pop()?.toLowerCase() || 'jpg';
@@ -131,13 +129,14 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
     mimeType = 'application/pdf';
   }
 
-  // === VARIABLES DESDE EL .ENV ===
   const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || ''; 
   const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
-
-  data.append('upload_preset', UPLOAD_PRESET);
+  const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`;
 
   if (Platform.OS === 'web') {
+    const data = new FormData();
+    data.append('upload_preset', UPLOAD_PRESET);
+    
     try {
       const fileResponse = await fetch(uri);
       const blob = await fileResponse.blob();
@@ -145,39 +144,60 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
     } catch (error) {
       console.error("Error convirtiendo a Blob en Web:", error);
     }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      body: data,
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      console.error("Cloudinary Error Detallado:", result);
+      throw new Error(result.error?.message || "Error al subir el archivo");
+    }
+
+    return { url: result.secure_url, publicId: result.public_id };
+
   } else {
-    // EN CELULAR: Pasamos el objeto nativo con el mimeType correcto (esto evita el Network Error)
-    data.append('file', {
-      uri: uri,
-      name: nombre,
-      type: mimeType
-    } as any);
+    // EN CELULAR: Usamos expo-file-system nativo
+    try {
+      const uploadResult = await FileSystem.uploadAsync(url, uri, {
+        httpMethod: 'POST',
+        uploadType: 1 as any, 
+        fieldName: 'file',
+        mimeType: mimeType,
+        parameters: {
+          upload_preset: UPLOAD_PRESET,
+        },
+      });
+
+      const result = JSON.parse(uploadResult.body);
+
+      if (uploadResult.status !== 200) {
+        console.error("Cloudinary Error Detallado:", result);
+        throw new Error(result.error?.message || "Error al subir el archivo");
+      }
+
+      return {
+        url: result.secure_url,
+        publicId: result.public_id,
+      };
+    } catch (error) {
+      console.error("Error de FileSystem:", error);
+      throw new Error("Falló la subida nativa del archivo");
+    }
   }
-
-  const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    body: data,
-    headers: {
-      'Accept': 'application/json',
-    },
-  });
-
-  const result = await response.json();
-  
-  if (!response.ok) {
-    console.error("Cloudinary Error Detallado:", result);
-    throw new Error(result.error?.message || "Error al subir el archivo");
-  }
-
-  return {
-    url: result.secure_url,
-    publicId: result.public_id,
-  };
 };
 
   const elegirArchivo = async () => {
+    // Definimos los límites en bytes (1MB = 1024 * 1024 bytes)
+    const LIMITE_10MB = 10 * 1024 * 1024;
+    const LIMITE_100MB = 100 * 1024 * 1024;
+
     if (tipo === "imagen" || tipo === "video") {
       const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permiso.granted) {
@@ -193,6 +213,18 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
       
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
+        
+        // VALIDACIÓN DE TAMAÑO PARA GALERÍA
+        const fileSize = asset.fileSize || 0;
+        if (tipo === "imagen" && fileSize > LIMITE_10MB) {
+          setAlerta({ visible: true, titulo: "Archivo muy pesado", mensaje: "Las imágenes no pueden superar los 10 MB. Por favor, elegí otra.", tipo: "error", cerrarAlSalir: false });
+          return;
+        }
+        if (tipo === "video" && fileSize > LIMITE_100MB) {
+          setAlerta({ visible: true, titulo: "Video muy pesado", mensaje: "Los videos no pueden superar los 100 MB. Por favor, elegí otro más corto o comprimido.", tipo: "error", cerrarAlSalir: false });
+          return;
+        }
+
         const extension = asset.uri.split(".").pop() ?? (tipo === "video" ? "mp4" : "jpg");
         setArchivo({
           uri: asset.uri,
@@ -205,8 +237,17 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
         type: tipo === "pdf" ? "application/pdf" : "*/*",
         copyToCacheDirectory: true,
       });
+      
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
+
+        // VALIDACIÓN DE TAMAÑO PARA DOCUMENTOS/PDF
+        const fileSize = asset.size || 0;
+        if (fileSize > LIMITE_10MB) {
+          setAlerta({ visible: true, titulo: "Documento muy pesado", mensaje: "Los documentos y PDFs no pueden superar los 10 MB. Podés intentar comprimirlo en alguna web gratuita.", tipo: "error", cerrarAlSalir: false });
+          return;
+        }
+
         setArchivo({ uri: asset.uri, nombre: asset.name });
         setHayCambios(true);
       }
@@ -478,6 +519,16 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
                     : "Seleccionar archivo"}
               </Text>
             </TouchableOpacity>
+
+            {/* AVISO DE LÍMITE DE TAMAÑO */}
+            <View style={styles.infoContainer}>
+              <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
+              <Text style={styles.infoText}>
+                {tipo === "video" 
+                  ? "Tamaño máximo permitido: 100 MB." 
+                  : "Tamaño máximo permitido: 10 MB."}
+              </Text>
+            </View>
           </>
         )}
 
@@ -695,5 +746,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
+  },
+  infoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  infoText: {
+    fontSize: 12,
+    color: "#6B7280",
   },
 });
