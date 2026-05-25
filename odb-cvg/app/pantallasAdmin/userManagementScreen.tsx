@@ -261,6 +261,8 @@ export default function UserManagementScreen() {
             placeholder="Buscar por nombre o email..."
             value={filtroTexto}
             onChangeText={setFiltroTexto}
+            autoCorrect={true}
+            autoCapitalize="sentences"
           />
           {/* Botones de rol */}
           <View style={styles.rolesContainer}>
@@ -435,6 +437,8 @@ export default function UserManagementScreen() {
                               placeholder="Buscar por nombre o email..."
                               value={filtroTexto}
                               onChangeText={setFiltroTexto}
+                              autoCorrect={true}
+                              autoCapitalize="sentences"
                             />
                             {alumnosFiltrados.length === 0 ? (
                               <Text style={[styles.emptyText, { marginTop: 16 }]}>
@@ -497,6 +501,8 @@ export default function UserManagementScreen() {
               onChangeText={setNombre}
               placeholder="Nombre completo"
               placeholderTextColor="#9CA3AF"
+              autoCorrect={true}
+              autoCapitalize="sentences"
             />
 
             <Text style={styles.inputLabel}>Email</Text>
@@ -507,7 +513,8 @@ export default function UserManagementScreen() {
               placeholder="correo@ejemplo.com"
               placeholderTextColor="#9CA3AF"
               keyboardType="email-address"
-              autoCapitalize="none"
+              autoCorrect={true}
+              autoCapitalize="sentences"
             />
 
             <Text style={styles.inputLabel}>Rol</Text>

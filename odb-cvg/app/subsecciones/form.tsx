@@ -200,6 +200,8 @@ export default function SubseccionFormScreen() {
             setHayCambios(true);
           }}
           maxLength={100}
+          autoCorrect={true}
+          autoCapitalize="sentences"
         />
 
         <View style={styles.profesorSection}>
