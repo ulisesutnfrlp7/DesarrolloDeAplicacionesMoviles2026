@@ -332,6 +332,10 @@ export default function UserManagementScreen() {
               const alumnosSinInscribir = usuarios.filter(u =>
                 u.rol === 'alumno' && !inscritos.some(i => i.alumnoId === u.id)
               );
+              const alumnosFiltrados = alumnosSinInscribir.filter(u =>
+                u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+                u.email.toLowerCase().includes(filtroTexto.toLowerCase())
+              );
 
               return (
                 <View key={cursada.id} style={styles.cursadaCard}>
@@ -425,13 +429,22 @@ export default function UserManagementScreen() {
                                 <Ionicons name="close" size={22} color="#6B7280" />
                               </TouchableOpacity>
                             </View>
-                            {alumnosSinInscribir.length === 0 ? (
+                            {/* Buscador */}
+                            <TextInput
+                              style={styles.buscadorInput}
+                              placeholder="Buscar por nombre o email..."
+                              value={filtroTexto}
+                              onChangeText={setFiltroTexto}
+                            />
+                            {alumnosFiltrados.length === 0 ? (
                               <Text style={[styles.emptyText, { marginTop: 16 }]}>
-                                Todos los alumnos ya están inscriptos.
+                                {alumnosSinInscribir.length === 0
+                                  ? "Todos los alumnos ya están inscriptos."
+                                  : "No se encontraron alumnos con ese criterio."}
                               </Text>
                             ) : (
                               <ScrollView style={{ maxHeight: 320 }}>
-                                {alumnosSinInscribir.map(u => (
+                                {alumnosFiltrados.map(u => (
                                   <TouchableOpacity
                                     key={u.id}
                                     style={styles.alumnoPickerRow}
