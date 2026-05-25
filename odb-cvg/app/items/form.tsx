@@ -5,7 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import { router, Stack, useFocusEffect, useLocalSearchParams,} from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
+import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Linking} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { db } from "../../config/firebaseConfig";
@@ -14,6 +14,7 @@ import { useItems } from "../../hooks/useItems";
 import { useUserRole } from "../../hooks/useUserRole";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import * as FileSystem from "expo-file-system/legacy";
+import * as IntentLauncher from "expo-intent-launcher";
 
 const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "texto", label: "Texto", icono: "document-text-outline" },
@@ -282,6 +283,33 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
     }
   };
 
+  const visualizarArchivo = async () => {
+    if (!archivo) return;
+    try {
+      if (Platform.OS === "android") {
+        // 1. Convertimos la ruta file:// a una ruta segura content://
+        const contentUri = await FileSystem.getContentUriAsync(archivo.uri);
+        
+        // 2. visor nativo de Android, le damos permisos de lectura
+        await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+          data: contentUri,
+          flags: 1,
+        });
+      } else {
+        await Linking.openURL(archivo.uri);
+      }
+    } catch (error) {
+      console.error("Error al abrir archivo local:", error);
+      setAlerta({ 
+        visible: true, 
+        titulo: "Aviso", 
+        mensaje: "No se pudo abrir la vista previa. Es posible que no tengas una app instalada para leer este tipo de archivo.", 
+        tipo: "error", 
+        cerrarAlSalir: false 
+      });
+    }
+  };
+
   const handleGuardar = async () => {
     const puedeGuardar =
       rol === "admin" || (rol === "profesor" && !modoEdicion && permiteCargaProfesor);
@@ -517,55 +545,80 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
             <Text style={styles.label}>
               Archivo{!modoEdicion && <Text style={styles.required}> *</Text>}
             </Text>
+
             {modoEdicion && archivoExistente && !archivo && (
               <View style={styles.archivoActualContainer}>
-                <Ionicons
-                  name="document-attach-outline"
-                  size={18}
-                  color="#25B471"
-                />
+                <Ionicons name="document-attach-outline" size={18} color="#25B471" />
                 <Text style={styles.archivoActualText} numberOfLines={1}>
                   {archivoExistente.nombre}
                 </Text>
                 <Text style={styles.archivoActualBadge}>Actual</Text>
               </View>
             )}
-            <TouchableOpacity
-              style={styles.filePickerBtn}
-              onPress={elegirArchivo}
-              disabled={subiendo}
-            >
-              <Ionicons
-                name={
-                  archivo ? "checkmark-circle-outline" : "cloud-upload-outline"
-                }
-                size={22}
-                color={archivo ? "#25B471" : "#0F4A32"}
-              />
-              <Text
-                style={[
-                  styles.filePickerText,
-                  archivo && styles.filePickerTextSelected,
-                ]}
-                numberOfLines={1}
-              >
-                {archivo
-                  ? archivo.nombre
-                  : modoEdicion
-                    ? "Reemplazar archivo (opcional)"
-                    : "Seleccionar archivo"}
-              </Text>
-            </TouchableOpacity>
 
-            {/* AVISO DE LÍMITE DE TAMAÑO */}
-            <View style={styles.infoContainer}>
-              <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
-              <Text style={styles.infoText}>
-                {tipo === "video" 
-                  ? "Tamaño máximo permitido: 100 MB." 
-                  : "Tamaño máximo permitido: 10 MB."}
-              </Text>
-            </View>
+            {!archivo ? (
+              // VISTA 1: AÚN NO SE SELECCIONÓ ARCHIVO
+              <>
+                <TouchableOpacity
+                  style={styles.filePickerBtn}
+                  onPress={elegirArchivo}
+                  disabled={subiendo}
+                >
+                  <Ionicons name="cloud-upload-outline" size={22} color="#0F4A32" />
+                  <Text style={styles.filePickerText} numberOfLines={1}>
+                    {modoEdicion ? "Reemplazar archivo (opcional)" : "Seleccionar archivo"}
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={styles.infoContainer}>
+                  <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
+                  <Text style={styles.infoText}>
+                    {tipo === "video" 
+                      ? "Tamaño máximo permitido: 100 MB." 
+                      : "Tamaño máximo permitido: 10 MB."}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              // VISTA 2: ARCHIVO SELECCIONADO (CONFIRMACIÓN)
+              <View style={styles.archivoSeleccionadoWrapper}>
+                <View style={styles.archivoDetalleCard}>
+                  <Ionicons name="checkmark-circle" size={24} color="#25B471" />
+                  <Text style={styles.archivoSeleccionadoNombre} numberOfLines={1}>
+                    {archivo.nombre}
+                  </Text>
+                </View>
+
+                {/* Los 2 botones */}
+                <View style={styles.botonesArchivoRow}>
+                  <TouchableOpacity 
+                    style={styles.btnVisualizar} 
+                    onPress={visualizarArchivo} 
+                    disabled={subiendo}
+                  >
+                    <Ionicons name="eye-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.btnVisualizarText}>Visualizar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.btnReemplazar} 
+                    onPress={elegirArchivo} 
+                    disabled={subiendo}
+                  >
+                    <Ionicons name="refresh-outline" size={18} color="#0F4A32" />
+                    <Text style={styles.btnReemplazarText}>Reemplazar</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Cartel de advertencia */}
+                <View style={styles.advertenciaContainer}>
+                  <Ionicons name="warning-outline" size={20} color="#B45309" />
+                  <Text style={styles.advertenciaText}>
+                    Revisá tu archivo antes de subirlo. Recordá que una vez guardado, solo el administrador podrá borrarlo.
+                  </Text>
+                </View>
+              </View>
+            )}
           </>
         )}
 
@@ -794,5 +847,79 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 12,
     color: "#6B7280",
+  },
+  archivoSeleccionadoWrapper: {
+    marginTop: 8,
+    gap: 12,
+  },
+  archivoDetalleCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F0FFF4",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  archivoSeleccionadoNombre: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#11181C",
+  },
+  botonesArchivoRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  btnVisualizar: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#25B471",
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  btnVisualizarText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  btnReemplazar: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#0F4A32",
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  btnReemplazarText: {
+    color: "#0F4A32",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  advertenciaContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFBEB",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FEF3C7",
+    marginTop: 2,
+  },
+  advertenciaText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#92400E",
+    lineHeight: 18,
   },
 });
