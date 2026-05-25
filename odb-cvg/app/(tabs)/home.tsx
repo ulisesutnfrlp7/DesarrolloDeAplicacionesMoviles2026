@@ -3,7 +3,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { signOut } from "firebase/auth";
 import React, { useState } from "react";
-import { ActivityIndicator, Image , Alert, FlatList, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ModuloCard from "../../components/ui/ModuloCard";
@@ -23,7 +32,6 @@ export default function HomeScreen() {
   const [modoOrdenamiento, setModoOrdenamiento] = useState(false);
   const [modulosOrdenables, setModulosOrdenables] = useState<Modulo[]>([]);
   const [guardandoOrden, setGuardandoOrden] = useState(false);
-
 
   const [modalSalir, setModalSalir] = useState(false);
   const [moduloAEliminar, setModuloAEliminar] = useState<string | null>(null);
@@ -150,6 +158,11 @@ export default function HomeScreen() {
                 <Text style={styles.badgeTextProfe}>Profesor</Text>
               </View>
             )}
+            {rol === "alumno" && (
+              <View style={[styles.badge, styles.badgeAlumno]}>
+                <Text style={styles.badgeTextAlumno}>Alumno</Text>
+              </View>
+            )}
           </View>
           <Text style={styles.subHeaderText}>Facultad de Odontología UNLP</Text>
         </View>
@@ -158,7 +171,9 @@ export default function HomeScreen() {
         {rol === "admin" && (
           <TouchableOpacity
             style={styles.adminButton}
-            onPress={() => router.push("../pantallasAdmin/userManagementScreen")}
+            onPress={() =>
+              router.push("../pantallasAdmin/userManagementScreen")
+            }
           >
             <Ionicons name="people-outline" size={18} color="#0F4A32" />
           </TouchableOpacity>
@@ -195,7 +210,10 @@ export default function HomeScreen() {
             <Text style={styles.orderCancelBtnText}>Cancelar</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.orderSaveBtn, guardandoOrden && styles.orderSaveBtnDisabled]}
+            style={[
+              styles.orderSaveBtn,
+              guardandoOrden && styles.orderSaveBtnDisabled,
+            ]}
             onPress={guardarOrden}
             disabled={guardandoOrden}
           >
@@ -248,7 +266,10 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.orderControls}>
                   <TouchableOpacity
-                    style={[styles.orderArrowBtn, index === 0 && styles.orderArrowBtnDisabled]}
+                    style={[
+                      styles.orderArrowBtn,
+                      index === 0 && styles.orderArrowBtnDisabled,
+                    ]}
                     onPress={() => moverModulo(index, -1)}
                     disabled={index === 0 || guardandoOrden}
                   >
@@ -257,27 +278,40 @@ export default function HomeScreen() {
                       size={22}
                       color={index === 0 ? "#CBD5E0" : "#0F4A32"}
                     />
-                    <Text style={[styles.orderArrowText, index === 0 && styles.orderArrowTextDisabled]}>
+                    <Text
+                      style={[
+                        styles.orderArrowText,
+                        index === 0 && styles.orderArrowTextDisabled,
+                      ]}
+                    >
                       Subir
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[
                       styles.orderArrowBtn,
-                      index === modulosOrdenables.length - 1 && styles.orderArrowBtnDisabled,
+                      index === modulosOrdenables.length - 1 &&
+                        styles.orderArrowBtnDisabled,
                     ]}
                     onPress={() => moverModulo(index, 1)}
-                    disabled={index === modulosOrdenables.length - 1 || guardandoOrden}
+                    disabled={
+                      index === modulosOrdenables.length - 1 || guardandoOrden
+                    }
                   >
                     <Ionicons
                       name="arrow-down-outline"
                       size={22}
-                      color={index === modulosOrdenables.length - 1 ? "#CBD5E0" : "#0F4A32"}
+                      color={
+                        index === modulosOrdenables.length - 1
+                          ? "#CBD5E0"
+                          : "#0F4A32"
+                      }
                     />
                     <Text
                       style={[
                         styles.orderArrowText,
-                        index === modulosOrdenables.length - 1 && styles.orderArrowTextDisabled,
+                        index === modulosOrdenables.length - 1 &&
+                          styles.orderArrowTextDisabled,
                       ]}
                     >
                       Bajar
@@ -381,7 +415,7 @@ const styles = StyleSheet.create({
   badgeAdmin: { backgroundColor: "#0F4A32" },
   badgeTextAdmin: {
     color: "#FFFFFF",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "bold",
     textTransform: "uppercase",
   },
@@ -396,17 +430,28 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textTransform: "uppercase",
   },
-  subHeaderText: { fontSize: 13, color: "#6B7280", marginTop: 3 },
-logoutButton: {
-    backgroundColor: '#E8F5E9',
+  badgeAlumno: {
+    backgroundColor: "#E8F5E9",
+    borderWidth: 1,
+    borderColor: "#25B471",
+  },
+  badgeTextAlumno: {
+    color: "#0F4A32",
+    fontSize: 11,
+    fontWeight: "bold",
+    textTransform: "uppercase",
+  },
+  subHeaderText: { fontSize: 13, color: "#6B7280", marginTop: 10 },
+  logoutButton: {
+    backgroundColor: "#E8F5E9",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
     marginLeft: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
-  logoutButtonText: { color: '#0F4A32', fontWeight: '700', fontSize: 14 },
+  logoutButtonText: { color: "#0F4A32", fontWeight: "700", fontSize: 14 },
   card: {
     backgroundColor: "white",
     padding: 20,
@@ -421,12 +466,12 @@ logoutButton: {
   cardStatus: { fontSize: 15, color: "#718096", marginTop: 8 },
 
   adminButton: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: "#E8F5E9",
     padding: 10,
     borderRadius: 10,
     marginLeft: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   orderButton: {
     flexDirection: "row",
@@ -570,11 +615,10 @@ logoutButton: {
     shadowOffset: { width: 0, height: 3 },
   },
 
-   logo: {
+  logo: {
     width: 50,
     height: 50,
     borderRadius: 50,
     marginBottom: 16,
   },
-
 });
