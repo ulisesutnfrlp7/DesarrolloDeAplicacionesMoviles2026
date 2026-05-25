@@ -1,10 +1,11 @@
 //app/recuperar.tsx
 import { router } from 'expo-router';
 import { sendPasswordResetEmail } from 'firebase/auth';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import ModalAlerta from '../components/ui/ModalAlerta';
-import { auth } from '../config/firebaseConfig';
+import { auth, db } from '../config/firebaseConfig';
 
 export default function RecuperarScreen() {
   const [email, setEmail] = useState('');
@@ -13,14 +14,27 @@ export default function RecuperarScreen() {
 
   const handleRecuperar = async () => {
     setErrorMensaje('');
+    const correoLimpiado = email.trim().toLowerCase();
 
-    if (!email.trim()) {
+    if (!correoLimpiado) {
       setErrorMensaje('Por favor ingresá tu correo electrónico.');
       return;
     }
     
     try {
-      await sendPasswordResetEmail(auth, email.trim());
+      // 1. Verificar si el correo existe en la base de datos de Firestore
+      const usuariosRef = collection(db, 'usuarios');
+      const q = query(usuariosRef, where('email', '==', correoLimpiado));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        // Si no se encontró ningún documento con ese email
+        setErrorMensaje('Este correo no está registrado en el sistema.');
+        return;
+      }
+
+      // 2. Si existe, enviamos el correo de recuperación
+      await sendPasswordResetEmail(auth, correoLimpiado);
       setModalExito(true);
     } catch (error: any) {
       if (error.code === 'auth/invalid-email') {
