@@ -25,6 +25,7 @@ export default function SeccionFormScreen() {
   const [titulo, setTitulo] = useState("");
   const [esRestringida, setEsRestringida] = useState(false);
   const [codigoAcceso, setCodigoAcceso] = useState("");
+  const [permiteCargaProfesor, setPermiteCargaProfesor] = useState(false);
   const [cargandoDatos, setCargandoDatos] = useState(modoEdicion);
   const [guardando, setGuardando] = useState(false);
   const [hayCambios, setHayCambios] = useState(false);
@@ -55,6 +56,7 @@ export default function SeccionFormScreen() {
           setTitulo(data.titulo ?? "");
           setEsRestringida(data.esRestringida ?? false);
           setCodigoAcceso(data.codigoAcceso ?? "");
+          setPermiteCargaProfesor(data.permiteCargaProfesor ?? false);
         }
       } catch (error) {
         console.error("Error al cargar sección:", error);
@@ -81,6 +83,7 @@ export default function SeccionFormScreen() {
       const data = {
         titulo: titulo.trim(),
         esRestringida,
+        permiteCargaProfesor,
         codigoAcceso: esRestringida
           ? (codigoAcceso || generarCodigoAleatorio())
           : null,
@@ -159,7 +162,7 @@ export default function SeccionFormScreen() {
     );
   }
 
-  if (rol !== "admin" && rol !== "profesor") {
+  if (rol !== "admin") {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />
@@ -245,6 +248,27 @@ export default function SeccionFormScreen() {
               </Text>
             </View>
           ) : null}
+        </View>
+
+        <View style={styles.cursadaSection}>
+          <Text style={styles.cursadaSectionTitulo}>Permitir carga de profesores</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Los profesores pueden subir contenido</Text>
+              <Text style={styles.switchHint}>
+                Si está activado, los profesores podrán agregar contenido en esta sección, pero no podrán editarlo ni eliminarlo.
+              </Text>
+            </View>
+            <Switch
+              value={permiteCargaProfesor}
+              onValueChange={(v) => {
+                setPermiteCargaProfesor(v);
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
         </View>
 
         {/* Botones de acción */}

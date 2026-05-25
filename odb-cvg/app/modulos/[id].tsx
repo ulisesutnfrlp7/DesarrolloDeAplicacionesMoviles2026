@@ -68,11 +68,12 @@ export default function ModuloDetalleScreen() {
     }
   };
 
-  const puedeGestionarSecciones = rol === "admin" || rol === "profesor";
+  const puedeGestionarSecciones = rol === "admin";
+  const puedeAccederComoDocente = rol === "admin" || rol === "profesor";
 
   const uid = auth.currentUser?.uid ?? null;
   const { seccionesInscritas, loading: loadingInscripciones } = useMisInscripciones(
-    !loadingRol && !puedeGestionarSecciones ? uid : null,
+    !loadingRol && !puedeAccederComoDocente ? uid : null,
   );
 
   if (loadingModulo || loadingRol) {
@@ -148,7 +149,7 @@ export default function ModuloDetalleScreen() {
           )}
         </View>
 
-        {loadingSecciones || (!puedeGestionarSecciones && loadingInscripciones) ? (
+        {loadingSecciones || (!puedeAccederComoDocente && loadingInscripciones) ? (
           <ActivityIndicator color="#25B471" style={{ marginTop: 16 }} />
         ) : secciones.length === 0 ? (
           <Text style={styles.sinSecciones}>
@@ -160,7 +161,7 @@ export default function ModuloDetalleScreen() {
           secciones.map((seccion) => {
             const bloqueada =
               !!seccion.esRestringida &&
-              !puedeGestionarSecciones &&
+              !puedeAccederComoDocente &&
               !seccionesInscritas.has(seccion.id);
             return (
             <TouchableOpacity
@@ -217,7 +218,7 @@ export default function ModuloDetalleScreen() {
                       </TouchableOpacity>
                     </>
                   )}
-                  {!puedeGestionarSecciones && seccion.esRestringida && (
+                  {!puedeAccederComoDocente && seccion.esRestringida && (
                     <View style={[styles.badgeAcceso, bloqueada ? styles.badgeBloqueado : styles.badgeAccedido]}>
                       <Ionicons
                         name={bloqueada ? "lock-closed-outline" : "checkmark-circle-outline"}

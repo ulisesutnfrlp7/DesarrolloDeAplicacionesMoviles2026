@@ -20,11 +20,13 @@ export interface Seccion {
   fechaActualizacion: any;
   esRestringida?: boolean;
   codigoAcceso?: string | null;
+  permiteCargaProfesor?: boolean;
 }
 
 export type SeccionInput = Pick<Seccion, "titulo"> & {
   esRestringida?: boolean;
   codigoAcceso?: string | null;
+  permiteCargaProfesor?: boolean;
 };
 
 export function useSecciones(moduloId: string) {
@@ -61,6 +63,7 @@ export function useSecciones(moduloId: string) {
     if (!user) throw new Error("No autenticado");
     await addDoc(collection(db, "modulos", moduloId, "secciones"), {
       ...data,
+      permiteCargaProfesor: data.permiteCargaProfesor ?? false,
       creadoPor: user.uid,
       fechaCreacion: serverTimestamp(),
       fechaActualizacion: serverTimestamp(),

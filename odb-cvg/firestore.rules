@@ -14,6 +14,21 @@ service cloud.firestore {
         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'profesor';
     }
 
+    function profesorCreaItemAutorizado() {
+      return isProfesor()
+        && request.resource.data.creadoPor == request.auth.uid;
+    }
+
+    function seccionPermiteCargaProfesor(moduloId, seccionId) {
+      return get(/databases/$(database)/documents/modulos/$(moduloId)/secciones/$(seccionId))
+        .data.permiteCargaProfesor == true;
+    }
+
+    function subseccionPermiteCargaProfesor(moduloId, seccionId, parentPath) {
+      return get(/databases/$(database)/documents/modulos/$(moduloId)/secciones/$(seccionId)/$(parentPath))
+        .data.permiteCargaProfesor == true;
+    }
+
     // Colección 'usuarios': solo el propio usuario puede leer/escribir su documento
     match /usuarios/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
@@ -34,20 +49,28 @@ service cloud.firestore {
       // Subcollección 'secciones': lectura para todos, escritura para admin y profesor
       match /secciones/{seccionId} {
         allow read: if request.auth != null;
-        allow create, update, delete: if isAdmin() || isProfesor();
-
-        // Subcolección 'items': lectura para todos, escritura para admin y profesor.
-        // El comodín recursivo permite items directos y también items dentro de subsecciones anidadas.
-        match /{path=**}/items/{itemId} {
+        allow create, update, delete: if isAdmin();
+        // Items directos de una seccion.
+        match /items/{itemId} {
           allow read: if request.auth != null;
-          allow create, update, delete: if isAdmin() || isProfesor();
+          allow create: if isAdmin() ||
+            (profesorCreaItemAutorizado() && seccionPermiteCargaProfesor(moduloId, seccionId));
+          allow update, delete: if isAdmin();
+        }
+
+        // Items dentro de subsecciones anidadas en cualquier profundidad.
+        match /{parentPath=**}/items/{itemId} {
+          allow read: if request.auth != null;
+          allow create: if isAdmin() ||
+            (profesorCreaItemAutorizado() && subseccionPermiteCargaProfesor(moduloId, seccionId, parentPath));
+          allow update, delete: if isAdmin();
         }
 
         // Subcolección 'subsecciones': lectura para todos, escritura para admin y profesor.
         // El comodín recursivo permite subsecciones en cualquier profundidad.
         match /{path=**}/subsecciones/{subseccionId} {
           allow read: if request.auth != null;
-          allow create, update, delete: if isAdmin() || isProfesor();
+          allow create, update, delete: if isAdmin();
         }
       }
     }

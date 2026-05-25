@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
@@ -31,6 +31,7 @@ export default function SubseccionFormScreen() {
   const { crearSubseccion, actualizarSubseccion } = useSubsecciones(moduloId, seccionId, resolvedParentPath);
 
   const [titulo, setTitulo] = useState("");
+  const [permiteCargaProfesor, setPermiteCargaProfesor] = useState(false);
   const [cargandoDatos, setCargandoDatos] = useState(modoEdicion);
   const [guardando, setGuardando] = useState(false);
   const [hayCambios, setHayCambios] = useState(false);
@@ -64,6 +65,7 @@ export default function SubseccionFormScreen() {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setTitulo(data.titulo ?? "");
+          setPermiteCargaProfesor(data.permiteCargaProfesor ?? false);
         }
       } catch (error) {
         console.error("Error al cargar subsección:", error);
@@ -87,7 +89,7 @@ export default function SubseccionFormScreen() {
     }
     setGuardando(true);
     try {
-      const data = { titulo: titulo.trim() };
+      const data = { titulo: titulo.trim(), permiteCargaProfesor };
       if (modoEdicion && currentSubseccionPath) {
         await actualizarSubseccion(currentSubseccionPath, data);
         setAlerta({
@@ -162,7 +164,7 @@ export default function SubseccionFormScreen() {
     );
   }
 
-  if (rol !== "admin" && rol !== "profesor") {
+  if (rol !== "admin") {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />
@@ -199,6 +201,27 @@ export default function SubseccionFormScreen() {
           }}
           maxLength={100}
         />
+
+        <View style={styles.profesorSection}>
+          <Text style={styles.profesorSectionTitulo}>Permitir carga de profesores</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Los profesores pueden subir contenido</Text>
+              <Text style={styles.switchHint}>
+                Si está activado, los profesores podrán agregar contenido en esta sección, pero no podrán editarlo ni eliminarlo.
+              </Text>
+            </View>
+            <Switch
+              value={permiteCargaProfesor}
+              onValueChange={(v) => {
+                setPermiteCargaProfesor(v);
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
@@ -276,6 +299,37 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 15,
     color: "#11181C",
+  },
+  profesorSection: {
+    marginTop: 24,
+    backgroundColor: "#F0FDF4",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  profesorSectionTitulo: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F4A32",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  switchLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  switchHint: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
   },
   actionButtons: {
     flexDirection: "row",

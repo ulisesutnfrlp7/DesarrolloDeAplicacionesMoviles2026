@@ -105,16 +105,22 @@ export default function SeccionDetalleScreen() {
     await WebBrowser.openBrowserAsync(url);
   };
 
-  const puedeGestionar = rol === "admin" || rol === "profesor";
+  const esAdmin = rol === "admin";
+  const esProfesor = rol === "profesor";
+  const puedeAccederComoDocente = esAdmin || esProfesor;
+  const puedeGestionarEstructura = esAdmin;
+  const puedeEditarEliminarItems = esAdmin;
+  const puedeCrearItems =
+    esAdmin || (esProfesor && seccion?.permiteCargaProfesor === true);
 
   const uid = auth.currentUser?.uid ?? null;
   const { seccionesInscritas, loading: loadingInscripciones } = useMisInscripciones(
-    !loadingRol && !puedeGestionar ? uid : null,
+    !loadingRol && !puedeAccederComoDocente ? uid : null,
   );
 
   const noInscripto =
     !!seccion?.esRestringida &&
-    !puedeGestionar &&
+    !puedeAccederComoDocente &&
     !seccionesInscritas.has(id ?? "");
 
   if (loadingSeccion || loadingRol) {
@@ -139,7 +145,7 @@ export default function SeccionDetalleScreen() {
     );
   }
 
-  if (seccion.esRestringida && !puedeGestionar && loadingInscripciones) {
+  if (seccion.esRestringida && !puedeAccederComoDocente && loadingInscripciones) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo={seccion.titulo} mostrarHome />
@@ -189,7 +195,7 @@ export default function SeccionDetalleScreen() {
             <View style={styles.emptyContainer}>
               <Ionicons name="document-outline" size={48} color="#CBD5E0" />
               <Text style={styles.emptyText}>
-                {puedeGestionar
+                {puedeCrearItems
                   ? 'No hay contenido. Presioná "+" para agregar.'
                   : "No hay contenido disponible aún."}
               </Text>
@@ -199,7 +205,7 @@ export default function SeccionDetalleScreen() {
               <ItemCard
                 key={item.id}
                 item={item}
-                puedeGestionar={puedeGestionar}
+                puedeGestionar={puedeEditarEliminarItems}
                 onEditar={() =>
                   router.push(
                     `/items/form?moduloId=${moduloId}&seccionId=${id}&itemId=${item.id}` as any,
@@ -213,7 +219,7 @@ export default function SeccionDetalleScreen() {
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Subsecciones</Text>
-            {puedeGestionar && (
+            {puedeGestionarEstructura && (
               <TouchableOpacity
                 style={styles.addSubseccionBtn}
                 onPress={() =>
@@ -230,7 +236,7 @@ export default function SeccionDetalleScreen() {
             <ActivityIndicator color="#25B471" style={{ marginTop: 16 }} />
           ) : subsecciones.length === 0 ? (
             <Text style={styles.sinSubsecciones}>
-              {puedeGestionar
+              {puedeGestionarEstructura
                 ? 'No hay subsecciones. Presioná "Añadir" para crear una.'
                 : "No hay subsecciones disponibles."}
             </Text>
@@ -239,7 +245,7 @@ export default function SeccionDetalleScreen() {
               <SubseccionCard
                 key={subseccion.id}
                 subseccion={subseccion}
-                puedeGestionar={puedeGestionar}
+                puedeGestionar={puedeGestionarEstructura}
                 onPress={() =>
                   router.push(`/subsecciones/${subseccion.id}?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any)
                 }
@@ -254,7 +260,7 @@ export default function SeccionDetalleScreen() {
           )}
         </ScrollView>
 
-        {puedeGestionar && (
+        {puedeCrearItems && (
           <TouchableOpacity
             style={styles.fab}
             onPress={() =>

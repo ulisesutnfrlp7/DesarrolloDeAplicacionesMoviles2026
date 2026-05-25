@@ -18,9 +18,12 @@ export interface Subseccion {
   creadoPor: string;
   fechaCreacion: any;
   fechaActualizacion: any;
+  permiteCargaProfesor?: boolean;
 }
 
-export type SubseccionInput = Pick<Subseccion, "titulo">;
+export type SubseccionInput = Pick<Subseccion, "titulo"> & {
+  permiteCargaProfesor?: boolean;
+};
 
 const getSubseccionPathSegments = (subseccionPath?: string) =>
   (subseccionPath ?? "")
@@ -92,6 +95,7 @@ export function useSubsecciones(moduloId: string, seccionId: string, parentPath?
     if (!user) throw new Error("No autenticado");
     await addDoc(getSubseccionesCollection(moduloId, seccionId, parentPath), {
       ...data,
+      permiteCargaProfesor: data.permiteCargaProfesor ?? false,
       creadoPor: user.uid,
       fechaCreacion: serverTimestamp(),
       fechaActualizacion: serverTimestamp(),
