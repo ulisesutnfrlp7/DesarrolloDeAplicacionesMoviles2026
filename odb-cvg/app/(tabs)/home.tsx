@@ -148,6 +148,8 @@ export default function HomeScreen() {
               style={styles.logo}
             />
             <Text style={styles.headerText}>CVG - Odonto B</Text>
+          </View>
+          <View style={styles.roleBadgeRow}>
             {rol === "admin" && (
               <View style={[styles.badge, styles.badgeAdmin]}>
                 <Text style={styles.badgeTextAdmin}>Admin</Text>
@@ -164,27 +166,30 @@ export default function HomeScreen() {
               </View>
             )}
           </View>
-          <Text style={styles.subHeaderText}>Facultad de Odontología UNLP</Text>
+          <View style={styles.headerMetaRow}>
+            <Text style={styles.subHeaderText}>Facultad de Odontología UNLP</Text>
+            <View style={styles.headerActions}>
+              {/*Boton para ir a pantalla de administracion de usuarios, solo visible para admins*/}
+              {rol === "admin" && (
+                <TouchableOpacity
+                  style={styles.adminButton}
+                  onPress={() =>
+                    router.push("../pantallasAdmin/userManagementScreen")
+                  }
+                >
+                  <Ionicons name="people-outline" size={18} color="#0F4A32" />
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.logoutButton}
+                onPress={() => setModalSalir(true)}
+              >
+                <Text style={styles.logoutButtonText}>Salir</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-
-        {/*Boton para ir a pantalla de administracion de usuarios, solo visible para admins*/}
-        {rol === "admin" && (
-          <TouchableOpacity
-            style={styles.adminButton}
-            onPress={() =>
-              router.push("../pantallasAdmin/userManagementScreen")
-            }
-          >
-            <Ionicons name="people-outline" size={18} color="#0F4A32" />
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={() => setModalSalir(true)}
-        >
-          <Text style={styles.logoutButtonText}>Salir</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Grid de módulos */}
@@ -393,9 +398,8 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+    flexDirection: "column",
+    alignItems: "stretch",
     paddingHorizontal: 20,
     paddingTop: 48,
     paddingBottom: 16,
@@ -403,12 +407,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
-  headerTitles: { flex: 1 },
+  headerTitles: { width: "100%" },
   titleWithBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flexWrap: "wrap",
+  },
+  roleBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
   },
   headerText: { fontSize: 22, fontWeight: "bold", color: "#11181C" },
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
@@ -441,13 +450,25 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textTransform: "uppercase",
   },
-  subHeaderText: { fontSize: 13, color: "#6B7280", marginTop: 10 },
+  headerMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 10,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  subHeaderText: { flex: 1, fontSize: 13, color: "#6B7280" },
   logoutButton: {
     backgroundColor: "#E8F5E9",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
-    marginLeft: 8,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -469,7 +490,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#E8F5E9",
     padding: 10,
     borderRadius: 10,
-    marginLeft: 8,
     justifyContent: "center",
     alignItems: "center",
   },
