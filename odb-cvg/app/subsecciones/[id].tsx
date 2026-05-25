@@ -62,7 +62,12 @@ export default function SubseccionDetalleScreen() {
     return () => unsubscribe();
   }, [currentSubseccionPath, moduloId, seccionId]);
 
-  const puedeGestionar = rol === "admin" || rol === "profesor";
+  const esAdmin = rol === "admin";
+  const esProfesor = rol === "profesor";
+  const puedeGestionarEstructura = esAdmin;
+  const puedeEditarEliminarItems = esAdmin;
+  const puedeCrearItems =
+    esAdmin || (esProfesor && subseccion?.permiteCargaProfesor === true);
 
   const handleEliminarItem = async () => {
     if (!itemAEliminar) return;
@@ -151,7 +156,7 @@ export default function SubseccionDetalleScreen() {
             <View style={styles.emptyContainer}>
               <Ionicons name="document-outline" size={48} color="#CBD5E0" />
               <Text style={styles.emptyText}>
-                {puedeGestionar
+                {puedeCrearItems
                   ? 'No hay contenido. Presioná "+" para agregar.'
                   : "No hay contenido disponible aún."}
               </Text>
@@ -161,7 +166,7 @@ export default function SubseccionDetalleScreen() {
               <ItemCard
                 key={item.id}
                 item={item}
-                puedeGestionar={puedeGestionar}
+                puedeGestionar={puedeEditarEliminarItems}
                 onEditar={() =>
                   router.push(
                     `/items/form?moduloId=${moduloId}&seccionId=${seccionId}&subseccionPath=${encodeURIComponent(currentSubseccionPath)}&itemId=${item.id}` as any,
@@ -175,7 +180,7 @@ export default function SubseccionDetalleScreen() {
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Subsecciones</Text>
-            {puedeGestionar && (
+            {puedeGestionarEstructura && (
               <TouchableOpacity
                 style={styles.addSubseccionBtn}
                 onPress={() =>
@@ -194,7 +199,7 @@ export default function SubseccionDetalleScreen() {
             <ActivityIndicator color="#25B471" style={{ marginTop: 16 }} />
           ) : subsecciones.length === 0 ? (
             <Text style={styles.sinSubsecciones}>
-              {puedeGestionar
+              {puedeGestionarEstructura
                 ? 'No hay subsecciones. Presioná "Añadir" para crear una.'
                 : "No hay subsecciones disponibles."}
             </Text>
@@ -205,7 +210,7 @@ export default function SubseccionDetalleScreen() {
                 <SubseccionCard
                   key={subseccionHija.id}
                   subseccion={subseccionHija}
-                  puedeGestionar={puedeGestionar}
+                  puedeGestionar={puedeGestionarEstructura}
                   onPress={() =>
                     router.push(
                       `/subsecciones/${subseccionHija.id}?moduloId=${moduloId}&seccionId=${seccionId}&subseccionPath=${encodeURIComponent(childPath)}` as any,
@@ -223,7 +228,7 @@ export default function SubseccionDetalleScreen() {
           )}
         </ScrollView>
 
-        {puedeGestionar && (
+        {puedeCrearItems && (
           <TouchableOpacity
             style={styles.fab}
             onPress={() =>

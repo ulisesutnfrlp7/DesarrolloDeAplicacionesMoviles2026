@@ -13,7 +13,7 @@ import type { ItemTipo } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
 import { useUserRole } from "../../hooks/useUserRole";
 import ScreenHeader from "../../components/ui/ScreenHeader";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "texto", label: "Texto", icono: "document-text-outline" },
@@ -51,6 +51,8 @@ export default function ItemFormScreen() {
     url: string;
     storageRef: string;
   } | null>(null);
+  const [permiteCargaProfesor, setPermiteCargaProfesor] = useState(false);
+  const [cargandoPermiso, setCargandoPermiso] = useState(true);
   const [cargandoDatos, setCargandoDatos] = useState(!!itemId);
   const [subiendo, setSubiendo] = useState(false);
   const [hayCambios, setHayCambios] = useState(false);
@@ -73,6 +75,32 @@ export default function ItemFormScreen() {
   useEffect(() => {
     setArchivo(null);
   }, [tipo]);
+
+  useEffect(() => {
+    if (!moduloId || !seccionId) {
+      setCargandoPermiso(false);
+      return;
+    }
+    const cargarPermiso = async () => {
+      try {
+        const subseccionSegments = (currentSubseccionPath ?? "")
+          .split("/")
+          .map((segment) => segment.trim())
+          .filter(Boolean)
+          .flatMap((id) => ["subsecciones", id]);
+        const snap = await getDoc(
+          doc(db, "modulos", moduloId, "secciones", seccionId, ...subseccionSegments),
+        );
+        setPermiteCargaProfesor(snap.exists() ? snap.data().permiteCargaProfesor === true : false);
+      } catch (error) {
+        console.error("Error al cargar permiso de carga:", error);
+        setPermiteCargaProfesor(false);
+      } finally {
+        setCargandoPermiso(false);
+      }
+    };
+    cargarPermiso();
+  }, [moduloId, seccionId, currentSubseccionPath]);
 
   // Cargar datos del item existente en modo edición
   useEffect(() => {
@@ -255,6 +283,12 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
   };
 
   const handleGuardar = async () => {
+    const puedeGuardar =
+      rol === "admin" || (rol === "profesor" && !modoEdicion && permiteCargaProfesor);
+    if (!puedeGuardar) {
+      setAlerta({ visible: true, titulo: "Sin permiso", mensaje: "No tenÃ©s permiso para cargar contenido en esta secciÃ³n.", tipo: "error", cerrarAlSalir: false });
+      return;
+    }
     if (!titulo.trim() && tipo !== "texto") {
       setAlerta({ visible: true, titulo: "Campo requerido", mensaje: "El título no puede estar vacío.", tipo: "error", cerrarAlSalir: false });
       return;
@@ -346,7 +380,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
     }, [hayCambios]),
   );
 
-  if (loadingRol || cargandoDatos) {
+  if (loadingRol || cargandoDatos || cargandoPermiso) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />
@@ -357,7 +391,10 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
     );
   }
 
-  if (rol !== "admin" && rol !== "profesor") {
+  const accesoPermitido =
+    rol === "admin" || (rol === "profesor" && !modoEdicion && permiteCargaProfesor);
+
+  if (!accesoPermitido) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />
