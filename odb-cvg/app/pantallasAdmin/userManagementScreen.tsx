@@ -44,6 +44,18 @@ export default function UserManagementScreen() {
   const [alerta, setAlerta] = useState<{
     visible: boolean; titulo: string; mensaje: string; tipo: 'error' | 'exito';
   }>({ visible: false, titulo: '', mensaje: '', tipo: 'exito' });
+  const [filtroTexto, setFiltroTexto] = useState("");
+  const [filtroRol, setFiltroRol] = useState<Rol | "todos">("todos");
+  const usuariosFiltrados = usuarios.filter((u) => {
+    const coincideTexto =
+      u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+      u.email.toLowerCase().includes(filtroTexto.toLowerCase());
+
+    const coincideRol = filtroRol === "todos" ? true : u.rol === filtroRol;
+
+    return coincideTexto && coincideRol;
+  });
+  
 
   // ─── Estado Cursadas ─────────────────────────────────────────────────────
   const [cursadas, setCursadas] = useState<CursadaRestringida[]>([]);
@@ -190,7 +202,7 @@ export default function UserManagementScreen() {
   const renderBadge = (r: Rol) => {
     if (r === 'admin') return (
       <View style={[styles.badge, styles.badgeAdmin]}>
-        <Text style={styles.badgeTextAdmin}>Admin</Text>
+        <Text style={styles.badgeTextAdmin}>Administrador</Text>
       </View>
     );
     if (r === 'profesor') return (
@@ -243,8 +255,29 @@ export default function UserManagementScreen() {
       {/* ─── Pestaña Usuarios ─────────────────────────────────────────────── */}
       {tabActiva === 'usuarios' && (
         <View style={styles.container}>
+          {/* Buscador */}
+          <TextInput
+            style={styles.input}
+            placeholder="Buscar por nombre o email..."
+            value={filtroTexto}
+            onChangeText={setFiltroTexto}
+          />
+          {/* Botones de rol */}
+          <View style={styles.rolesContainer}>
+            {["todos", "alumno", "profesor", "admin"].map((rol) => {
+            const activo = filtroRol === rol;
+            return (
+            <TouchableOpacity
+              key={rol}
+              style={[styles.rolButton, filtroRol === rol && styles.rolButtonActivo]}
+              onPress={() => setFiltroRol(rol as Rol | "todos")}
+            >
+              <Text style={activo ? styles.rolButtonTextActivo : styles.rolButtonText}>{rol.toUpperCase()}</Text>
+            </TouchableOpacity>
+              )})}
+          </View>
           <FlatList
-            data={usuarios}
+            data={usuariosFiltrados}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={
@@ -586,6 +619,12 @@ const styles = StyleSheet.create({
   badgeTextProfe: { color: '#0F4A32', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' },
   badgeAlumno: { backgroundColor: '#E2E8F0' },
   badgeTextAlumno: { color: '#4A5568', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' },
+  buscadorInput: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, minHeight: 44, fontSize: 14, color: '#11181C', marginBottom: 20 },
+  rolesContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 , marginTop: 12  },
+  rolButton: { flex: 1, marginHorizontal: 4, paddingVertical: 8, borderWidth: 1, borderColor: '#25B471', borderRadius: 8, alignItems: 'center', backgroundColor: '#FFFFFF'},
+  rolButtonActivo: { backgroundColor: '#25B471'},
+  rolButtonText: { fontSize: 13, fontWeight: '600', color: '#25B471'},
+  rolButtonTextActivo: { color: '#FFFFFF'},
 
   // ─── Cursadas ─────────────────────────────────────────────────────────────
   cursadaCard: {
@@ -671,7 +710,6 @@ const styles = StyleSheet.create({
     borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
     fontSize: 15, color: '#11181C',
   },
-  rolesContainer: { flexDirection: 'row', gap: 10, marginTop: 4 },
   rolBtn: {
     flex: 1, paddingVertical: 10, borderRadius: 10,
     borderWidth: 1.5, borderColor: '#E5E7EB',
