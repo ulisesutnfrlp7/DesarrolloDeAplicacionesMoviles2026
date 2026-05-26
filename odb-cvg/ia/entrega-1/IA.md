@@ -1,7 +1,7 @@
 ---
-## Q&A de la sesión
 ---
-
+### Q&A de la sesión 1 
+---
 ### 1. Planificación inicial — CRUD de Módulos de Información
 
 **Pregunta:**
@@ -18609,3 +18609,2639 @@ Modifiqué solo [home.tsx](<./odb-cvg/app/(tabs)/home.tsx>).
 El badge del rol volvió a quedar debajo del título, alineado a la izquierda y antes del subtítulo. Los botones “Usuarios” y “Salir” siguen a la derecha en la fila inferior, junto a la zona del subtítulo.
 
 No modifiqué lógica de roles, permisos, autenticación, Firestore, módulos ni contenidos. El botón “Ordenar” queda donde estaba, arriba de la lista de módulos.
+
+## Q&A de la sesión 5
+
+### **“Generame el código de un login en React Native con Firebase Auth y Google Sign-In”** 
+
+Quiero conectar este login con google creo, como podria hacer? //app/login.tsx import { router } from "expo-router"; import { signInWithEmailAndPassword } from "firebase/auth"; import React, { useState } from "react"; import { StyleSheet, Text, TextInput, TouchableOpacity, View, } from "react-native"; import { auth } from "../config/firebaseConfig"; export default function LoginScreen() { const \[email, setEmail\] \= useState(""); const \[password, setPassword\] \= useState(""); const \[errorMensaje, setErrorMensaje\] \= useState(""); const handleLogin \= async () \=\> { setErrorMensaje(""); if (\!email || \!password) { setErrorMensaje("Por favor, completá todos los campos."); return; } const mailFormateado \= email.toLowerCase().trim(); try { await signInWithEmailAndPassword(auth, mailFormateado, password); router.replace("/(tabs)/home" as any); } catch (error: any) { if (error.code \=== 'auth/invalid-credential') { setErrorMensaje("El correo o la contraseña son incorrectos."); } else if (error.code \=== 'auth/invalid-email') { setErrorMensaje("El formato del correo electrónico no es válido."); } else { setErrorMensaje("Ocurrió un error al intentar iniciar sesión."); } } }; return ( \<View style={styles.container}\> \<View style={styles.header}\> \<Text style={styles.title}\>Operatoria Dental B\</Text\> \<Text style={styles.subtitle}\>Facultad de Odontología \- UNLP\</Text\> \</View\> \<View style={styles.formContainer}\> \<Text style={styles.label}\>Correo Electrónico\</Text\> \<TextInput style={\[styles.input, errorMensaje ? styles.inputError : null\]} // Borde rojo si hay error placeholder="Ej: alumno@unlp.edu.ar" value={email} onChangeText={(text) \=\> { setEmail(text); setErrorMensaje(""); }} keyboardType="email-address" autoCapitalize="none" placeholderTextColor="\#666" /\> \<Text style={styles.label}\>Contraseña\</Text\> \<TextInput style={\[styles.input, errorMensaje ? styles.inputError : null\]} placeholder="\*\*\*\*\*\*\*\*" value={password} onChangeText={(text) \=\> { setPassword(text); setErrorMensaje(""); }} secureTextEntry placeholderTextColor="\#666" /\> {errorMensaje ? ( \<Text style={styles.errorText}\>{errorMensaje}\</Text\> ) : null} \<TouchableOpacity style={styles.primaryButton} onPress={handleLogin}\> \<Text style={styles.primaryButtonText}\>Iniciar Sesión\</Text\> \</TouchableOpacity\> \<TouchableOpacity style={styles.linkButton} onPress={() \=\> router.push("/recuperar")} \> \<Text style={styles.linkText}\>¿Olvidaste tu contraseña?\</Text\> \</TouchableOpacity\> \<View style={styles.divider} /\> \<TouchableOpacity style={styles.secondaryButton} onPress={() \=\> router.push("/registro")} \> \<Text style={styles.secondaryButtonText}\>Crear cuenta nueva\</Text\> \</TouchableOpacity\> \</View\> \</View\> ); } const styles \= StyleSheet.create({ container: { flex: 1, backgroundColor: "\#F5F5F5", justifyContent: "center", padding: 20, }, header: { marginBottom: 40, alignItems: "center" }, title: { fontSize: 28, fontWeight: "bold", color: "\#0F4A32", textAlign: "center", marginBottom: 8, }, subtitle: { fontSize: 16, color: "\#000000", textAlign: "center", fontWeight: "500", }, formContainer: { backgroundColor: "\#FFFFFF", padding: 20, borderRadius: 12, shadowColor: "\#000", shadowOpacity: 0.1, shadowRadius: 5, elevation: 3, }, label: { fontSize: 14, fontWeight: "700", color: "\#000000", marginBottom: 8 }, input: { backgroundColor: "\#F9F9F9", borderWidth: 1, borderColor: "\#E0E0E0", borderRadius: 8, paddingHorizontal: 12, minHeight: 48, marginBottom: 20, fontSize: 16, color: "\#000", }, inputError: { borderColor: "\#DC2626", backgroundColor: "\#FEF2F2", }, errorText: { color: "\#DC2626", fontSize: 13, marginBottom: 12, marginTop: \-8, textAlign: "center", }, primaryButton: { backgroundColor: "\#25B471", borderRadius: 8, alignItems: "center", justifyContent: "center", minHeight: 48, marginTop: 4, }, primaryButtonText: { color: "\#FFFFFF", fontWeight: "bold", fontSize: 16 }, linkButton: { alignItems: "center", marginTop: 15, minHeight: 48, justifyContent: "center", }, linkText: { color: "\#0F4A32", fontSize: 14, fontWeight: "600" }, divider: { height: 1, backgroundColor: "\#E0E0E0", marginVertical: 20 }, secondaryButton: { backgroundColor: "\#FFFFFF", borderWidth: 2, borderColor: "\#25B471", borderRadius: 8, alignItems: "center", justifyContent: "center", minHeight: 48, }, secondaryButtonText: { color: "\#25B471", fontWeight: "bold", fontSize: 16 }, }); 
+
+### 
+
+### **1\. Instalar dependencias necesarias**
+
+En tu proyecto, corré:
+
+bash  
+npm install expo-auth-session expo-web-browser  
+npm install firebase
+
+Estas librerías permiten abrir el flujo de autenticación de Google en Expo.
+
+### **🔹 2\. Configurar Firebase para Google Sign-In**
+
+En la consola de Firebase:
+
+1. Entrá a **Authentication → Sign-in method**.  
+2. Activá **Google** como proveedor.  
+3. Copiá el **Client ID de OAuth 2.0** (lo vas a usar en Expo).
+
+### **🔹 3\. Configurar Expo para Google**
+
+En tu `app.json` agregá dentro de `"expo"`:
+
+json  
+{  
+  "expo": {  
+    "extra": {  
+      "googleClientId": "TU\_CLIENT\_ID.apps.googleusercontent.com"  
+    }  
+  }  
+}
+
+### **🔹 4\. Crear el flujo de login con Google**
+
+En tu `login.tsx` podés agregar un botón extra y la lógica:
+
+tsx  
+import \* as WebBrowser from "expo-web-browser";  
+import \* as Google from "expo-auth-session/providers/google";  
+import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";  
+import { auth } from "../config/firebaseConfig";
+
+WebBrowser.maybeCompleteAuthSession();
+
+export default function LoginScreen() {  
+  const \[request, response, promptAsync\] \= Google.useAuthRequest({  
+    expoClientId: process.env.EXPO\_PUBLIC\_GOOGLE\_CLIENT\_ID,  
+    iosClientId: process.env.EXPO\_PUBLIC\_GOOGLE\_CLIENT\_ID,  
+    androidClientId: process.env.EXPO\_PUBLIC\_GOOGLE\_CLIENT\_ID,  
+    webClientId: process.env.EXPO\_PUBLIC\_GOOGLE\_CLIENT\_ID,  
+  });
+
+  React.useEffect(() \=\> {  
+    if (response?.type \=== "success") {  
+      const { authentication } \= response;  
+      const credential \= GoogleAuthProvider.credential(authentication.idToken);  
+      signInWithCredential(auth, credential)  
+        .then(() \=\> router.replace("/(tabs)/home" as any))  
+        .catch(() \=\> setErrorMensaje("Error al iniciar sesión con Google"));  
+    }  
+  }, \[response\]);
+
+  return (  
+    \<View\>  
+      {/\* ...tu formulario de email/contraseña... \*/}
+
+      \<TouchableOpacity  
+        style={styles.secondaryButton}  
+        disabled={\!request}  
+        onPress={() \=\> promptAsync()}  
+      \>  
+        \<Text style={styles.secondaryButtonText}\>Iniciar con Google\</Text\>  
+      \</TouchableOpacity\>  
+    \</View\>  
+  );  
+}
+
+### **🔹 5\. Flujo final**
+
+* El botón abre la ventana de Google Sign-In.  
+* Expo obtiene el `idToken`.  
+* Se crea una credencial de Firebase (`GoogleAuthProvider.credential`).  
+* Se autentica en Firebase con `signInWithCredential`.  
+* Si todo sale bien, redirigís al `home`.
+
+**“Tengo duda, si mi aplicacion la hago con expo go, para que pueda ser en android/ios que pongo en tipo de aplicacion?”**
+
+* **Si tu app la corrés con Expo Go (modo desarrollo)** → lo más sencillo es crear un **OAuth Client ID de tipo *Web application***.  
+  * Porque Expo Go en realidad abre un navegador interno para manejar el login.  
+  * Ahí no necesitás poner *Nombre de paquete* ni *SHA-1*.  
+* **Si después vas a compilar un APK para Android (producción)** → ahí sí tenés que crear un **OAuth Client ID de tipo *Android***.  
+  * En ese caso te pide el **Nombre del paquete** (el `applicationId` de tu app) y la **huella SHA-1** de tu keystore.  
+  * Eso sirve para que solo tu APK firmado pueda usar esas credenciales.
+
+### **🔹 Cómo seguir desde la captura que me mandaste**
+
+1. Si todavía estás en Expo Go → cambiá el **Tipo de aplicación** a **Web application**.  
+   * Poné un nombre (ej: `Expo Login`).
+
+En **Authorized redirect URIs**, agregá:  
+Código  
+https://auth.expo.io/@tuUsuario/tuProyecto
+
+* (reemplazá `tuUsuario` por tu usuario de Expo y `tuProyecto` por el nombre del proyecto).  
+2. Guardá → te va a mostrar el **Client ID** (termina en `.apps.googleusercontent.com`).
+
+Ese es el que tenés que poner en tu `.env` como:  
+env  
+EXPO\_PUBLIC\_GOOGLE\_CLIENT\_ID="TU\_CLIENT\_ID.apps.googleusercontent.com"
+
+*   
+3. Si más adelante compilás para Android/iOS → repetís el proceso creando credenciales específicas para **Android** y/o **iOS**, con sus datos (package name, SHA-1, etc.).
+
+### **“Buscador de usuarios por roles en la vista del administrador”** 
+
+Supon que eres un  desarrollador de aplicaciones moviles y que tener que hacer el codigo para un buscador de ususarios que filtre por: nombre de usuario, cursada, legajo, etc. Y ademas, agrega botones abajo del buscador para que puedan marcar la opcion que quieren filtrar. Que estas sean profesor, alumno o administrador, todos; cosa de que muestre a todos los usuarios del tipo seleccionado
+
+// ─── Estado Usuarios ─────────────────────────────────────────────────────
+
+  const \[usuarios, setUsuarios\] \= useState\<Usuario\[\]\>(\[\]);
+
+  const \[loading, setLoading\] \= useState(true);
+
+  const \[modalEditar, setModalEditar\] \= useState(false);
+
+  const \[usuarioAEliminarId, setUsuarioAEliminarId\] \= useState\<string | null\>(null);
+
+  const \[usuarioActual, setUsuarioActual\] \= useState\<Usuario | null\>(null);
+
+  const \[nombre, setNombre\] \= useState('');
+
+  const \[email, setEmail\] \= useState('');
+
+  const \[rol, setRol\] \= useState\<Rol\>('alumno');
+
+  const \[esAdmin, setEsAdmin\] \= useState(false);
+
+  const \[alerta, setAlerta\] \= useState\<{
+
+    visible: boolean; titulo: string; mensaje: string; tipo: 'error' | 'exito';
+
+  }\>({ visible: false, titulo: '', mensaje: '', tipo: 'exito' });
+
+Perfecto, Brisa 🙌. Te armo un ejemplo completo de cómo podrías implementar un **buscador de usuarios** con filtros por nombre, cursada, legajo y además botones para filtrar por rol (profesor, alumno, administrador o todos).
+
+### **🔹 Ejemplo de implementación**
+
+tsx
+
+import React, { useState, useEffect } from "react";
+
+import { View, TextInput, TouchableOpacity, Text, FlatList, StyleSheet } from "react-native";
+
+type Rol \= "profesor" | "alumno" | "administrador";
+
+interface Usuario {
+
+  id: string;
+
+  nombre: string;
+
+  cursada: string;
+
+  legajo: string;
+
+  rol: Rol;
+
+}
+
+export default function BuscadorUsuarios() {
+
+  const \[usuarios, setUsuarios\] \= useState\<Usuario\[\]\>(\[\]);
+
+  const \[filtroTexto, setFiltroTexto\] \= useState("");
+
+  const \[filtroRol, setFiltroRol\] \= useState\<Rol | "todos"\>("todos");
+
+  // 🔹 Simulación de datos
+
+  useEffect(() \=\> {
+
+    setUsuarios(\[
+
+      { id: "1", nombre: "Juan Pérez", cursada: "Operativa 1", legajo: "123", rol: "alumno" },
+
+      { id: "2", nombre: "Ana Gómez", cursada: "Operativa 2", legajo: "456", rol: "profesor" },
+
+      { id: "3", nombre: "Carlos Ruiz", cursada: "Operativa 3", legajo: "789", rol: "administrador" },
+
+    \]);
+
+  }, \[\]);
+
+  // 🔹 Filtrado dinámico
+
+  const usuariosFiltrados \= usuarios.filter((u) \=\> {
+
+    const coincideTexto \=
+
+      u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+      u.cursada.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+      u.legajo.toLowerCase().includes(filtroTexto.toLowerCase());
+
+    const coincideRol \= filtroRol \=== "todos" ? true : u.rol \=== filtroRol;
+
+    return coincideTexto && coincideRol;
+
+  });
+
+  return (
+
+    \<View style={styles.container}\>
+
+      \<TextInput
+
+        style={styles.input}
+
+        placeholder="Buscar por nombre, cursada o legajo..."
+
+        value={filtroTexto}
+
+        onChangeText={setFiltroTexto}
+
+      /\>
+
+      {/\* 🔹 Botones de rol \*/}
+
+      \<View style={styles.rolesContainer}\>
+
+        {\["todos", "alumno", "profesor", "administrador"\].map((rol) \=\> (
+
+          \<TouchableOpacity
+
+            key={rol}
+
+            style={\[styles.rolButton, filtroRol \=== rol && styles.rolButtonActivo\]}
+
+            onPress={() \=\> setFiltroRol(rol as Rol | "todos")}
+
+          \>
+
+            \<Text style={styles.rolButtonText}\>{rol.toUpperCase()}\</Text\>
+
+          \</TouchableOpacity\>
+
+        ))}
+
+      \</View\>
+
+      {/\* 🔹 Lista de usuarios filtrados \*/}
+
+      \<FlatList
+
+        data={usuariosFiltrados}
+
+        keyExtractor={(item) \=\> item.id}
+
+        renderItem={({ item }) \=\> (
+
+          \<View style={styles.usuarioCard}\>
+
+            \<Text style={styles.usuarioNombre}\>{item.nombre}\</Text\>
+
+            \<Text\>Cursada: {item.cursada}\</Text\>
+
+            \<Text\>Legajo: {item.legajo}\</Text\>
+
+            \<Text\>Rol: {item.rol}\</Text\>
+
+          \</View\>
+
+        )}
+
+      /\>
+
+    \</View\>
+
+  );
+
+}
+
+const styles \= StyleSheet.create({
+
+  container: { flex: 1, padding: 20, backgroundColor: "\#F5F5F5" },
+
+  input: { backgroundColor: "\#FFF", borderWidth: 1, borderColor: "\#CCC", borderRadius: 8, paddingHorizontal: 12, minHeight: 48, marginBottom: 15 },
+
+  rolesContainer: { flexDirection: "row", justifyContent: "space-around", marginBottom: 15 },
+
+  rolButton: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: "\#25B471", borderRadius: 6 },
+
+  rolButtonActivo: { backgroundColor: "\#25B471" },
+
+  rolButtonText: { color: "\#25B471", fontWeight: "bold" },
+
+  usuarioCard: { backgroundColor: "\#FFF", padding: 12, borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: "\#DDD" },
+
+  usuarioNombre: { fontWeight: "bold", fontSize: 16, marginBottom: 4 },
+
+});
+
+### **🔹 Cómo funciona**
+
+* El `TextInput` permite buscar por **nombre, cursada o legajo**.  
+* Los botones debajo permiten elegir el **rol**: profesor, alumno, administrador o todos.  
+* El `FlatList` muestra solo los usuarios que cumplen con el filtro de texto y el rol seleccionado.
+
+👉 Con este patrón tenés un buscador flexible y escalable. Podés reemplazar los datos simulados con los que traigas de tu base de datos (Firestore, API, etc.).
+
+¿Querés que te arme la versión conectada directamente a **Firestore** para que filtre usuarios en tiempo real desde tu colección `usuarios`?
+
+Si hace eso, conectalo con firebase para que traiga los datos que ya estan cargados y ademas, borra el filtro por cursada y legajo y agregale por email
+
+Perfecto, Brisa 🙌. Te armo el buscador conectado directamente con **Firebase Firestore**, filtrando por **nombre, email** y con los botones para seleccionar el rol (profesor, alumno, administrador o todos).
+
+### **🔹 Código con Firebase**
+
+tsx
+
+import React, { useState, useEffect } from "react";
+
+import { View, TextInput, TouchableOpacity, Text, FlatList, StyleSheet } from "react-native";
+
+import { collection, getDocs } from "firebase/firestore";
+
+import { db } from "../config/firebaseConfig";
+
+type Rol \= "profesor" | "alumno" | "administrador";
+
+interface Usuario {
+
+  id: string;
+
+  nombre: string;
+
+  email: string;
+
+  rol: Rol;
+
+}
+
+export default function BuscadorUsuarios() {
+
+  const \[usuarios, setUsuarios\] \= useState\<Usuario\[\]\>(\[\]);
+
+  const \[filtroTexto, setFiltroTexto\] \= useState("");
+
+  const \[filtroRol, setFiltroRol\] \= useState\<Rol | "todos"\>("todos");
+
+  // 🔹 Traer usuarios desde Firestore
+
+  useEffect(() \=\> {
+
+    const fetchUsuarios \= async () \=\> {
+
+      try {
+
+        const querySnapshot \= await getDocs(collection(db, "usuarios"));
+
+        const lista: Usuario\[\] \= querySnapshot.docs.map((doc) \=\> ({
+
+          id: doc.id,
+
+          ...doc.data(),
+
+        })) as Usuario\[\];
+
+        setUsuarios(lista);
+
+      } catch (error) {
+
+        console.error("Error al traer usuarios:", error);
+
+      }
+
+    };
+
+    fetchUsuarios();
+
+  }, \[\]);
+
+  // 🔹 Filtrado dinámico
+
+  const usuariosFiltrados \= usuarios.filter((u) \=\> {
+
+    const coincideTexto \=
+
+      u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+      u.email.toLowerCase().includes(filtroTexto.toLowerCase());
+
+    const coincideRol \= filtroRol \=== "todos" ? true : u.rol \=== filtroRol;
+
+    return coincideTexto && coincideRol;
+
+  });
+
+  return (
+
+    \<View style={styles.container}\>
+
+      {/\* 🔹 Buscador \*/}
+
+      \<TextInput
+
+        style={styles.input}
+
+        placeholder="Buscar por nombre o email..."
+
+        value={filtroTexto}
+
+        onChangeText={setFiltroTexto}
+
+      /\>
+
+      {/\* 🔹 Botones de rol \*/}
+
+      \<View style={styles.rolesContainer}\>
+
+        {\["todos", "alumno", "profesor", "administrador"\].map((rol) \=\> (
+
+          \<TouchableOpacity
+
+            key={rol}
+
+            style={\[styles.rolButton, filtroRol \=== rol && styles.rolButtonActivo\]}
+
+            onPress={() \=\> setFiltroRol(rol as Rol | "todos")}
+
+          \>
+
+            \<Text style={styles.rolButtonText}\>{rol.toUpperCase()}\</Text\>
+
+          \</TouchableOpacity\>
+
+        ))}
+
+      \</View\>
+
+      {/\* 🔹 Lista de usuarios filtrados \*/}
+
+      \<FlatList
+
+        data={usuariosFiltrados}
+
+        keyExtractor={(item) \=\> item.id}
+
+        renderItem={({ item }) \=\> (
+
+          \<View style={styles.usuarioCard}\>
+
+            \<Text style={styles.usuarioNombre}\>{item.nombre}\</Text\>
+
+            \<Text\>Email: {item.email}\</Text\>
+
+            \<Text\>Rol: {item.rol}\</Text\>
+
+          \</View\>
+
+        )}
+
+      /\>
+
+    \</View\>
+
+  );
+
+}
+
+const styles \= StyleSheet.create({
+
+  container: { flex: 1, padding: 20, backgroundColor: "\#F5F5F5" },
+
+  input: { backgroundColor: "\#FFF", borderWidth: 1, borderColor: "\#CCC", borderRadius: 8, paddingHorizontal: 12, minHeight: 48, marginBottom: 15 },
+
+  rolesContainer: { flexDirection: "row", justifyContent: "space-around", marginBottom: 15 },
+
+  rolButton: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: "\#25B471", borderRadius: 6 },
+
+  rolButtonActivo: { backgroundColor: "\#25B471" },
+
+  rolButtonText: { color: "\#25B471", fontWeight: "bold" },
+
+  usuarioCard: { backgroundColor: "\#FFF", padding: 12, borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: "\#DDD" },
+
+  usuarioNombre: { fontWeight: "bold", fontSize: 16, marginBottom: 4 },
+
+});
+
+### **🔹 Cómo funciona**
+
+* Se conecta a la colección `usuarios` en Firestore.  
+* Filtra por **nombre** o **email**.  
+* Los botones permiten elegir el rol: alumno, profesor, administrador o todos.  
+* El `FlatList` muestra los usuarios filtrados en tiempo real.
+
+👉 Con esto ya tenés el buscador conectado a Firebase y adaptado a tus necesidades.
+
+¿Querés que te muestre cómo hacer que el buscador se actualice automáticamente cuando se agregan/editar usuarios en Firestore (con `onSnapshot` en vez de `getDocs`)?
+
+export default function UserManagementScreen() { // ─── Pestaña activa ────────────────────────────────────────────────────── const \[tabActiva, setTabActiva\] \= useState\<'usuarios' | 'cursadas'\>('usuarios'); // ─── Estado Usuarios ───────────────────────────────────────────────────── const \[usuarios, setUsuarios\] \= useState\<Usuario\[\]\>(\[\]); const \[loading, setLoading\] \= useState(true); const \[modalEditar, setModalEditar\] \= useState(false); const \[usuarioAEliminarId, setUsuarioAEliminarId\] \= useState\<string | null\>(null); const \[usuarioActual, setUsuarioActual\] \= useState\<Usuario | null\>(null); const \[nombre, setNombre\] \= useState(''); const \[email, setEmail\] \= useState(''); const \[rol, setRol\] \= useState\<Rol\>('alumno'); const \[esAdmin, setEsAdmin\] \= useState(false); const \[alerta, setAlerta\] \= useState\<{ visible: boolean; titulo: string; mensaje: string; tipo: 'error' | 'exito'; }\>({ visible: false, titulo: '', mensaje: '', tipo: 'exito' }); // ─── Estado Cursadas ───────────────────────────────────────────────────── const \[cursadas, setCursadas\] \= useState\<CursadaRestringida\[\]\>(\[\]); const \[loadingCursadas, setLoadingCursadas\] \= useState(true); const \[cursadaExpandida, setCursadaExpandida\] \= useState\<CursadaRestringida | null\>(null); const \[cursadaARegenerear, setCursadaARegenerar\] \= useState\<CursadaRestringida | null\>(null); const \[regenerando, setRegenerando\] \= useState(false); const \[modalAsignar, setModalAsignar\] \= useState(false); const \[asignando, setAsignando\] \= useState(false); const { inscripciones: inscripcionesExpandida, loading: loadingInscripciones } \= useInscripcionesPorSeccion(cursadaExpandida?.id ?? null); const { modulos, loading: loadingModulos } \= useModulos(); const rootNavigationState \= useRootNavigationState(); useEffect(() \=\> { if (\!rootNavigationState?.key) return; const unsubscribe \= auth.onAuthStateChanged(async (user) \=\> { try { if (\!user) { router.replace('/login'); return; } const userSnap \= await getDoc(doc(db, 'usuarios', user.uid)); if (\!userSnap.exists() || userSnap.data().rol \!== 'admin') { router.replace('/(tabs)/home' as any); return; } setEsAdmin(true); const snap \= await getDocs(collection(db, 'usuarios')); setUsuarios(snap.docs.map(d \=\> ({ id: d.id, nombre: d.data().nombre, email: d.data().email, rol: d.data().rol, }))); } catch { setAlerta({ visible: true, titulo: 'Error', mensaje: 'No se pudieron cargar los usuarios.', tipo: 'error' }); } finally { setLoading(false); } }); return unsubscribe; }, \[rootNavigationState\]); // Cargar cursadas restringidas via collectionGroup useEffect(() \=\> { const q \= query( collectionGroup(db, 'secciones'), where('esRestringida', '==', true), ); const unsubscribe \= onSnapshot(q, (snapshot) \=\> { setCursadas(snapshot.docs.map(d \=\> ({ id: d.id, moduloId: d.ref.parent.parent?.id ?? '', titulo: d.data().titulo ?? '', codigoAcceso: d.data().codigoAcceso ?? '', }))); setLoadingCursadas(false); }, () \=\> setLoadingCursadas(false)); return () \=\> unsubscribe(); }, \[\]); // Mapa uid→nombre para mostrar en inscripciones const usuariosMap: Record\<string, string\> \= {}; usuarios.forEach(u \=\> { usuariosMap\[u.id\] \= u.nombre || u.email; }); const modulosMap: Record\<string, string\> \= {}; modulos.forEach(m \=\> { modulosMap\[m.id\] \= m.titulo; }); const abrirEditar \= (user: Usuario) \=\> { setUsuarioActual(user); setNombre(user.nombre); setEmail(user.email); setRol(user.rol); setModalEditar(true); }; const guardarCambios \= async () \=\> { if (\!usuarioActual) return; try { await updateDoc(doc(db, 'usuarios', usuarioActual.id), { nombre, email, rol }); setUsuarios(prev \=\> prev.map(u \=\> u.id \=== usuarioActual.id ? { ...u, nombre, email, rol } : u )); setModalEditar(false); setAlerta({ visible: true, titulo: 'Guardado', mensaje: 'El usuario fue actualizado correctamente.', tipo: 'exito' }); } catch { setAlerta({ visible: true, titulo: 'Error', mensaje: 'No se pudo actualizar el usuario.', tipo: 'error' }); } }; const confirmarEliminar \= async () \=\> { if (\!usuarioAEliminarId) return; try { await deleteDoc(doc(db, 'usuarios', usuarioAEliminarId)); setUsuarios(prev \=\> prev.filter(u \=\> u.id \!== usuarioAEliminarId)); setUsuarioAEliminarId(null); setAlerta({ visible: true, titulo: 'Eliminado', mensaje: 'El usuario fue eliminado.', tipo: 'exito' }); } catch { setAlerta({ visible: true, titulo: 'Error', mensaje: 'No se pudo eliminar el usuario.', tipo: 'error' }); } }; el codigo que vos me mandaste deberia estar en esta seccion no?
+
+Exacto, Brisa 🙌. El bloque que te pasé del **buscador con filtros** se integra dentro de tu `UserManagementScreen`, en la sección de **usuarios**. Es decir, lo tenés que colocar en el renderizado de la pestaña activa `usuarios`, aprovechando que ya traés los datos desde Firestore en tu `useEffect`.
+
+### **🔹 Cómo integrarlo**
+
+**Ya tenés el estado** `usuarios` **cargado desde Firestore** en tu `useEffect`.
+
+1. → No hace falta volver a traerlos con `getDocs`, porque ya lo hacés en tu código.  
+2. **Agregá estados para el filtro**:
+
+ts
+
+const \[filtroTexto, setFiltroTexto\] \= useState("");
+
+const \[filtroRol, setFiltroRol\] \= useState\<Rol | "todos"\>("todos");
+
+3. **Filtrado dinámico** (justo antes del `return`):
+
+ts
+
+const usuariosFiltrados \= usuarios.filter((u) \=\> {
+
+  const coincideTexto \=
+
+    u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+    u.email.toLowerCase().includes(filtroTexto.toLowerCase());
+
+  const coincideRol \= filtroRol \=== "todos" ? true : u.rol \=== filtroRol;
+
+  return coincideTexto && coincideRol;
+
+});
+
+4. **Renderizado en la pestaña de usuarios**:
+
+tsx
+
+{tabActiva \=== "usuarios" && (
+
+  \<View style={{ flex: 1 }}\>
+
+    {/\* Buscador \*/}
+
+    \<TextInput
+
+      style={styles.input}
+
+      placeholder="Buscar por nombre o email..."
+
+      value={filtroTexto}
+
+      onChangeText={setFiltroTexto}
+
+    /\>
+
+    {/\* Botones de rol \*/}
+
+    \<View style={styles.rolesContainer}\>
+
+      {\["todos", "alumno", "profesor", "administrador"\].map((rol) \=\> (
+
+        \<TouchableOpacity
+
+          key={rol}
+
+          style={\[styles.rolButton, filtroRol \=== rol && styles.rolButtonActivo\]}
+
+          onPress={() \=\> setFiltroRol(rol as Rol | "todos")}
+
+        \>
+
+          \<Text style={styles.rolButtonText}\>{rol.toUpperCase()}\</Text\>
+
+        \</TouchableOpacity\>
+
+      ))}
+
+    \</View\>
+
+    {/\* Lista filtrada \*/}
+
+    \<FlatList
+
+      data={usuariosFiltrados}
+
+      keyExtractor={(item) \=\> item.id}
+
+      renderItem={({ item }) \=\> (
+
+        \<View style={styles.usuarioCard}\>
+
+          \<Text style={styles.usuarioNombre}\>{item.nombre}\</Text\>
+
+          \<Text\>Email: {item.email}\</Text\>
+
+          \<Text\>Rol: {item.rol}\</Text\>
+
+        \</View\>
+
+      )}
+
+    /\>
+
+  \</View\>
+
+)}
+
+### **🔹 Estilos sugeridos**
+
+Podés agregar al `StyleSheet`:
+
+ts
+
+input: { backgroundColor: "\#FFF", borderWidth: 1, borderColor: "\#CCC", borderRadius: 8, paddingHorizontal: 12, minHeight: 48, marginBottom: 15 },
+
+rolesContainer: { flexDirection: "row", justifyContent: "space-around", marginBottom: 15 },
+
+rolButton: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: "\#25B471", borderRadius: 6 },
+
+rolButtonActivo: { backgroundColor: "\#25B471" },
+
+rolButtonText: { color: "\#25B471", fontWeight: "bold" },
+
+usuarioCard: { backgroundColor: "\#FFF", padding: 12, borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: "\#DDD" },
+
+usuarioNombre: { fontWeight: "bold", fontSize: 16, marginBottom: 4 },
+
+✅ Con esto, tu `UserManagementScreen` queda con:
+
+* **Carga de usuarios desde Firestore** (ya lo tenías).  
+* **Buscador por nombre/email**.  
+* **Botones para filtrar por rol**.  
+* **Lista filtrada** que se actualiza en tiempo real según lo que escribas o el rol que selecciones.
+
+¿Querés que te arme el `UserManagementScreen` completo con esta integración ya lista para que lo copies directo y pruebes?
+
+okey pero va todo dentro de la pesataña de usuarios no?
+
+Exacto, Brisa 🙌. Todo el bloque del **buscador con filtros** va dentro de la pestaña de **usuarios** de tu `UserManagementScreen`.
+
+Tu componente ya maneja dos pestañas (`usuarios` y `cursadas`) con el estado `tabActiva`. Entonces, el buscador y la lista filtrada se renderizan **solo cuando** `tabActiva === "usuarios"`.
+
+### **🔹 Integración dentro de `UserManagementScreen`**
+
+tsx
+
+{tabActiva \=== "usuarios" && (
+
+  \<View style={{ flex: 1 }}\>
+
+    {/\* Buscador \*/}
+
+    \<TextInput
+
+      style={styles.input}
+
+      placeholder="Buscar por nombre o email..."
+
+      value={filtroTexto}
+
+      onChangeText={setFiltroTexto}
+
+    /\>
+
+    {/\* Botones de rol \*/}
+
+    \<View style={styles.rolesContainer}\>
+
+      {\["todos", "alumno", "profesor", "administrador"\].map((rol) \=\> (
+
+        \<TouchableOpacity
+
+          key={rol}
+
+          style={\[styles.rolButton, filtroRol \=== rol && styles.rolButtonActivo\]}
+
+          onPress={() \=\> setFiltroRol(rol as Rol | "todos")}
+
+        \>
+
+          \<Text style={styles.rolButtonText}\>{rol.toUpperCase()}\</Text\>
+
+        \</TouchableOpacity\>
+
+      ))}
+
+    \</View\>
+
+    {/\* Lista filtrada \*/}
+
+    \<FlatList
+
+      data={usuariosFiltrados}
+
+      keyExtractor={(item) \=\> item.id}
+
+      renderItem={({ item }) \=\> (
+
+        \<View style={styles.usuarioCard}\>
+
+          \<Text style={styles.usuarioNombre}\>{item.nombre}\</Text\>
+
+          \<Text\>Email: {item.email}\</Text\>
+
+          \<Text\>Rol: {item.rol}\</Text\>
+
+        \</View\>
+
+      )}
+
+    /\>
+
+  \</View\>
+
+)}
+
+### **🔹 Estados y filtrado**
+
+Agregá arriba en tu componente:
+
+ts
+
+const \[filtroTexto, setFiltroTexto\] \= useState("");
+
+const \[filtroRol, setFiltroRol\] \= useState\<Rol | "todos"\>("todos");
+
+const usuariosFiltrados \= usuarios.filter((u) \=\> {
+
+  const coincideTexto \=
+
+    u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+    u.email.toLowerCase().includes(filtroTexto.toLowerCase());
+
+  const coincideRol \= filtroRol \=== "todos" ? true : u.rol \=== filtroRol;
+
+  return coincideTexto && coincideRol;
+
+});
+
+✅ Con esto, tu `UserManagementScreen` queda así:
+
+* **Carga de usuarios desde Firestore** (ya lo tenías).  
+* **Buscador por nombre/email**.  
+* **Botones para filtrar por rol**.  
+* **Lista filtrada** que se muestra solo en la pestaña de usuarios.
+
+De esa forma, cuando cambies a la pestaña de cursadas, no se renderiza el buscador ni la lista de usuarios.
+
+¿Querés que te arme el `UserManagementScreen` completo con esta integración ya incluida para que lo copies directo y pruebes?
+
+card: { backgroundColor: '\#FFFFFF', borderRadius: 12, padding: 14, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1, shadowColor: '\#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, borderLeftWidth: 3, borderLeftColor: '\#25B471', }, cardInfo: { flex: 1 }, cardNombre: { fontSize: 15, fontWeight: '700', color: '\#11181C' }, cardEmail: { fontSize: 13, color: '\#6B7280', marginTop: 2 }, cardActions: { gap: 10, alignItems: 'flex-end' }, editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '\#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, }, editBtnText: { fontSize: 13, fontWeight: '600', color: '\#0F4A32' }, deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '\#FEF2F2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, }, deleteBtnText: { fontSize: 13, fontWeight: '600', color: '\#DC2626' }, badge: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, alignSelf: 'flex-start' }, badgeAdmin: { backgroundColor: '\#0F4A32' }, badgeTextAdmin: { color: '\#FFFFFF', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' }, badgeProfe: { backgroundColor: '\#E8F5E9', borderWidth: 1, borderColor: '\#25B471' }, badgeTextProfe: { color: '\#0F4A32', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' }, badgeAlumno: { backgroundColor: '\#E2E8F0' }, badgeTextAlumno: { color: '\#4A5568', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' }, con estos estilos como seria el codigo para los estilos del buscador y los botones de filtrado?
+
+Exacto, Brisa 🙌. Ya tenés definidos estilos muy prolijos para las **cards de usuario**, así que el buscador y los botones de filtrado deberían seguir esa misma línea visual. Te propongo los estilos complementarios para que encajen con lo que ya tenés:
+
+### **🔹 Estilos para el buscador y botones de filtrado**
+
+ts
+
+buscadorInput: {
+
+  backgroundColor: '\#FFFFFF',
+
+  borderWidth: 1,
+
+  borderColor: '\#E0E0E0',
+
+  borderRadius: 8,
+
+  paddingHorizontal: 12,
+
+  minHeight: 44,
+
+  fontSize: 14,
+
+  color: '\#11181C',
+
+  marginBottom: 12,
+
+},
+
+rolesContainer: {
+
+  flexDirection: 'row',
+
+  justifyContent: 'space-between',
+
+  marginBottom: 16,
+
+},
+
+rolButton: {
+
+  flex: 1,
+
+  marginHorizontal: 4,
+
+  paddingVertical: 8,
+
+  borderWidth: 1,
+
+  borderColor: '\#25B471',
+
+  borderRadius: 8,
+
+  alignItems: 'center',
+
+  backgroundColor: '\#FFFFFF',
+
+},
+
+rolButtonActivo: {
+
+  backgroundColor: '\#25B471',
+
+},
+
+rolButtonText: {
+
+  fontSize: 13,
+
+  fontWeight: '600',
+
+  color: '\#25B471',
+
+},
+
+rolButtonTextActivo: {
+
+  color: '\#FFFFFF',
+
+},
+
+### **🔹 Cómo se usan**
+
+* El `TextInput` del buscador usa `styles.buscadorInput`.  
+* Los botones de rol se renderizan con `styles.rolButton`, y si están activos se les aplica también `styles.rolButtonActivo`.  
+* El texto del botón cambia de color según esté activo o no (`rolButtonText` vs `rolButtonTextActivo`).
+
+Ejemplo dentro de tu pestaña de usuarios:
+
+tsx
+
+\<TextInput
+
+  style={styles.buscadorInput}
+
+  placeholder="Buscar por nombre o email..."
+
+  value={filtroTexto}
+
+  onChangeText={setFiltroTexto}
+
+/\>
+
+\<View style={styles.rolesContainer}\>
+
+  {\["todos", "alumno", "profesor", "administrador"\].map((rol) \=\> {
+
+    const activo \= filtroRol \=== rol;
+
+    return (
+
+      \<TouchableOpacity
+
+        key={rol}
+
+        style={\[styles.rolButton, activo && styles.rolButtonActivo\]}
+
+        onPress={() \=\> setFiltroRol(rol as Rol | "todos")}
+
+      \>
+
+        \<Text style={activo ? styles.rolButtonTextActivo : styles.rolButtonText}\>
+
+          {rol.toUpperCase()}
+
+        \</Text\>
+
+      \</TouchableOpacity\>
+
+    );
+
+  })}
+
+\</View\>
+
+✅ Con esto, el buscador y los botones mantienen la estética limpia y consistente con tus cards de usuario.
+
+¿Querés que te arme el `UserManagementScreen` completo con estos estilos ya integrados para que lo copies directo y pruebes?
+
+genial, ahora dos correciones que necesito. Cuando apreto los botones para filtrar, como la letra es verde y el boton cuando esta activo se pone en verde, se pierde el texto, asiq necsitaria que el color de texto cuando el boton este activo se cambie a blanco. Y el filtro por administrador no me finciona, sera porque el rol es admin?
+
+Exacto, Brisa 🙌. Te marco las dos correcciones:
+
+### **🔹 1\. Texto blanco cuando el botón está activo**
+
+Ahora mismo tu botón activo se pinta de verde (`backgroundColor: '#25B471'`) pero el texto sigue siendo verde, por eso se pierde.
+
+La solución es aplicar un estilo distinto al texto cuando el botón está activo:
+
+tsx
+
+\<Text style={activo ? styles.rolButtonTextActivo : styles.rolButtonText}\>
+
+  {rol.toUpperCase()}
+
+\</Text\>
+
+Y en tus estilos:
+
+ts
+
+rolButtonText: {
+
+  fontSize: 13,
+
+  fontWeight: '600',
+
+  color: '\#25B471',
+
+},
+
+rolButtonTextActivo: {
+
+  fontSize: 13,
+
+  fontWeight: '600',
+
+  color: '\#FFFFFF', // 🔹 texto blanco cuando activo
+
+},
+
+### **🔹 2\. Filtro por administrador**
+
+El problema es que en tu Firestore guardás el rol como `"admin"` y en el filtro estabas usando `"administrador"`.
+
+Entonces nunca coincide.
+
+👉 Solución: usá los mismos valores que tenés en la base.
+
+Si en Firestore guardás `"admin"`, el botón debería ser `"admin"`, no `"administrador"`.
+
+tsx
+
+{\["todos", "alumno", "profesor", "admin"\].map((rol) \=\> (
+
+  \<TouchableOpacity
+
+    key={rol}
+
+    style={\[styles.rolButton, filtroRol \=== rol && styles.rolButtonActivo\]}
+
+    onPress={() \=\> setFiltroRol(rol as Rol | "todos")}
+
+  \>
+
+    \<Text style={filtroRol \=== rol ? styles.rolButtonTextActivo : styles.rolButtonText}\>
+
+      {rol.toUpperCase()}
+
+    \</Text\>
+
+  \</TouchableOpacity\>
+
+))}
+
+Y tu tipo `Rol` debería reflejar eso:
+
+ts
+
+type Rol \= "profesor" | "alumno" | "admin";
+
+✅ Con estas dos correcciones:
+
+* El texto de los botones activos se verá en blanco sobre el fondo verde.  
+* El filtro por administrador funcionará porque ahora coincide con el valor real `"admin"` en Firestore.
+
+¿Querés que te arme el bloque final de la pestaña de usuarios con estas dos correcciones ya aplicadas para que lo copies directo?
+
+{/\* Botones de rol \*/} \<View style={styles.rolesContainer}\> {\["todos", "alumno", "profesor", "admin"\].map((rol) \=\> ( \<TouchableOpacity key={rol} style={\[styles.rolButton, filtroRol \=== rol && styles.rolButtonActivo\]} onPress={() \=\> setFiltroRol(rol as Rol | "todos")} \> \<Text style={activo ? styles.rolButtonTextActivo : styles.rolButtonText}\>{rol.toUpperCase()}\</Text\> \</TouchableOpacity\> ))} \</View\> por que activo me marca como error? que es lo que puedo hacer o me flata para corregirlo?
+
+Muy bien visto, Brisa 🙌. El error con `activo` es porque esa variable **no existe en tu código**: la estás usando dentro del `map` pero nunca la definiste.
+
+Lo que realmente querés es comparar si el rol actual del botón coincide con el `filtroRol`. Eso se hace creando una constante dentro del `map`:
+
+tsx
+
+{/\* Botones de rol \*/}
+
+\<View style={styles.rolesContainer}\>
+
+  {\["todos", "alumno", "profesor", "admin"\].map((rol) \=\> {
+
+    const activo \= filtroRol \=== rol; // 🔹 acá definís activo
+
+    return (
+
+      \<TouchableOpacity
+
+        key={rol}
+
+        style={\[styles.rolButton, activo && styles.rolButtonActivo\]}
+
+        onPress={() \=\> setFiltroRol(rol as Rol | "todos")}
+
+      \>
+
+        \<Text style={activo ? styles.rolButtonTextActivo : styles.rolButtonText}\>
+
+          {rol.toUpperCase()}
+
+        \</Text\>
+
+      \</TouchableOpacity\>
+
+    );
+
+  })}
+
+\</View\>
+
+### **🔹 Correcciones aplicadas**
+
+**Definí** `activo` **dentro del** `map`:  
+ts  
+const activo \= filtroRol \=== rol;
+
+1. Así ya no te marca error.
+
+**Texto blanco cuando el botón está activo**:
+
+2. Usás `styles.rolButtonTextActivo` para que el texto se vea en blanco sobre el fondo verde.
+
+**Filtro por administrador**:
+
+Asegurate de que el valor en Firestore sea `"admin"` y no `"administrador"`.
+
+Tu tipo `Rol` debería ser:  
+ts  
+type Rol \= "alumno" | "profesor" | "admin";
+
+3. 
+
+✅ Con esto, el error desaparece, el texto se ve correctamente en blanco cuando el botón está activo, y el filtro por administrador funciona porque coincide con el valor real en Firestore.
+
+¿Querés que te arme el bloque final de la pestaña de usuarios con estas tres correcciones ya integradas para que lo copies directo?
+
+**“Me podrias tirar que etiquetas de estilos debería cambiar para que los botones y el buscador estén más separados”**
+
+Exacto, Brisa 🙌. Para separar un poquito más el **buscador** de los **botones de rol**, lo más simple es darle un `marginBottom` al estilo del input, o un `marginTop` al contenedor de los botones.
+
+---
+
+### **🔹 Opción 1: agregar espacio debajo del buscador**
+
+buscadorInput: {
+
+  backgroundColor: '\#FFFFFF',
+
+  borderWidth: 1,
+
+  borderColor: '\#E0E0E0',
+
+  borderRadius: 8,
+
+  paddingHorizontal: 12,
+
+  minHeight: 44,
+
+  fontSize: 14,
+
+  color: '\#11181C',
+
+  marginBottom: 20, // 🔹 aumentá este valor para más separación
+
+},
+
+---
+
+### **🔹 Opción 2: agregar espacio arriba de los botones**
+
+rolesContainer: {
+
+  flexDirection: 'row',
+
+  justifyContent: 'space-between',
+
+  marginBottom: 16,
+
+  marginTop: 8, // 🔹 un pequeño margen superior
+
+},
+
+---
+
+✅ Con cualquiera de estas dos opciones vas a lograr que el buscador quede un poquito más separado de los botones de rol.  
+Si querés un “cachito nada más”, te recomiendo empezar con `marginBottom: 20` en el buscador y ajustar hasta que se vea cómodo.
+
+¿Querés que te arme el bloque final de estilos del buscador y botones con estas correcciones ya aplicadas para que lo copies directo?
+
+**{/\* ─── Pestaña Cursadas ─────────────────────────────────────────────── \*/}**
+
+      **{tabActiva \=== 'cursadas' && (**
+
+        **\<ScrollView style={styles.container} contentContainerStyle={styles.listContent}\>**
+
+          **{loadingCursadas ? (**
+
+            **\<ActivityIndicator color="\#25B471" style={{ marginTop: 32 }} /\>**
+
+          **) : cursadas.length \=== 0 ? (**
+
+            **\<View style={styles.emptyContainer}\>**
+
+              **\<Ionicons name="school-outline" size={48} color="\#CBD5E0" /\>**
+
+              **\<Text style={styles.emptyText}\>No hay cursadas con acceso restringido.\</Text\>**
+
+              **\<Text style={\[styles.emptyText, { fontSize: 12, marginTop: 4 }\]}\>**
+
+                **Activá el control de acceso al crear o editar una sección para verla en este listado.**
+
+              **\</Text\>**
+
+            **\</View\>**
+
+          **) : (**
+
+            **cursadas.map((cursada) \=\> {**
+
+              **const expandida \= cursadaExpandida?.id \=== cursada.id;**
+
+              **const inscritos \= expandida ? inscripcionesExpandida : \[\];**
+
+              **const moduloTitulo \= loadingModulos**
+
+                **? 'Cargando módulo...'**
+
+                **: (modulosMap\[cursada.moduloId\] ?? 'Módulo no encontrado');**
+
+              **const alumnosSinInscribir \= usuarios.filter(u \=\>**
+
+                **u.rol \=== 'alumno' && \!inscritos.some(i \=\> i.alumnoId \=== u.id)**
+
+              **);**
+
+              **return (**
+
+                **\<View key={cursada.id} style={styles.cursadaCard}\>**
+
+                  **\<TouchableOpacity**
+
+                    **style={styles.cursadaCardHeader}**
+
+                    **onPress={() \=\> setCursadaExpandida(expandida ? null : cursada)}**
+
+                    **activeOpacity={0.8}**
+
+                  **\>**
+
+                    **\<View style={styles.cursadaIconBg}\>**
+
+                      **\<Ionicons name="school-outline" size={20} color="\#0F4A32" /\>**
+
+                    **\</View\>**
+
+                    **\<View style={{ flex: 1 }}\>**
+
+                      **\<Text style={styles.cursadaTitulo}\>{cursada.titulo}\</Text\>**
+
+                      **\<Text style={styles.cursadaSubtitulo}\>Módulo: {moduloTitulo}\</Text\>**
+
+                    **\</View\>**
+
+                    **\<Ionicons**
+
+                      **name={expandida ? 'chevron-up-outline' : 'chevron-down-outline'}**
+
+                      **size={18}**
+
+                      **color="\#9CA3AF"**
+
+                    **/\>**
+
+                  **\</TouchableOpacity\>**
+
+                  **{expandida && (**
+
+                    **\<View style={styles.cursadaPanel}\>**
+
+                      **{/\* Código actual \*/}**
+
+                      **\<Text style={styles.panelLabel}\>Código de acceso\</Text\>**
+
+                      **\<View style={styles.codigoRow}\>**
+
+                        **\<Text style={styles.codigoTexto}\>{cursada.codigoAcceso || '—'}\</Text\>**
+
+                        **\<TouchableOpacity**
+
+                          **style={styles.regenerarBtn}**
+
+                          **onPress={() \=\> setCursadaARegenerar(cursada)}**
+
+                        **\>**
+
+                          **\<Ionicons name="refresh-outline" size={14} color="\#DC2626" /\>**
+
+                          **\<Text style={styles.regenerarBtnText}\>Regenerar\</Text\>**
+
+                        **\</TouchableOpacity\>**
+
+                      **\</View\>**
+
+                      **\<Text style={styles.codigoHint}\>**
+
+                        **Al regenerar, todos los alumnos inscriptos perderán el acceso.**
+
+                      **\</Text\>**
+
+                      **{/\* Lista de inscriptos \*/}**
+
+                      **\<View style={styles.inscriptosHeader}\>**
+
+                        **\<Text style={styles.panelLabel}\>**
+
+                          **Inscriptos ({expandida ? inscritos.length : '…'})**
+
+                        **\</Text\>**
+
+                        **\<TouchableOpacity**
+
+                          **style={styles.asignarBtn}**
+
+                          **onPress={() \=\> setModalAsignar(true)}**
+
+                        **\>**
+
+                          **\<Ionicons name="person-add-outline" size={14} color="\#0F4A32" /\>**
+
+                          **\<Text style={styles.asignarBtnText}\>Asignar\</Text\>**
+
+                        **\</TouchableOpacity\>**
+
+                      **\</View\>**
+
+                      **{loadingInscripciones ? (**
+
+                        **\<ActivityIndicator color="\#25B471" size="small" style={{ marginTop: 8 }} /\>**
+
+                      **) : inscritos.length \=== 0 ? (**
+
+                        **\<Text style={styles.emptyText}\>Sin inscriptos aún.\</Text\>**
+
+                      **) : (**
+
+                        **inscritos.map((insc) \=\> (**
+
+                          **\<View key={insc.id} style={styles.inscriptoRow}\>**
+
+                            **\<View style={{ flex: 1 }}\>**
+
+                              **\<Text style={styles.inscriptoNombre}\>**
+
+                                **{usuariosMap\[insc.alumnoId\] || insc.alumnoId}**
+
+                              **\</Text\>**
+
+                              **\<View style={styles.inscriptoMeta}\>**
+
+                                **\<View style={\[styles.tipoBadge, insc.tipo \=== 'manual' ? styles.tipoBadgeManual : styles.tipoBadgeCodigo\]}\>**
+
+                                  **\<Text style={styles.tipoBadgeText}\>**
+
+                                    **{insc.tipo \=== 'manual' ? 'Manual' : 'Código'}**
+
+                                  **\</Text\>**
+
+                                **\</View\>**
+
+                              **\</View\>**
+
+                            **\</View\>**
+
+                            **\<TouchableOpacity**
+
+                              **style={styles.revocarBtn}**
+
+                              **onPress={() \=\> handleRevocarInscripcion(insc)}**
+
+                            **\>**
+
+                              **\<Ionicons name="close-circle-outline" size={18} color="\#DC2626" /\>**
+
+                            **\</TouchableOpacity\>**
+
+                          **\</View\>**
+
+                        **))**
+
+                      **)}**
+
+                      **{/\* Modal asignar alumno \*/}**
+
+                      **\<Modal visible={modalAsignar} transparent animationType="slide"\>**
+
+                        **\<View style={styles.modalOverlay}\>**
+
+                          **\<View style={styles.modalContent}\>**
+
+                            **\<View style={styles.modalHeader}\>**
+
+                              **\<Text style={styles.modalTitle}\>Asignar alumno\</Text\>**
+
+                              **\<TouchableOpacity onPress={() \=\> setModalAsignar(false)}\>**
+
+                                **\<Ionicons name="close" size={22} color="\#6B7280" /\>**
+
+                              **\</TouchableOpacity\>**
+
+                            **\</View\>**
+
+                            **{alumnosSinInscribir.length \=== 0 ? (**
+
+                              **\<Text style={\[styles.emptyText, { marginTop: 16 }\]}\>**
+
+                                **Todos los alumnos ya están inscriptos.**
+
+                              **\</Text\>**
+
+                            **) : (**
+
+                              **\<ScrollView style={{ maxHeight: 320 }}\>**
+
+                                **{alumnosSinInscribir.map(u \=\> (**
+
+                                  **\<TouchableOpacity**
+
+                                    **key={u.id}**
+
+                                    **style={styles.alumnoPickerRow}**
+
+                                    **onPress={() \=\> handleAsignarAlumno(u.id)}**
+
+                                    **disabled={asignando}**
+
+                                  **\>**
+
+                                    **\<View style={styles.alumnoPickerIcon}\>**
+
+                                      **\<Ionicons name="person-outline" size={16} color="\#0F4A32" /\>**
+
+                                    **\</View\>**
+
+                                    **\<View style={{ flex: 1 }}\>**
+
+                                      **\<Text style={styles.alumnoPickerNombre}\>{u.nombre}\</Text\>**
+
+                                      **\<Text style={styles.alumnoPickerEmail}\>{u.email}\</Text\>**
+
+                                    **\</View\>**
+
+                                    **{asignando ? (**
+
+                                      **\<ActivityIndicator size="small" color="\#25B471" /\>**
+
+                                    **) : (**
+
+                                      **\<Ionicons name="add-circle-outline" size={20} color="\#25B471" /\>**
+
+                                    **)}**
+
+                                  **\</TouchableOpacity\>**
+
+                                **))}**
+
+                              **\</ScrollView\>**
+
+                            **)}**
+
+                          **\</View\>**
+
+                        **\</View\>**
+
+                      **\</Modal\>**
+
+                    **\</View\>**
+
+                  **)}**
+
+                **\</View\>**
+
+              **);**
+
+            **})**
+
+          **)}**
+
+        **\</ScrollView\>**
+
+      **)}**
+
+**Ahora quiero agregarle a ese código un buscador de usuarios en la pestaña de cursadas, en la parte de asignar usuario que filtre por nombre y email para que le sea más fácil al administrador buscar a los alumnos**
+
+Perfecto, Brisa 🙌. Para agregar un **buscador de usuarios** en la parte del modal de “Asignar alumno”, lo que necesitás es:
+
+### **🔹 1\. Estado para el filtro**
+
+Arriba en tu componente, agregá:
+
+ts
+
+const \[filtroTexto, setFiltroTexto\] \= useState("");
+
+### **🔹 2\. Filtrado de alumnos**
+
+En vez de usar directamente `alumnosSinInscribir`, creá una lista filtrada:
+
+ts
+
+const alumnosFiltrados \= alumnosSinInscribir.filter(u \=\>
+
+  u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+  u.email.toLowerCase().includes(filtroTexto.toLowerCase())
+
+);
+
+### **🔹 3\. Input de búsqueda dentro del modal**
+
+Justo arriba del `ScrollView` que lista los alumnos, poné un `TextInput`:
+
+tsx
+
+\<TextInput
+
+  style={styles.buscadorInput}
+
+  placeholder="Buscar por nombre o email..."
+
+  value={filtroTexto}
+
+  onChangeText={setFiltroTexto}
+
+/\>
+
+### **🔹 4\. Usar la lista filtrada**
+
+Cambiá el `map` para que recorra `alumnosFiltrados` en lugar de `alumnosSinInscribir`:
+
+tsx
+
+{alumnosFiltrados.map(u \=\> (
+
+  \<TouchableOpacity
+
+    key={u.id}
+
+    style={styles.alumnoPickerRow}
+
+    onPress={() \=\> handleAsignarAlumno(u.id)}
+
+    disabled={asignando}
+
+  \>
+
+    \<View style={styles.alumnoPickerIcon}\>
+
+      \<Ionicons name="person-outline" size={16} color="\#0F4A32" /\>
+
+    \</View\>
+
+    \<View style={{ flex: 1 }}\>
+
+      \<Text style={styles.alumnoPickerNombre}\>{u.nombre}\</Text\>
+
+      \<Text style={styles.alumnoPickerEmail}\>{u.email}\</Text\>
+
+    \</View\>
+
+    {asignando ? (
+
+      \<ActivityIndicator size="small" color="\#25B471" /\>
+
+    ) : (
+
+      \<Ionicons name="add-circle-outline" size={20} color="\#25B471" /\>
+
+    )}
+
+  \</TouchableOpacity\>
+
+))}
+
+### **🔹 5\. Estilo del buscador**
+
+Agregá algo simple en tus `styles`:
+
+ts
+
+buscadorInput: {
+
+  backgroundColor: '\#FFFFFF',
+
+  borderWidth: 1,
+
+  borderColor: '\#E0E0E0',
+
+  borderRadius: 8,
+
+  paddingHorizontal: 12,
+
+  minHeight: 40,
+
+  fontSize: 14,
+
+  color: '\#11181C',
+
+  marginBottom: 12, // separa del listado
+
+},
+
+✅ Con esto, tu modal de “Asignar alumno” ahora tiene un buscador arriba que filtra dinámicamente por **nombre** y **email**.
+
+¿Querés que te arme el bloque completo del **Modal con buscador integrado** para que lo copies directo y no tengas que ir pegando partes?
+
+**“En que parte bien tengo que poner cada parte del codigo? no se donde ponerlos, explicame bien detallado dentro que secciones ordenarlos”**
+
+Muy bien, Brisa 🙌. Te explico **exactamente dónde poner cada parte del código del buscador** dentro de tu componente, paso por paso:
+
+### **🔹 1\. Estado del buscador**
+
+Esto va **arriba en tu componente**, junto con los demás `useState`:
+
+ts
+
+const \[filtroTexto, setFiltroTexto\] \= useState("");
+
+### **🔹 2\. Lista filtrada**
+
+Ponelo **después de calcular** `alumnosSinInscribir`, justo donde ya definís esa constante:
+
+ts
+
+const alumnosSinInscribir \= usuarios.filter(u \=\>
+
+  u.rol \=== 'alumno' && \!inscritos.some(i \=\> i.alumnoId \=== u.id)
+
+);
+
+const alumnosFiltrados \= alumnosSinInscribir.filter(u \=\>
+
+  u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+  u.email.toLowerCase().includes(filtroTexto.toLowerCase())
+
+);
+
+### **🔹 3\. Input de búsqueda**
+
+Dentro del **Modal de asignar alumno**, justo **antes del** `ScrollView` **que lista los alumnos**, agregá el buscador:
+
+tsx
+
+\<TextInput
+
+  style={styles.buscadorInput}
+
+  placeholder="Buscar por nombre o email..."
+
+  value={filtroTexto}
+
+  onChangeText={setFiltroTexto}
+
+/\>
+
+👉 Esto se coloca dentro de `<View style={styles.modalContent}>`, arriba del listado.
+
+### **🔹 4\. Usar la lista filtrada**
+
+En el `ScrollView`, cambiá `alumnosSinInscribir.map(...)` por `alumnosFiltrados.map(...)`:
+
+tsx
+
+\<ScrollView style={{ maxHeight: 320 }}\>
+
+  {alumnosFiltrados.map(u \=\> (
+
+    \<TouchableOpacity
+
+      key={u.id}
+
+      style={styles.alumnoPickerRow}
+
+      onPress={() \=\> handleAsignarAlumno(u.id)}
+
+      disabled={asignando}
+
+    \>
+
+      \<View style={styles.alumnoPickerIcon}\>
+
+        \<Ionicons name="person-outline" size={16} color="\#0F4A32" /\>
+
+      \</View\>
+
+      \<View style={{ flex: 1 }}\>
+
+        \<Text style={styles.alumnoPickerNombre}\>{u.nombre}\</Text\>
+
+        \<Text style={styles.alumnoPickerEmail}\>{u.email}\</Text\>
+
+      \</View\>
+
+      {asignando ? (
+
+        \<ActivityIndicator size="small" color="\#25B471" /\>
+
+      ) : (
+
+        \<Ionicons name="add-circle-outline" size={20} color="\#25B471" /\>
+
+      )}
+
+    \</TouchableOpacity\>
+
+  ))}
+
+\</ScrollView\>
+
+### **🔹 5\. Estilos del buscador**
+
+En tu objeto `styles`, agregá:
+
+ts
+
+buscadorInput: {
+
+  backgroundColor: '\#FFFFFF',
+
+  borderWidth: 1,
+
+  borderColor: '\#E0E0E0',
+
+  borderRadius: 8,
+
+  paddingHorizontal: 12,
+
+  minHeight: 40,
+
+  fontSize: 14,
+
+  color: '\#11181C',
+
+  marginBottom: 12,
+
+},
+
+## **📌 Resumen de ubicación**
+
+* **Arriba del componente** → `useState` para `filtroTexto`.  
+* **Después de** `alumnosSinInscribir` → constante `alumnosFiltrados`.  
+* **Dentro del Modal, antes del ScrollView** → `<TextInput>` buscador.  
+* **En el ScrollView** → usar `alumnosFiltrados.map(...)`.  
+* **En styles** → agregar `buscadorInput`.
+
+✅ Con este orden, tu buscador queda integrado de forma limpia y clara en la sección de “Asignar alumno”.
+
+¿Querés que te arme el **bloque completo del Modal con el buscador ya insertado** para que lo copies directo sin tener que ir acomodando cada parte?
+
+si
+
+Perfecto, Brisa 🙌. Te dejo el **bloque completo del Modal de “Asignar alumno” con el buscador integrado**, ya ordenado para que lo copies directo en tu código:
+
+tsx
+
+{/\* Modal asignar alumno \*/}
+
+\<Modal visible={modalAsignar} transparent animationType="slide"\>
+
+  \<View style={styles.modalOverlay}\>
+
+    \<View style={styles.modalContent}\>
+
+      \<View style={styles.modalHeader}\>
+
+        \<Text style={styles.modalTitle}\>Asignar alumno\</Text\>
+
+        \<TouchableOpacity onPress={() \=\> setModalAsignar(false)}\>
+
+          \<Ionicons name="close" size={22} color="\#6B7280" /\>
+
+        \</TouchableOpacity\>
+
+      \</View\>
+
+      {/\* Buscador \*/}
+
+      \<TextInput
+
+        style={styles.buscadorInput}
+
+        placeholder="Buscar por nombre o email..."
+
+        value={filtroTexto}
+
+        onChangeText={setFiltroTexto}
+
+      /\>
+
+      {alumnosFiltrados.length \=== 0 ? (
+
+        \<Text style={\[styles.emptyText, { marginTop: 16 }\]}\>
+
+          {alumnosSinInscribir.length \=== 0
+
+            ? "Todos los alumnos ya están inscriptos."
+
+            : "No se encontraron alumnos con ese criterio."}
+
+        \</Text\>
+
+      ) : (
+
+        \<ScrollView style={{ maxHeight: 320 }}\>
+
+          {alumnosFiltrados.map(u \=\> (
+
+            \<TouchableOpacity
+
+              key={u.id}
+
+              style={styles.alumnoPickerRow}
+
+              onPress={() \=\> handleAsignarAlumno(u.id)}
+
+              disabled={asignando}
+
+            \>
+
+              \<View style={styles.alumnoPickerIcon}\>
+
+                \<Ionicons name="person-outline" size={16} color="\#0F4A32" /\>
+
+              \</View\>
+
+              \<View style={{ flex: 1 }}\>
+
+                \<Text style={styles.alumnoPickerNombre}\>{u.nombre}\</Text\>
+
+                \<Text style={styles.alumnoPickerEmail}\>{u.email}\</Text\>
+
+              \</View\>
+
+              {asignando ? (
+
+                \<ActivityIndicator size="small" color="\#25B471" /\>
+
+              ) : (
+
+                \<Ionicons name="add-circle-outline" size={20} color="\#25B471" /\>
+
+              )}
+
+            \</TouchableOpacity\>
+
+          ))}
+
+        \</ScrollView\>
+
+      )}
+
+    \</View\>
+
+  \</View\>
+
+\</Modal\>
+
+### **🔹 Ubicación de cada parte**
+
+**Arriba del componente**:  
+ts  
+const \[filtroTexto, setFiltroTexto\] \= useState("");
+
+* 
+
+**Después de** `alumnosSinInscribir`:  
+ts  
+const alumnosFiltrados \= alumnosSinInscribir.filter(u \=\>
+
+  u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+  u.email.toLowerCase().includes(filtroTexto.toLowerCase())
+
+);
+
+*   
+* **Dentro del Modal**: el bloque que te pasé reemplaza tu listado actual de alumnos.
+
+**En** `styles`: agregá el estilo del buscador:  
+ts  
+buscadorInput: {
+
+  backgroundColor: '\#FFFFFF',
+
+  borderWidth: 1,
+
+  borderColor: '\#E0E0E0',
+
+  borderRadius: 8,
+
+  paddingHorizontal: 12,
+
+  minHeight: 40,
+
+  fontSize: 14,
+
+  color: '\#11181C',
+
+  marginBottom: 12,
+
+},
+
+* 
+
+✅ Con esto tu modal ahora muestra un **input de búsqueda arriba**, filtra dinámicamente por nombre y email, y da un mensaje claro si no encuentra coincidencias.
+
+¿Querés que te arme también el bloque de **estados y constantes (**`useState`**,** `alumnosFiltrados`**)** para que lo copies arriba del componente y quede todo completo?
+
+donde esta alumnosSinInscribir en mi codigo ,no lo encuentro
+
+Brisa 🙌, en el código que me compartiste todavía **no aparece explícitamente la constante** `alumnosSinInscribir`, por eso no la encontrás. Esa parte la tenés que **definir vos** justo dentro del `map` de cada cursada expandida, donde ya tenés acceso a `usuarios` y a la lista de `inscritos`.
+
+### **🔹 Dónde poner `alumnosSinInscribir`**
+
+En tu bloque:
+
+tsx
+
+cursadas.map((cursada) \=\> {
+
+  const expandida \= cursadaExpandida?.id \=== cursada.id;
+
+  const inscritos \= expandida ? inscripcionesExpandida : \[\];
+
+  const moduloTitulo \= loadingModulos
+
+    ? 'Cargando módulo...'
+
+    : (modulosMap\[cursada.moduloId\] ?? 'Módulo no encontrado');
+
+
+  // 🔹 Acá definís alumnosSinInscribir
+
+  const alumnosSinInscribir \= usuarios.filter(u \=\>
+
+    u.rol \=== 'alumno' && \!inscritos.some(i \=\> i.alumnoId \=== u.id)
+
+  );
+
+  // 🔹 Y justo después, alumnosFiltrados
+
+  const alumnosFiltrados \= alumnosSinInscribir.filter(u \=\>
+
+    u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+    u.email.toLowerCase().includes(filtroTexto.toLowerCase())
+
+  );
+
+### **🔹 Dónde poner el buscador**
+
+Dentro del **Modal de asignar alumno**, arriba del `ScrollView` que lista los alumnos:
+
+tsx
+
+\<TextInput
+
+  style={styles.buscadorInput}
+
+  placeholder="Buscar por nombre o email..."
+
+  value={filtroTexto}
+
+  onChangeText={setFiltroTexto}
+
+/\>
+
+Y en el listado usás:
+
+tsx
+
+{alumnosFiltrados.map(u \=\> (
+
+  ...
+
+))}
+
+### **🔹 Estado del buscador**
+
+Arriba en tu componente (junto con otros `useState`):
+
+ts
+
+const \[filtroTexto, setFiltroTexto\] \= useState("");
+
+✅ En resumen:
+
+* **Arriba del componente** → `useState` para `filtroTexto`.  
+* **Dentro del** `map` **de cursadas** → definís `alumnosSinInscribir` y `alumnosFiltrados`.  
+* **Dentro del Modal** → agregás el `<TextInput>` buscador antes del `ScrollView`.  
+* **En el ScrollView** → usás `alumnosFiltrados.map(...)`.
+
+¿Querés que te arme el bloque **completo del** `map` **de cursadas con el buscador ya integrado** para que lo copies directo sin tener que ir acomodando cada parte?
+
+{/\* Modal asignar alumno \*/} \<Modal visible={modalAsignar} transparent animationType="slide"\> \<View style={styles.modalOverlay}\> \<View style={styles.modalContent}\> \<View style={styles.modalHeader}\> \<Text style={styles.modalTitle}\>Asignar alumno\</Text\> \<TouchableOpacity onPress={() \=\> setModalAsignar(false)}\> \<Ionicons name="close" size={22} color="\#6B7280" /\> \</TouchableOpacity\> \</View\> {/\* Buscador \*/} \<TextInput style={styles.buscadorInput} placeholder="Buscar por nombre o email..." value={filtroTexto} onChangeText={setFiltroTexto} /\> {alumnosFiltrados.length \=== 0 ? ( \<Text style={\[styles.emptyText, { marginTop: 16 }\]}\> {alumnosSinInscribir.length \=== 0 ? "Todos los alumnos ya están inscriptos." : "No se encontraron alumnos con ese criterio."} \</Text\> ) : ( \<ScrollView style={{ maxHeight: 320 }}\> {alumnosFiltrados.map(u \=\> ( \<TouchableOpacity key={u.id} style={styles.alumnoPickerRow} onPress={() \=\> handleAsignarAlumno(u.id)} disabled={asignando} \> \<View style={styles.alumnoPickerIcon}\> \<Ionicons name="person-outline" size={16} color="\#0F4A32" /\> \</View\> \<View style={{ flex: 1 }}\> \<Text style={styles.alumnoPickerNombre}\>{u.nombre}\</Text\> \<Text style={styles.alumnoPickerEmail}\>{u.email}\</Text\> \</View\> {asignando ? ( \<ActivityIndicator size="small" color="\#25B471" /\> ) : ( \<Ionicons name="add-circle-outline" size={20} color="\#25B471" /\> )} \</TouchableOpacity\> ))} \</ScrollView\> )} \</View\> por que no me aparece el buscador cuando apreto el boton de asignar alumno
+
+Brisa 🙌, si el buscador no aparece dentro del modal cuando apretás “Asignar alumno”, lo más probable es que falten **dos cosas clave** en tu componente:
+
+### **🔹 1\. Estado del buscador**
+
+Tenés que declarar el `useState` arriba del componente, junto con los demás estados:
+
+ts
+
+const \[filtroTexto, setFiltroTexto\] \= useState("");
+
+👉 Si esto no está, `filtroTexto` es `undefined` y el `<TextInput>` directamente no se renderiza.
+
+### **🔹 2\. Lista filtrada**
+
+Dentro del `map` de cada cursada expandida, justo después de calcular `alumnosSinInscribir`, agregá:
+
+ts
+
+const alumnosFiltrados \= alumnosSinInscribir.filter(u \=\>
+
+  u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+  u.email.toLowerCase().includes(filtroTexto.toLowerCase())
+
+);
+
+👉 Si no definís `alumnosFiltrados`, el bloque que pusiste en el modal nunca se va a mostrar porque esa variable no existe.
+
+### **🔹 3\. Reemplazo en el Modal**
+
+En el modal, asegurate de que el bloque que pegaste esté **dentro de** `<View style={styles.modalContent}>` y que uses `alumnosFiltrados.map(...)` en lugar de `alumnosSinInscribir.map(...)`.
+
+### **🔹 4\. Estilo del buscador**
+
+En tu `styles`, agregá:
+
+ts
+
+buscadorInput: {
+
+  backgroundColor: '\#FFFFFF',
+
+  borderWidth: 1,
+
+  borderColor: '\#E0E0E0',
+
+  borderRadius: 8,
+
+  paddingHorizontal: 12,
+
+  minHeight: 40,
+
+  fontSize: 14,
+
+  color: '\#11181C',
+
+  marginBottom: 12,
+
+},
+
+👉 Si no tiene estilo, puede estar renderizado pero invisible (ej. texto blanco sobre fondo blanco).
+
+✅ En resumen:
+
+* Declarar `filtroTexto` con `useState`.  
+* Definir `alumnosFiltrados` después de `alumnosSinInscribir`.  
+* Usar `alumnosFiltrados` en el modal.  
+* Darle estilo al buscador para que se vea.
+
+¿Querés que te arme el bloque **completo del** `map` **de cursadas con** `alumnosSinInscribir`**,** `alumnosFiltrados` **y el modal con buscador ya integrado** para que lo copies directo y funcione sin que falte nada?
+
+const styles \= StyleSheet.create({ container: { flex: 1, backgroundColor: '\#F5F5F5' }, centered: { flex: 1, justifyContent: 'center', alignItems: 'center' }, listContent: { padding: 16, paddingBottom: 40 }, emptyContainer: { alignItems: 'center', paddingTop: 60, gap: 12 }, emptyText: { fontSize: 14, color: '\#9CA3AF', fontStyle: 'italic', textAlign: 'center' }, // ─── Tabs ──────────────────────────────────────────────────────────────── tabBar: { flexDirection: 'row', backgroundColor: '\#FFFFFF', paddingHorizontal: 16, paddingVertical: 10, gap: 8, borderBottomWidth: 1, borderBottomColor: '\#F3F4F6', }, tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 10, backgroundColor: '\#F3F4F6', }, tabBtnActive: { backgroundColor: '\#E8F5E9' }, tabBtnText: { fontSize: 14, fontWeight: '600', color: '\#9CA3AF' }, tabBtnTextActive: { color: '\#0F4A32' }, // ─── Usuarios ──────────────────────────────────────────────────────────── card: { backgroundColor: '\#FFFFFF', borderRadius: 12, padding: 14, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1, shadowColor: '\#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, borderLeftWidth: 3, borderLeftColor: '\#25B471', }, cardInfo: { flex: 1 }, cardNombre: { fontSize: 15, fontWeight: '700', color: '\#11181C' }, cardEmail: { fontSize: 13, color: '\#6B7280', marginTop: 2 }, cardActions: { gap: 10, alignItems: 'flex-end' }, editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '\#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, }, editBtnText: { fontSize: 13, fontWeight: '600', color: '\#0F4A32' }, deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '\#FEF2F2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, }, deleteBtnText: { fontSize: 13, fontWeight: '600', color: '\#DC2626' }, badge: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, alignSelf: 'flex-start' }, badgeAdmin: { backgroundColor: '\#0F4A32' }, badgeTextAdmin: { color: '\#FFFFFF', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' }, badgeProfe: { backgroundColor: '\#E8F5E9', borderWidth: 1, borderColor: '\#25B471' }, badgeTextProfe: { color: '\#0F4A32', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' }, badgeAlumno: { backgroundColor: '\#E2E8F0' }, badgeTextAlumno: { color: '\#4A5568', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' }, buscadorInput: { backgroundColor: '\#FFFFFF', borderWidth: 1, borderColor: '\#E0E0E0', borderRadius: 8, paddingHorizontal: 12, minHeight: 44, fontSize: 14, color: '\#11181C', marginBottom: 20 }, rolesContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 , marginTop: 12 }, rolButton: { flex: 1, marginHorizontal: 4, paddingVertical: 8, borderWidth: 1, borderColor: '\#25B471', borderRadius: 8, alignItems: 'center', backgroundColor: '\#FFFFFF'}, rolButtonActivo: { backgroundColor: '\#25B471'}, rolButtonText: { fontSize: 13, fontWeight: '600', color: '\#25B471'}, rolButtonTextActivo: { color: '\#FFFFFF'}, // ─── Cursadas ───────────────────────────────────────────────────────────── cursadaCard: { backgroundColor: '\#FFFFFF', borderRadius: 12, marginBottom: 12, overflow: 'hidden', elevation: 1, shadowColor: '\#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, borderLeftWidth: 3, borderLeftColor: '\#25B471', }, cursadaCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, }, cursadaIconBg: { width: 40, height: 40, borderRadius: 10, backgroundColor: '\#E8F5E9', justifyContent: 'center', alignItems: 'center', }, cursadaTitulo: { fontSize: 15, fontWeight: '700', color: '\#11181C' }, cursadaSubtitulo: { fontSize: 12, color: '\#9CA3AF', marginTop: 2 }, cursadaPanel: { borderTopWidth: 1, borderTopColor: '\#F3F4F6', padding: 14, gap: 4, }, panelLabel: { fontSize: 11, fontWeight: '700', color: '\#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8, marginBottom: 6 }, codigoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, codigoTexto: { fontSize: 22, fontWeight: '800', color: '\#0F4A32', letterSpacing: 4 }, regenerarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '\#FEF2F2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, }, regenerarBtnText: { fontSize: 13, fontWeight: '600', color: '\#DC2626' }, codigoHint: { fontSize: 11, color: '\#9CA3AF', marginBottom: 4 }, inscriptosHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, asignarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '\#E8F5E9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, }, asignarBtnText: { fontSize: 13, fontWeight: '600', color: '\#0F4A32' }, inscriptoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '\#F9F9F9', }, inscriptoNombre: { fontSize: 14, fontWeight: '600', color: '\#11181C' }, inscriptoMeta: { flexDirection: 'row', gap: 6, marginTop: 3 }, tipoBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }, tipoBadgeCodigo: { backgroundColor: '\#EFF6FF' }, tipoBadgeManual: { backgroundColor: '\#F0FDF4', borderWidth: 1, borderColor: '\#BBF7D0' }, tipoBadgeText: { fontSize: 10, fontWeight: '700', color: '\#374151' }, revocarBtn: { padding: 4 }, alumnoPickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '\#F3F4F6', }, alumnoPickerIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: '\#E8F5E9', justifyContent: 'center', alignItems: 'center', }, alumnoPickerNombre: { fontSize: 14, fontWeight: '600', color: '\#11181C' }, alumnoPickerEmail: { fontSize: 12, color: '\#9CA3AF' }, // ─── Modal ──────────────────────────────────────────────────────────────── modalOverlay: { flex: 1, backgroundColor: '\#00000066', justifyContent: 'flex-end', }, modalContent: { backgroundColor: '\#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 36, }, modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, }, modalTitle: { fontSize: 18, fontWeight: '700', color: '\#11181C' }, inputLabel: { fontSize: 13, fontWeight: '600', color: '\#374151', marginBottom: 6, marginTop: 12 }, input: { backgroundColor: '\#F9F9F9', borderWidth: 1, borderColor: '\#E5E7EB', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '\#11181C', }, rolBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: '\#E5E7EB', alignItems: 'center', backgroundColor: '\#FFFFFF', }, rolBtnSelected: { backgroundColor: '\#0F4A32', borderColor: '\#0F4A32' }, rolBtnText: { fontSize: 13, fontWeight: '600', color: '\#6B7280' }, rolBtnTextSelected: { color: '\#FFFFFF' }, modalActions: { flexDirection: 'row', gap: 12, marginTop: 24 }, cancelBtn: { flex: 1, backgroundColor: '\#FFFFFF', borderRadius: 12, borderWidth: 1.5, borderColor: '\#E5E7EB', paddingVertical: 14, alignItems: 'center', }, cancelBtnText: { color: '\#6B7280', fontSize: 15, fontWeight: '700' }, saveBtn: { flex: 1, backgroundColor: '\#25B471', borderRadius: 12, paddingVertical: 14, alignItems: 'center', }, saveBtnText: { color: '\#FFFFFF', fontSize: 15, fontWeight: '700' }, }); estos son mis estilos, ya tengo un buscadorinput pero no se si sirbe
+
+Brisa 🙌, tu estilo `buscadorInput` **sí sirve perfectamente** para el buscador dentro del modal de “Asignar alumno”. Lo que pasa es que todavía no conectaste bien las piezas de lógica con el estado y la lista filtrada. Te muestro cómo integrarlo todo:
+
+### **🔹 1\. Estado del buscador**
+
+Arriba en tu componente, junto con los demás `useState`:
+
+ts
+
+const \[filtroTexto, setFiltroTexto\] \= useState("");
+
+### **🔹 2\. Lista de alumnos sin inscribir y filtrados**
+
+Dentro del `map` de cada cursada expandida, justo después de calcular `inscritos`, agregá:
+
+ts
+
+const alumnosSinInscribir \= usuarios.filter(u \=\>
+
+  u.rol \=== 'alumno' && \!inscritos.some(i \=\> i.alumnoId \=== u.id)
+
+);
+
+const alumnosFiltrados \= alumnosSinInscribir.filter(u \=\>
+
+  u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+
+  u.email.toLowerCase().includes(filtroTexto.toLowerCase())
+
+);
+
+### **🔹 3\. Usar el buscador en el modal**
+
+Tu bloque del modal ya tiene el `<TextInput style={styles.buscadorInput} ... />`.
+
+Lo único que tenés que asegurarte es que el listado use `alumnosFiltrados`:
+
+tsx
+
+{alumnosFiltrados.length \=== 0 ? (
+
+  \<Text style={\[styles.emptyText, { marginTop: 16 }\]}\>
+
+    {alumnosSinInscribir.length \=== 0
+
+      ? "Todos los alumnos ya están inscriptos."
+
+      : "No se encontraron alumnos con ese criterio."}
+
+  \</Text\>
+
+) : (
+
+  \<ScrollView style={{ maxHeight: 320 }}\>
+
+    {alumnosFiltrados.map(u \=\> (
+
+      \<TouchableOpacity
+
+        key={u.id}
+
+        style={styles.alumnoPickerRow}
+
+        onPress={() \=\> handleAsignarAlumno(u.id)}
+
+        disabled={asignando}
+
+      \>
+
+        \<View style={styles.alumnoPickerIcon}\>
+
+          \<Ionicons name="person-outline" size={16} color="\#0F4A32" /\>
+
+        \</View\>
+
+        \<View style={{ flex: 1 }}\>
+
+          \<Text style={styles.alumnoPickerNombre}\>{u.nombre}\</Text\>
+
+          \<Text style={styles.alumnoPickerEmail}\>{u.email}\</Text\>
+
+        \</View\>
+
+        {asignando ? (
+
+          \<ActivityIndicator size="small" color="\#25B471" /\>
+
+        ) : (
+
+\<ScrollView style={{ maxHeight: 320 }}\>
+
+    {alumnosFiltrados.map(u \=\> (
+
+      \<TouchableOpacity
+
+        key={u.id}
+
+        style={styles.alumnoPickerRow}
+
+        onPress={() \=\> handleAsignarAlumno(u.id)}
+
+        disabled={asignando}
+
+      \>
+
+        \<View style={styles.alumnoPickerIcon}\>
+
+          \<Ionicons name="person-outline" size={16} color="\#0F4A32" /\>
+
+        \</View\>
+
+        \<View style={{ flex: 1 }}\>
+
+          \<Text style={styles.alumnoPickerNombre}\>{u.nombre}\</Text\>
+
+          \<Text style={styles.alumnoPickerEmail}\>{u.email}\</Text\>
+
+        \</View\>
+
+        {asignando ? (
+
+          \<ActivityIndicator size="small" color="\#25B471" /\>
+
+        ) : (
+
+          \<Ionicons name="add-circle-outline" size={20} color="\#25B471" /\>
+
+        )}
+
+      \</TouchableOpacity\>
+
+    ))}
+
+  \</ScrollView\>
+
+)}
+
+### **🔹 4\. Estilo del buscador**
+
+El estilo que ya tenés en tu `styles`:
+
+ts
+
+buscadorInput: {
+
+  backgroundColor: '\#FFFFFF',
+
+  borderWidth: 1,
+
+  borderColor: '\#E0E0E0',
+
+  borderRadius: 8,
+
+  paddingHorizontal: 12,
+
+  minHeight: 44,
+
+  fontSize: 14,
+
+  color: '\#11181C',
+
+  marginBottom: 20,
+
+},
+
+👉 Este estilo es correcto y se va a ver bien dentro del modal.
+
+✅ Con esto, el buscador aparece arriba del listado en el modal y filtra dinámicamente por nombre y email.
+
+¿Querés que te arme el bloque **completo del** `map` **de cursadas con** `alumnosSinInscribir`**,** `alumnosFiltrados` **y el modal con buscador integrado** para que lo copies directo y quede funcionando sin que falte nada?
+
+y como tirarias el commit con las indicaciones que te mande antes
+
+Genial, Brisa 🙌. Como ya tenés el buscador integrado en el modal y lo probaste, el commit debería reflejar esa nueva funcionalidad. Siguiendo las convenciones que me pediste antes (**Conventional Commits**), lo correcto es usar el prefijo `feat` porque agregaste una nueva feature: el buscador de alumnos dentro del modal de asignación.
+
+### **🔹 Ejemplo de commit válido**
+
+bash
+
+git add app/pantallasAdmin/userManagementScreen.tsx
+
+git commit \-m "feat(frontend): agrega buscador en modal de asignar alumno filtrando por nombre y email"
+
+### **🔹 Explicación**
+
+* `feat` → indica que agregaste una nueva funcionalidad.  
+* `(frontend)` → el área afectada (podés usar `frontend`, `app`, `usuarios`, según cómo lo definieron ustedes).  
+* **Descripción clara** → “agrega buscador en modal de asignar alumno filtrando por nombre y email”.
+
+✅ Con este formato tu commit queda claro y ordenado en el historial, y se entiende que la mejora fue el buscador dentro del modal de asignación.
+
+¿Querés que te arme también la variante para cuando hagas un **fix** (por ejemplo, si después corregís que el buscador no filtraba bien por email)?
+
+ahora quiero que me ayudes a ver como puedo hacer para implementar corrección automática o sugerencias de texto para los campos de texto
+
+Perfecto, Brisa 🙌. Lo que querés implementar es algo que en móviles se conoce como **autocorrección** o **sugerencias de texto** en los campos de entrada. En React Native (y Expo), tenés varias formas de hacerlo:
+
+## **🔹 1\. Autocorrección básica**
+
+Los `TextInput` ya soportan autocorrección nativa del sistema operativo.
+
+Podés activarla con la prop:
+
+tsx
+
+\<TextInput
+
+  style={styles.input}
+
+  placeholder="Escribí tu nombre"
+
+  autoCorrect={true}   // habilita autocorrección
+
+  autoCapitalize="none" // controla mayúsculas automáticas
+
+/\>
+
+👉 Esto usa el motor de autocorrección del teclado del celular (Android/iOS).
+
+## **🔹 2\. Sugerencias de texto (autocomplete)**
+
+Si querés sugerencias personalizadas (ej. emails, nombres de usuarios), podés armar tu propia lista filtrada y mostrarla debajo del campo:
+
+tsx
+
+const \[texto, setTexto\] \= useState("");
+
+const sugerencias \= usuarios.filter(u \=\>
+
+  u.nombre.toLowerCase().includes(texto.toLowerCase()) ||
+
+  u.email.toLowerCase().includes(texto.toLowerCase())
+
+);
+
+\<TextInput
+
+  style={styles.input}
+
+  placeholder="Buscar usuario"
+
+  value={texto}
+
+  onChangeText={setTexto}
+
+/\>
+
+{texto.length \> 0 && (
+
+  \<ScrollView style={{ maxHeight: 150 }}\>
+
+    {sugerencias.map(u \=\> (
+
+      \<TouchableOpacity key={u.id} onPress={() \=\> setTexto(u.nombre)}\>
+
+        \<Text style={{ padding: 8 }}\>{u.nombre} ({u.email})\</Text\>
+
+      \</TouchableOpacity\>
+
+    ))}
+
+  \</ScrollView\>
+
+)}
+
+👉 Esto funciona como un **autocomplete**: mientras escribís, aparecen sugerencias y podés tocarlas para autocompletar.
+
+## **🔹 3\. Predicciones más avanzadas**
+
+Si querés algo más “inteligente” (ej. sugerencias de frases completas), podés:
+
+* Usar librerías como **react-native-autocomplete-input**.  
+* O integrar un servicio externo (ej. un modelo de IA que sugiera texto según contexto).
+
+Ejemplo con librería:
+
+bash
+
+npm install react-native-autocomplete-input
+
+tsx
+
+import Autocomplete from 'react-native-autocomplete-input';
+
+\<Autocomplete
+
+  data={sugerencias}
+
+  defaultValue={texto}
+
+  onChangeText={setTexto}
+
+  renderItem={({ item }) \=\> (
+
+    \<TouchableOpacity onPress={() \=\> setTexto(item.nombre)}\>
+
+      \<Text\>{item.nombre}\</Text\>
+
+    \</TouchableOpacity\>
+
+  )}
+
+/\>
+
+✅ En resumen:
+
+* **autoCorrect** → usa el teclado del sistema.  
+* **autocomplete personalizado** → filtrás tu lista y mostrás sugerencias debajo del input.  
+* **librerías externas** → te dan componentes listos para autocompletar.
+
+¿Querés que te arme un ejemplo **integrado en tu modal de asignar alumno**, donde el buscador no solo filtre sino que también muestre sugerencias tipo “autocomplete” debajo del campo de texto?
+
+como seria usando la libreria de react native, tendria que agregrla a todos los archivos?
+
+Muy bien, Brisa 🙌. Te explico cómo usar la librería **react-native-autocomplete-input** para implementar sugerencias de texto en tus campos:
+
+## **🔹 1\. Instalar la librería**
+
+En tu proyecto Expo/React Native corré:
+
+bash
+
+npm install react-native-autocomplete-input
+
+o
+
+bash
+
+yarn add react-native-autocomplete-input
+
+## **🔹 2\. Importar en el archivo donde quieras usarlo**
+
+No hace falta agregarla en *todos* los archivos. Solo la importás en los componentes donde quieras mostrar sugerencias:
+
+tsx
+
+import Autocomplete from 'react-native-autocomplete-input';
+
+## **🔹 3\. Usar el componente**
+
+Ejemplo dentro de tu modal de “Asignar alumno”:
+
+tsx
+
+const \[query, setQuery\] \= useState("");
+
+const sugerencias \= usuarios.filter(u \=\>
+
+  u.nombre.toLowerCase().includes(query.toLowerCase()) ||
+
+  u.email.toLowerCase().includes(query.toLowerCase())
+
+);
+
+\<Autocomplete
+
+  data={sugerencias}
+
+  defaultValue={query}
+
+  onChangeText={setQuery}
+
+  placeholder="Buscar por nombre o email..."
+
+  flatListProps={{
+
+    keyExtractor: (item) \=\> item.id,
+
+    renderItem: ({ item }) \=\> (
+
+      \<TouchableOpacity onPress={() \=\> setQuery(item.nombre)}\>
+
+        \<Text style={{ padding: 8 }}\>{item.nombre} ({item.email})\</Text\>
+
+      \</TouchableOpacity\>
+
+    ),
+
+  }}
+
+/\>
+
+👉 Esto hace que mientras escribís en el campo, aparezca una lista desplegable con coincidencias. Al tocar una sugerencia, se completa el campo.
+
+## **🔹 4\. ¿En qué archivos usarlo?**
+
+**Solo en los que necesites sugerencias**.
+
+* Por ejemplo:  
+  * En tu modal de asignar alumno (`userManagementScreen.tsx`).  
+  * En un formulario de login/registro si querés autocompletar emails.  
+  * En cualquier otro campo de texto donde quieras sugerencias.
+
+No es obligatorio en todos los `TextInput`. Podés mezclar: algunos inputs normales con `autoCorrect`, y otros con `Autocomplete`.
+
+✅ En resumen:
+
+* Instalás la librería una sola vez.  
+* La importás solo en los archivos donde quieras usarla.  
+* Usás el componente `Autocomplete` en lugar de `TextInput` para mostrar sugerencias dinámicas.
+
+¿Querés que te arme el bloque **completo del modal de asignar alumno reemplazando el** `TextInput` **por** `Autocomplete` para que lo copies directo y veas cómo queda con sugerencias?
+
+quiero que esto pase en todos los inputs de la aplicacion, cual de las tres formas me recomendas?
+
+Muy buena pregunta, Brisa 🙌. Como querés que **todos los inputs de tu aplicación** tengan corrección automática o sugerencias, te resumo las tres opciones y cuál conviene según tu caso:
+
+## **🔹 Opción 1: `autoCorrect` nativo**
+
+* **Qué hace**: usa el teclado del sistema (Android/iOS) para autocorrección y predicciones.  
+* **Ventajas**:  
+  * No tenés que instalar nada.  
+  * Funciona en todos los `TextInput` automáticamente.  
+  * Es rápido y liviano.  
+* **Limitaciones**:  
+  * Solo ofrece lo que el teclado del celular ya trae (no podés personalizar sugerencias).  
+  * No sirve si querés sugerencias basadas en tus propios datos (ej. emails de usuarios).
+
+👉 Ideal si lo que buscás es **autocorrección básica en todos los campos**.
+
+## **🔹 Opción 2: Autocomplete personalizado**
+
+* **Qué hace**: vos filtrás una lista (ej. usuarios, emails, materias) y mostrás sugerencias debajo del input.  
+* **Ventajas**:  
+  * Totalmente personalizable.  
+  * Podés usarlo solo en los inputs que lo necesiten (ej. buscadores, asignar alumno).  
+* **Limitaciones**:  
+  * Tenés que programar la lógica de filtrado y renderizado.  
+  * No es automático en todos los inputs, lo aplicás caso por caso.
+
+👉 Ideal si querés **sugerencias específicas de tu app** (ej. nombres de alumnos, emails).
+
+## **🔹 Opción 3: Librería `react-native-autocomplete-input`**
+
+* **Qué hace**: reemplaza `TextInput` por un componente que ya trae lista desplegable de sugerencias.  
+* **Ventajas**:  
+  * Te ahorra código, ya viene armado.  
+  * Se ve prolijo y estándar.  
+* **Limitaciones**:  
+  * Tenés que instalar y mantener la librería.  
+  * No conviene usarla en *todos* los inputs (ej. password, email de login), porque no siempre querés sugerencias.
+
+👉 Ideal si querés **inputs con autocompletado avanzado en lugares puntuales**.
+
+## **✅ Recomendación para tu caso**
+
+Como me dijiste que lo querés en **todos los inputs de la aplicación**, lo más práctico es:
+
+* Usar `autoCorrect={true}` **y** `autoCapitalize` en todos los `TextInput`.  
+* Y solo en los campos donde realmente necesites sugerencias personalizadas (ej. buscador de alumnos, buscador de cursadas), aplicar **autocomplete personalizado o la librería**.
+
+Así no sobrecargás la app, mantenés la experiencia consistente y tenés control sobre dónde aparecen sugerencias.
+
+👉 En resumen:
+
+* **Para todos los inputs** → `autoCorrect` nativo.  
+* **Para buscadores o campos especiales** → autocomplete personalizado o librería.
+
+¿Querés que te arme un ejemplo de cómo dejar un **TextInput base con autocorrección activada** y otro con **autocomplete personalizado** para que veas la diferencia clara?
+
+quiero que mas que nada te sugiera la corraccion en las falta de ortografia o cuando no ponene tilde o escriben mal la palabra, mas que nada en las secciones de agregar titulos, modulos, etc
+
+Perfecto, Brisa 🙌. Como lo que buscás es que en **todos los campos de texto donde los usuarios escriben títulos, nombres de módulos, etc.** se sugiera corrección ortográfica (faltas de tilde, errores comunes), la mejor estrategia es apoyarte en lo que ya trae el sistema operativo y complementarlo con lógica propia en los casos críticos.
+
+## **🔹 Opciones aplicadas a tu caso**
+
+### **1\. Autocorrección nativa (`autoCorrect`)**
+
+En cada `TextInput` podés activar:  
+tsx  
+\<TextInput
+
+  style={styles.input}
+
+  placeholder="Título del módulo"
+
+  autoCorrect={true}
+
+  autoCapitalize="sentences"
+
+/\>
+
+*   
+* Esto hace que el teclado del celular sugiera correcciones ortográficas automáticamente (acentos, palabras mal escritas).  
+* Ventaja: funciona en **todos los inputs** sin que tengas que programar nada extra.
+
+  ### **2\. Sugerencias personalizadas (autocomplete)**
+
+* Si querés que además de la autocorrección del teclado, tu app sugiera palabras específicas (ej. lista de materias, módulos frecuentes), podés armar un **diccionario propio** y mostrar sugerencias debajo del input.  
+  Ejemplo:  
+  tsx  
+  const sugerencias \= \["Matemática", "Programación", "Simulación", "Operativa Dental"\];  
+  const filtradas \= sugerencias.filter(s \=\>  
+    s.toLowerCase().includes(texto.toLowerCase())  
+  );  
+*   
+* Esto complementa la autocorrección con **sugerencias específicas de tu aplicación**.
+
+  ### **3\. Librería `react-native-autocomplete-input`**
+
+* Útil si querés un componente listo que muestre sugerencias tipo “dropdown”.  
+* Pero no conviene aplicarlo a *todos* los inputs, porque en campos como contraseñas o emails no tiene sentido.  
+* Mejor usarlo en **inputs clave**: títulos, nombres de módulos, descripciones.
+
+  ## **✅ Recomendación para tu caso**
+
+* **Activá** `autoCorrect={true}` **en todos los** `TextInput` → así el teclado del sistema corrige ortografía y acentos automáticamente.  
+* **Usá autocomplete personalizado o la librería solo en inputs clave** (ej. títulos de cursadas, nombres de módulos), donde quieras dar sugerencias específicas de tu app.
+
+De esa forma tenés lo mejor de ambos mundos: corrección ortográfica automática en toda la app, y sugerencias inteligentes en los campos importantes.
+
+👉 Te puedo armar un **ejemplo completo de un** `TextInput` **para títulos de módulos** con autocorrección activada y sugerencias personalizadas debajo. ¿Querés que te lo prepare para que lo copies directo?
+
+con que tecla puedo marcar todos los text inputs de una en un archivo
+
+Brisa 🙌, si lo que querés es **marcar todos los** `TextInput` **de un archivo a la vez** para aplicarles propiedades como `autoCorrect={true}`, no existe una “tecla mágica” que lo haga automáticamente en React Native. Tenés dos caminos prácticos:
+
+## **🔹 1\. Buscar y reemplazar en tu editor (VSCode)**
+
+* Abrí el archivo.  
+* Usá **Ctrl \+ F** (o **Cmd \+ F** en Mac) para buscar `TextInput`.  
+* Luego usá **Ctrl \+ H** (Replace) para reemplazar:  
+  * Buscar: `<TextInput`  
+  * Reemplazar por: `<TextInput autoCorrect={true} autoCapitalize="sentences"`
+
+  👉 Esto agrega esas props en todos los `TextInput` del archivo de una sola vez.
+
+Después revisás manualmente los casos especiales (ej. password, email) donde no conviene tener autocorrección.
+
+## **🔹 2\. Crear un componente `CustomTextInput`**
+
+En vez de modificar todos los `TextInput` uno por uno, podés crear un wrapper que ya tenga las props que querés:
+
+tsx
+
+import React from 'react';
+
+import { TextInput } from 'react-native';
+
+export default function CustomTextInput(props) {
+
+  return (
+
+    \<TextInput
+
+      autoCorrect={true}
+
+      autoCapitalize="sentences"
+
+      {...props} // permite pasar estilos y otras props
+
+    /\>
+
+  );
+
+}
+
+Y en tus pantallas reemplazás:
+
+tsx
+
+\<TextInput style={styles.input} placeholder="Título" /\>
+
+por:
+
+tsx
+
+\<CustomTextInput style={styles.input} placeholder="Título" /\>
+
+👉 Así todos los inputs de tu app tienen autocorrección y capitalización automática sin repetir código.
+
+## **✅ Recomendación**
+
+* Si querés **aplicar rápido en un archivo puntual** → usá **buscar y reemplazar**.  
+* Si querés **mantenerlo en toda la app de forma ordenada** → creá un `CustomTextInput` y usalo en lugar del `TextInput` nativo.
+
+¿Querés que te arme el ejemplo de cómo reemplazar **todos tus** `TextInput` **actuales por** `CustomTextInput` en tu archivo de “Asignar alumno” para que veas cómo quedaría aplicado de forma global?
+
+hay manera de agregar alguna etiqueta para que se corrijan las mayusculas?
+
+Brisa 🙌, sí, en React Native podés controlar cómo se manejan las mayúsculas en los `TextInput` usando la prop `autoCapitalize`. No es una “etiqueta” HTML como en la web, sino una propiedad específica del componente.
+
+## **🔹 Opciones de `autoCapitalize`**
+
+Podés elegir entre varias formas:
+
+* `none` → no aplica mayúsculas automáticamente.  
+* `sentences` → pone mayúscula al inicio de cada oración.  
+* `words` → pone mayúscula al inicio de cada palabra.  
+* `characters` → convierte todo el texto en mayúsculas.
+
+Ejemplo:
+
+tsx
+
+\<TextInput
+
+  style={styles.input}
+
+  placeholder="Título del módulo"
+
+  autoCorrect={true}          // corrige ortografía
+
+  autoCapitalize="sentences"  // mayúscula al inicio de cada oración
+
+/\>
+
+## **🔹 Recomendación para tu caso**
+
+Como querés que en **títulos, nombres de módulos, etc.** se corrija ortografía y se sugieran mayúsculas:
+
+* Usá `autoCorrect={true}` → para que el teclado sugiera correcciones ortográficas y acentos.  
+* Usá `autoCapitalize="words"` → para que cada palabra empiece con mayúscula (ideal para títulos y nombres).
+
+Ejemplo aplicado:
+
+tsx
+
+\<TextInput
+
+  style={styles.input}
+
+  placeholder="Nombre del módulo"
+
+  autoCorrect={true}
+
+  autoCapitalize="words"
+
+/\>
+
+✅ Con esto, todos los campos de texto donde los usuarios escriban títulos o nombres van a tener **sugerencias de ortografía** y además se van a **capitalizar automáticamente las palabras**.
+
+¿Querés que te arme un **CustomTextInput** que ya tenga `autoCorrect` y `autoCapitalize="words"` por defecto, para que lo uses en toda la app sin tener que repetir esas props en cada input?
+
