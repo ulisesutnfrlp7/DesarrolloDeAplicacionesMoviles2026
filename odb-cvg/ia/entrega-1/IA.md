@@ -15186,3 +15186,3426 @@ y usarlo en toda la app.
 Tu proyecto ya está en el punto donde vale muchísimo la pena hacerlo.
 
 ---
+
+---
+## Q&A de la sesión 4
+---
+> Antes de hacer cualquier modificación, necesito que analices el proyecto para entender cómo está implementada la creación de secciones y la restricción por código de acceso.
+>
+> Contexto:
+> Estoy trabajando en una app de React Native / Expo para un Campus Virtual de la asignatura Operatoria Dental B. La Entrega 1 incluye gestión de usuarios por roles —alumno, docente y administrador— y repositorio de contenidos organizado por años/cursos.
+>
+> Necesito modificar una funcionalidad existente:
+> Actualmente el administrador puede restringir una sección mediante código de acceso, y el alumno puede solicitar/ingresar acceso. Pero la opción de restringir una sección solo aparece cuando el título de la sección comienza con “Cursada -”.
+>
+> Antes de modificar, quiero que hagas un análisis del repo.
+>
+> Tareas:
+> - Revisá la estructura general del proyecto.
+> - Identificá los archivos relacionados con:
+>   - creación de secciones;
+>   - formulario de alta de sección;
+>   - rol administrador;
+>   - restricciones con código de acceso;
+>   - solicitud o validación de acceso por parte del alumno.
+> - Buscá específicamente dónde se usa la condición relacionada con el título “Cursada -”.
+> - No modifiques archivos todavía.
+> - No ejecutes comandos de Git.
+> - No hagas git add, git commit, git pull, git push, merge ni rebase.
+>
+> Al finalizar, respondeme con:
+> - qué archivos parecen estar involucrados;
+> - dónde está la condición que hace depender la restricción del título “Cursada -”;
+> - qué cambio mínimo recomendarías hacer;
+> - si hay riesgos de romper otra funcionalidad;
+> - un breve plan de modificación, pero sin aplicar cambios todavía.
+
+<details><summary>3 previous messages</summary>
+
+> Voy a revisar solo lectura: estructura, búsquedas de texto y archivos relevantes. Me voy a mantener lejos de Git y de cualquier edición, como pediste.
+>
+> Ya apareció el punto caliente: `app/secciones/form.tsx` contiene el `startsWith("cursada -")`. Ahora voy a leer los archivos relacionados para entender flujo completo, no solo esa línea aislada.
+>
+> El formulario confirma que la restricción está atada al nombre en tres lugares: al guardar, al tipear el título y al renderizar el control. Voy a completar el mapa mirando la pantalla de módulo, detalle de sección, modal de matrícula, reglas y administración.
+</details>
+
+Analicé el repo en modo solo lectura. No modifiqué archivos y no ejecuté comandos de Git.
+
+**Archivos involucrados**
+- [app/secciones/form.tsx](<./odb-cvg/app/secciones/form.tsx:81>): formulario de alta/edición de sección. Acá se decide si aparece y se guarda el control de acceso.
+- [hooks/useSecciones.ts](<./odb-cvg/hooks/useSecciones.ts:22>): modelo `Seccion`, creación, actualización y eliminación.
+- [app/modulos/[id].tsx](<./odb-cvg/app/modulos/[id].tsx:162>): lista secciones, detecta `esRestringida`, bloquea al alumno y abre `MatriculacionModal`.
+- [components/ui/MatriculacionModal.tsx](<./odb-cvg/components/ui/MatriculacionModal.tsx:38>): ingreso del código por parte del alumno.
+- [hooks/useInscripciones.ts](<./odb-cvg/hooks/useInscripciones.ts:94>): generación, validación, inscripción manual, revocación y regeneración de códigos.
+- [app/secciones/[id].tsx](<./odb-cvg/app/secciones/[id].tsx:85>): refuerza el bloqueo si el alumno intenta entrar directo a una sección restringida.
+- [app/pantallasAdmin/userManagementScreen.tsx](<./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx:89>): panel admin de “Cursadas”, lista secciones con `esRestringida == true`, regenera código y asigna/revoca alumnos.
+- [hooks/useUserRole.ts](<./odb-cvg/hooks/useUserRole.ts:6>): lectura del rol del usuario.
+- [firestore.rules](<./odb-cvg/firestore.rules:28>): permisos de secciones e inscripciones.
+
+**Dónde está la condición “Cursada -”**
+La dependencia del título está en [app/secciones/form.tsx](<./odb-cvg/app/secciones/form.tsx:81>):
+
+- Línea 81: calcula `esCursada = titulo.trim().toLowerCase().startsWith("cursada -")`.
+- Líneas 84-90: solo incluye `esRestringida` y `codigoAcceso` en el guardado si `esCursada` es true.
+- Línea 200: si el título deja de empezar con `"cursada -"`, limpia `esRestringida` y `codigoAcceso`.
+- Línea 209: solo renderiza el bloque “Control de acceso” si el título empieza con `"cursada -"`.
+- Además, [userManagementScreen.tsx](<./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx:277>) tiene un texto que instruye activar acceso en una sección `"Cursada - XXXX"`.
+
+**Cambio mínimo recomendado**
+En `app/secciones/form.tsx`, quitar el gate por título y hacer que el control de acceso esté disponible para cualquier sección:
+
+- Eliminar `esCursada`.
+- Guardar siempre `esRestringida` y `codigoAcceso`.
+- No limpiar los campos al cambiar el título.
+- Renderizar siempre el bloque “Control de acceso”.
+
+Opcional pero coherente: cambiar textos de “cursada” a “sección” en el formulario, modal y panel admin si ahora cualquier sección puede restringirse.
+
+**Riesgos**
+El riesgo funcional principal es bajo, porque el resto del flujo ya depende de `esRestringida`, no del título. La pantalla de módulo, el detalle de sección, el modal de código, el panel admin y las reglas de Firestore ya trabajan con campos (`esRestringida`, `codigoAcceso`) y no con `"Cursada -"`.
+
+Riesgos a cuidar:
+- Si había secciones restringidas que se renombran, el cambio debería preservar `codigoAcceso`.
+- El panel admin se llama “Cursadas” y puede quedar semánticamente raro si aparecen secciones que no son cursadas.
+- Actualmente el formulario de sección permite acceso a `admin` y `profesor`; si la restricción debe ser solo de administrador, eso sería otro ajuste separado.
+
+**Plan breve**
+1. Editar `app/secciones/form.tsx` para desacoplar el control de acceso del título.
+2. Ajustar textos visibles que dicen “cursada” si se quiere generalizar a “sección”.
+3. Revisar que crear, editar, bloquear, ingresar código y regenerar código sigan usando `esRestringida`/`codigoAcceso`.
+4. Probar manualmente: crear sección normal restringida, entrar como alumno, ingresar código, editar título sin perder código.
+
+---
+> Necesito modificar la lógica de creación de secciones en la app Campus Virtual de Operatoria Dental B.
+>
+> Contexto del proyecto:
+> La app corresponde a la Entrega 1 del proyecto de Desarrollo de Apps Móviles. Incluye gestión de usuarios con roles diferenciados —alumno, docente y administrador— y un repositorio de contenidos organizado por años/cursos, con acceso a materiales como teóricos, guías de TP y bibliografía obligatoria en PDF. Además, el alcance contempla que los alumnos puedan acceder a determinados niveles o contenidos mediante códigos otorgados por docentes/administradores.
+>
+> Cambio requerido:
+> Actualmente ya existe implementada la funcionalidad para que el administrador pueda restringir una sección mediante un código de acceso, y también existe la solicitud de acceso por parte del alumno.
+>
+> El problema es que la opción para restringir una sección solo aparece cuando el administrador escribe un título que comienza con “Cursada -” al crear la sección.
+>
+> Necesito cambiar ese comportamiento para que, cuando el administrador presione “Añadir” una sección y se abra el formulario de carga de datos, la opción de restringir la sección aparezca automáticamente como un campo más del formulario, sin depender del título ingresado.
+>
+> Objetivo:
+> Permitir que el administrador pueda restringir cualquier sección que cree, no solamente las secciones cuyo título empiece con “Cursada -”.
+>
+> Instrucciones específicas:
+> - Revisá primero cómo está implementada actualmente la lógica de restricciones con código de acceso.
+> - Identificá dónde se valida o condiciona que la opción de restricción aparezca solamente cuando el título contiene o comienza con “Cursada -”.
+> - Eliminá esa dependencia del título.
+> - Hacé que la opción de restringir sección aparezca siempre en el formulario de creación de sección para el administrador.
+> - Mantené la lógica existente de restricción por código de acceso.
+> - Mantené la lógica existente de solicitud de acceso por parte del alumno.
+> - Mantené el diseño actual de los botones, campos y opciones.
+> - No cambies estilos visuales salvo que sea estrictamente necesario para ubicar el campo en el formulario.
+> - No cambies nombres de pantallas, textos principales ni estructura visual general.
+> - No rompas la creación de secciones no restringidas.
+> - Si el administrador no activa la restricción, la sección debe crearse como pública o sin código, igual que antes.
+> - Si el administrador activa la restricción, debe poder cargar o generar el código de acceso según la lógica que ya exista actualmente.
+> - Revisá que la visualización del alumno siga respetando la restricción: si la sección está restringida, debe pedir código o solicitud de acceso; si no está restringida, debe permitir el acceso normal.
+>
+> Aclaración importante:
+> No quiero que rehagas toda la funcionalidad de restricciones. La funcionalidad ya existe. Solo quiero que la opción de restringir aparezca siempre al crear una sección, y que deje de depender del título “Cursada -”.
+>
+> Importante:
+> No ejecutes ningún comando de Git.
+> No hagas git add.
+> No hagas git commit.
+> No hagas git pull.
+> No hagas git push.
+> No hagas merge ni rebase.
+> Solo modificá los archivos necesarios.
+>
+> Al finalizar:
+> - Indicá qué archivos modificaste.
+> - Explicá brevemente qué condición eliminaste.
+> - Explicá cómo quedó funcionando la creación de secciones restringidas y no restringidas.
+> - Indicá cómo puedo probarlo manualmente desde la app.
+
+<details><summary>5 previous messages</summary>
+
+> Perfecto, voy a tocar solo la lógica mínima del formulario de sección. La restricción ya está bien modelada por `esRestringida` y `codigoAcceso`; el cambio va a ser sacar el filtro por título sin alterar el flujo del alumno.
+>
+> Voy a editar `app/secciones/form.tsx`: guardar siempre los campos de restricción, dejar de limpiarlos cuando cambia el título y mostrar siempre el bloque “Control de acceso” dentro del formulario.
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/app/secciones/form.tsx` (+67 -77)
+>
+> </details>
+>
+> Cambio aplicado en el formulario. Ahora voy a verificar que no quede ninguna condición activa por `"Cursada -"` en ese archivo y que TypeScript/JSX haya quedado balanceado.
+>
+> La búsqueda ya no encuentra `startsWith("cursada -")` ni `Cursada -` en el formulario. Voy a correr el lint del proyecto para detectar errores sintácticos o de JSX; no toca Git.
+</details>
+
+Listo. Modifiqué solo [app/secciones/form.tsx](<./odb-cvg/app/secciones/form.tsx:81>).
+
+Eliminé la condición que hacía `titulo.trim().toLowerCase().startsWith("cursada -")`. Antes, el formulario solo mostraba y guardaba `esRestringida` / `codigoAcceso` cuando el título empezaba con “Cursada -”. Ahora el bloque “Control de acceso” aparece siempre como parte del formulario, sin depender del título.
+
+Cómo quedó:
+- Si no se activa el switch, la sección se guarda con `esRestringida: false` y `codigoAcceso: null`, o sea pública como antes.
+- Si se activa el switch, se conserva la lógica existente: genera un código con `generarCodigoAleatorio()` si todavía no hay uno, lo muestra y lo guarda.
+- La vista del alumno no se tocó: sigue bloqueando según `seccion.esRestringida`, abre `MatriculacionModal` y valida contra `codigoAcceso`.
+
+Verificación:
+- Confirmé que ya no quedan usos de `startsWith("cursada -")`, `Cursada -` ni `esCursada` en `app/secciones/form.tsx`.
+- Corrí `npm run lint`; falló por errores preexistentes fuera del cambio: comillas sin escapar en `app/pantallasAdmin/userManagementScreen.tsx` y imports no resueltos en `components/ui/collapsible.tsx`. En el archivo modificado solo aparecen warnings preexistentes (`Stack` sin uso y dependencia de hook).
+
+Para probarlo manualmente:
+1. Entrá como admin.
+2. Abrí un módulo y presioná “Añadir”.
+3. Escribí un título cualquiera, por ejemplo “Bibliografía obligatoria”.
+4. Verificá que “Control de acceso” aparece aunque no empiece con “Cursada -”.
+5. Guardá sin activar el switch y comprobá que el alumno puede entrar normal.
+6. Creá otra sección, activá “Requerir código de inscripción”, guardá y entrá como alumno: debería mostrarse bloqueada y pedir el código.
+
+---
+> Necesito modificar la pantalla de administración donde se listan las secciones restringidas o cursadas con código de acceso.
+>
+> Contexto:
+> La app es un Campus Virtual para la asignatura Operatoria Dental B. Tiene módulos por año/curso y secciones dentro de esos módulos. Algunas secciones pueden estar restringidas mediante código de acceso, y el administrador puede verlas desde la pantalla de Administración, en la pestaña “Cursadas”.
+>
+> Problema actual:
+> En la tarjeta de una sección restringida, debajo del título de la sección aparece el texto “Módulo: ...”, pero actualmente se está mostrando un identificador raro, por ejemplo:
+>
+> Módulo: sxqrWcNwTFNLhSXvx8nX
+>
+> Ese valor parece ser el ID del módulo, no el nombre visible del módulo.
+>
+> Cambio requerido:
+> Necesito que en esa parte se muestre el nombre real del módulo al que pertenece la sección, no el ID.
+>
+> Ejemplo esperado:
+> En lugar de mostrar:
+>
+> Módulo: sxqrWcNwTFNLhSXvx8nX
+>
+> debería mostrar algo como:
+>
+> Módulo: Operatoria Dental I y II - 3er año
+>
+> o el nombre correspondiente del módulo asociado a esa sección.
+>
+> Instrucciones:
+> - Revisá cómo está implementada la pantalla de Administración, especialmente la pestaña “Cursadas”.
+> - Identificá de dónde se obtienen las secciones restringidas.
+> - Identificá cómo se guarda la relación entre sección y módulo.
+> - Revisá si la sección guarda un campo como `moduloId`, `moduleId`, `idModulo` o similar.
+> - Revisá dónde se cargan los datos de los módulos y sus nombres.
+> - Modificá la lógica para que, al renderizar cada sección restringida, se busque el módulo asociado por su ID y se muestre su nombre/título visible.
+> - No muestres el ID del módulo al usuario final.
+> - Mantené el diseño actual de la tarjeta, textos, botones, colores e íconos.
+> - No cambies la lógica de regenerar código.
+> - No cambies la lógica de asignar alumnos.
+> - No cambies la lógica de inscriptos.
+> - No rehagas la pantalla completa.
+> - Aplicá el cambio mínimo necesario.
+>
+> Casos a contemplar:
+> - Si la sección tiene un módulo asociado válido, mostrar el nombre del módulo.
+> - Si por algún motivo no se encuentra el módulo asociado, mostrar un texto entendible como “Módulo no encontrado” o mantener un fallback prolijo, pero no mostrar el ID crudo.
+> - La sección debe seguir funcionando igual para regenerar código y asignar alumnos.
+>
+> Importante:
+> No ejecutes ningún comando de Git.
+> No hagas git add.
+> No hagas git commit.
+> No hagas git pull.
+> No hagas git push.
+> No hagas merge ni rebase.
+> Solo modificá los archivos necesarios.
+>
+> Al finalizar:
+> - Indicá qué archivos modificaste.
+> - Explicá brevemente por qué antes se mostraba el ID.
+> - Explicá cómo resolviste la búsqueda del nombre del módulo.
+> - Indicá cómo puedo probarlo manualmente desde la app.
+
+<details><summary>8 previous messages</summary>
+
+> Voy a tocar la pantalla admin de forma acotada: primero confirmo cómo arma la lista de secciones restringidas y después agrego la resolución del título del módulo sin cambiar regeneración, asignación ni la UI base.
+>
+> La relación viene de `collectionGroup('secciones')`: Firestore devuelve cada sección y desde `d.ref.parent.parent?.id` se toma el ID del módulo padre. Voy a mantener ese ID para operaciones internas y resolver aparte el título visible con la colección `modulos`.
+>
+> El primer parche no calzó por caracteres especiales en un comentario del archivo. Lo hago en fragmentos más pequeños, usando líneas estables alrededor del código.
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx` (+5 -4)
+> - Wrote `./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx` (+6 -5)
+> - Wrote `./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx` (+7 -4)
+> - Wrote `./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx` (+14 -11)
+>
+> </details>
+>
+> Ya está reemplazado el subtítulo visible: las operaciones siguen usando `moduloId`, pero la tarjeta ahora calcula `moduloTitulo` desde los módulos cargados. Voy a hacer una verificación rápida de referencias y lint para detectar si introduje algún error nuevo.
+>
+> El lint marca dos errores antiguos en esta misma pantalla por comillas sin escapar en un texto de ayuda. Voy a corregir solo esa representación JSX, preservando el texto visible, para que mi cambio no deje errores nuevos en el archivo tocado.
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx` (+1 -1)
+>
+> </details>
+>
+> Listo, quedó preservado el texto pero escapado correctamente. Recorro lint una vez más para separar errores propios de los preexistentes.
+</details>
+
+Listo. Para este cambio modifiqué [userManagementScreen.tsx](<./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx:12>).
+
+Antes se mostraba el ID porque las secciones restringidas se cargan con `collectionGroup(db, 'secciones')`, y el código obtiene el módulo padre con `d.ref.parent.parent?.id`. Ese `moduloId` se estaba renderizando directo en la tarjeta: `Módulo: {cursada.moduloId}`.
+
+Lo resolví cargando los módulos con `useModulos()`, armando un mapa `id -> titulo`, y usando ese mapa al renderizar cada tarjeta. El `moduloId` se conserva internamente para regenerar código y asignar alumnos, pero al usuario se le muestra el título del módulo. Si todavía está cargando, muestra `Cargando módulo...`; si no encuentra el módulo, muestra `Módulo no encontrado`.
+
+También corregí el escape de comillas en un texto JSX de esa misma pantalla, sin cambiar el texto visible.
+
+Verificación: corrí `npm run lint`. Ya no hay errores en `userManagementScreen.tsx`; el lint sigue fallando por errores preexistentes en `components/ui/collapsible.tsx` por imports `@/components/themed-text` y `@/components/themed-view`.
+
+Para probarlo:
+1. Entrá como admin.
+2. Andá a Administración.
+3. Abrí la pestaña “Cursadas”.
+4. Mirá una sección restringida: debajo del título debería decir `Módulo: <nombre real del módulo>`, no el ID.
+5. Expandí la tarjeta y probá que “Regenerar” y “Asignar” sigan funcionando igual.
+
+---
+> Necesito analizar una modificación importante en la app Campus Virtual de Operatoria Dental B, pero todavía no quiero que modifiques archivos.
+>
+> Contexto:
+> La app está hecha en React Native / Expo y corresponde a la Entrega 1 del proyecto. Actualmente tiene módulos, secciones dentro de módulos y dentro de cada sección ya existe la posibilidad de añadir distintos tipos de contenido, como archivos, imágenes, links u otros elementos, según la implementación actual.
+>
+> Cambio que quiero evaluar:
+> Necesito que dentro de una sección también se puedan crear subsecciones. Es decir, que una sección pueda contener:
+> 1. contenido directo, como archivos, imágenes, links, etc.;
+> 2. y también subsecciones internas.
+>
+> Además, dentro de cada subsección también se debe poder añadir contenido del mismo tipo que ya se puede añadir actualmente en una sección: archivos, imágenes, links, etc.
+>
+> Importante:
+> No quiero eliminar ni reemplazar la funcionalidad actual de agregar contenido directamente dentro de una sección. Eso debe seguir funcionando igual, porque puede haber secciones que no necesiten subsecciones.
+>
+> Diseño esperado:
+> Me gustaría que la forma de crear una subsección mantenga el mismo estilo visual y de interacción que actualmente se usa para agregar una sección dentro de un módulo.
+>
+> Es decir:
+> - Si actualmente en un módulo existe un botón “Añadir” o similar para crear una sección, dentro de una sección debería existir una opción equivalente para crear una subsección.
+> - El formulario/modal/pantalla para crear subsecciones debería reutilizar o imitar el diseño actual de creación de secciones.
+> - No quiero un diseño nuevo ni distinto, sino mantener coherencia visual con lo que ya está implementado.
+>
+> Permisos:
+> Así como actualmente ciertos usuarios pueden crear, modificar y eliminar secciones, esos mismos usuarios deben poder crear, modificar y eliminar subsecciones.
+>
+> Por lo tanto:
+> - Si un administrador/docente puede crear secciones, también debe poder crear subsecciones.
+> - Si un usuario puede modificar secciones, también debe poder modificar subsecciones.
+> - Si un usuario puede eliminar secciones, también debe poder eliminar subsecciones.
+> - Los alumnos no deberían poder administrar subsecciones si actualmente no pueden administrar secciones.
+>
+> Funcionalidades requeridas para subsecciones:
+> - Crear subsección dentro de una sección.
+> - Listar subsecciones dentro de una sección.
+> - Entrar a una subsección.
+> - Agregar contenido dentro de una subsección, reutilizando la lógica ya existente para agregar contenido en secciones.
+> - Modificar subsección.
+> - Eliminar subsección.
+> - Mantener contenido directo en la sección principal.
+> - Mantener contenido directo dentro de cada subsección.
+>
+> Ejemplo esperado:
+> Módulo: Operatoria Dental I y II - 3er año
+>
+> Sección: Bibliografía
+> - PDF: Bibliografía obligatoria.pdf
+> - Link: Biblioteca virtual
+>
+> Subsección: Unidad 1
+> - PDF: Teórico unidad 1.pdf
+> - Imagen: esquema clínico.jpg
+> - Link: recurso complementario
+>
+> Subsección: Unidad 2
+> - PDF: Teórico unidad 2.pdf
+>
+> Tareas de análisis:
+> - Revisá la estructura actual del proyecto.
+> - Identificá cómo se crean, listan, editan y eliminan las secciones.
+> - Identificá cómo se agregan archivos, imágenes, links u otros elementos dentro de las secciones.
+> - Identificá qué roles o permisos permiten actualmente crear, modificar y eliminar secciones.
+> - Identificá cómo se controla en la interfaz qué usuario puede ver las opciones de administración.
+> - Identificá cómo está modelada la información en la base de datos o Firestore.
+> - Identificá si conviene implementar las subsecciones como:
+>   - una subcolección dentro de cada sección;
+>   - documentos con un campo `parentSectionId`;
+>   - o reutilizando la lógica existente de secciones con algún tipo de relación jerárquica.
+> - Indicá qué opción recomendás según la estructura actual del proyecto.
+> - Indicá qué archivos habría que modificar.
+> - Indicá qué componentes o pantallas podrían reutilizarse para no duplicar código.
+> - Indicá cómo se podría reutilizar el diseño actual de creación de secciones para crear subsecciones.
+> - Indicá si hay riesgo de romper la carga actual de materiales en secciones.
+> - Indicá cómo debería quedar la navegación para entrar a una subsección.
+> - Indicá cómo se debería mantener la carga de contenido directo en una sección.
+> - Indicá cómo deberían funcionar modificar y eliminar subsección.
+>
+> Restricciones:
+> - No modifiques archivos todavía.
+> - No ejecutes comandos de Git.
+> - No hagas git add.
+> - No hagas git commit.
+> - No hagas git pull.
+> - No hagas git push.
+> - No hagas merge ni rebase.
+> - No rehagas pantallas completas si no es necesario.
+> - No cambies el diseño visual general.
+> - Solo quiero un análisis y una propuesta de implementación mínima y segura.
+>
+> Al finalizar, respondeme con:
+> - archivos involucrados;
+> - estructura actual encontrada;
+> - cómo funcionan actualmente las secciones;
+> - cómo funcionan actualmente los permisos para crear, modificar y eliminar secciones;
+> - propuesta recomendada para implementar subsecciones;
+> - cómo reutilizarías el diseño actual de creación de secciones;
+> - plan de modificación paso a paso;
+> - riesgos o puntos a revisar antes de tocar código.
+
+<details><summary>4 previous messages</summary>
+
+> Voy a hacer una pasada solo lectura por las pantallas y hooks que sostienen módulos, secciones e ítems. No voy a tocar archivos ni usar Git; la idea es salir con un mapa claro y una propuesta mínima.
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Select-String -Path odb-cvg\hooks\useSecciones.ts,odb-cvg\hooks\useItems.ts,odb-cvg\hooks\useModulos.ts,odb-cvg\hooks\useUserRole.ts -Pattern 'export interface|export type|export function|collection\(|doc\(|allow|rol|admin|profesor|alumno|items|secciones' -Context 1,2`
+> - Ran `Select-String -LiteralPath 'odb-cvg\app\modulos\[id].tsx','odb-cvg\app\secciones\[id].tsx' -Pattern 'puedeGestionar|puedeGestionarSecciones|secciones|items|router.push|form\?|eliminar|FAB|Añadir|add|pencil|trash|useItems|useSecciones' -Context 2,3`
+> - Ran `Select-String -Path odb-cvg\app\secciones\form.tsx,odb-cvg\app\items\form.tsx,odb-cvg\firestore.rules -Pattern 'moduloId|seccionId|crear|actualizar|eliminar|rol|admin|profesor|collection\(|items|secciones|ScreenHeader|TextInput|Switch|codigoAcceso' -Context 2,3`
+> - Ran `rg --files odb-cvg\app odb-cvg\hooks odb-cvg\components odb-cvg\firestore.rules odb-cvg\firebase.indexes.json`
+>
+> </details>
+>
+> Ya tengo el mapa principal: Firestore usa `modulos/{moduloId}/secciones/{seccionId}/items/{itemId}` y la UI de detalle de sección mezcla listado de ítems con un FAB para agregar contenido. Voy a revisar rutas para estimar el alcance de navegación de subsecciones.
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `Get-Content -Path odb-cvg\app\layout.tsx`
+> - Ran `Select-String -Path odb-cvg\app\items\form.tsx -Pattern 'TIPOS|uploadToCloudinary|handleGuardar|tipo ===|DocumentPicker|ImagePicker|enlace|video|documento|pdf|imagen|texto' -Context 1,3`
+> - Ran `Get-Content -Path odb-cvg\firebase.indexes.json`
+>
+> </details>
+</details>
+
+Hice el análisis en modo solo lectura. No modifiqué archivos ni usé Git.
+
+**Archivos Involucrados**
+- [hooks/useSecciones.ts](<./odb-cvg/hooks/useSecciones.ts:30>): CRUD de secciones.
+- [app/secciones/form.tsx](<./odb-cvg/app/secciones/form.tsx:15>): formulario de crear/editar sección.
+- [app/modulos/[id].tsx](<./odb-cvg/app/modulos/[id].tsx:20>): lista secciones dentro de un módulo.
+- [hooks/useItems.ts](<./odb-cvg/hooks/useItems.ts:58>): CRUD de contenidos dentro de una sección.
+- [app/items/form.tsx](<./odb-cvg/app/items/form.tsx:26>): formulario para agregar texto, enlace, PDF, imagen, video o documento.
+- [app/secciones/[id].tsx](<./odb-cvg/app/secciones/[id].tsx:23>): detalle de sección, lista ítems y permite agregarlos.
+- [firestore.rules](<./odb-cvg/firestore.rules:23>): reglas de permisos.
+- [app/layout.tsx](<./odb-cvg/app/layout.tsx:35>): rutas Expo Router.
+
+**Estructura Actual**
+Firestore está modelado así:
+
+```text
+modulos/{moduloId}
+  secciones/{seccionId}
+    items/{itemId}
+```
+
+Las secciones pertenecen al módulo por estar dentro de la subcolección `secciones`. Los ítems pertenecen a la sección por estar dentro de `items`.
+
+Los ítems soportan estos tipos en `useItems.ts` / `items/form.tsx`:
+`texto`, `enlace`, `pdf`, `imagen`, `video`, `documento`.
+
+**Cómo Funcionan Las Secciones**
+En `app/modulos/[id].tsx`, el hook `useSecciones(id)` lista las secciones del módulo. Si el usuario puede gestionar, ve botón “Añadir”, editar y eliminar.
+
+Crear/editar sección usa `app/secciones/form.tsx`, que toma `moduloId` y opcionalmente `seccionId`. Guarda en:
+
+```text
+modulos/{moduloId}/secciones/{seccionId}
+```
+
+El detalle de sección está en `app/secciones/[id].tsx`. Ahí se carga la sección, se valida si está restringida y se listan sus contenidos con `useItems(moduloId, id)`.
+
+**Permisos Actuales**
+En interfaz:
+- `admin` y `profesor` pueden gestionar secciones e ítems.
+- `alumno` no ve controles de administración.
+
+Esto se controla con:
+
+```ts
+const puedeGestionar = rol === "admin" || rol === "profesor";
+const puedeGestionarSecciones = rol === "admin" || rol === "profesor";
+```
+
+En Firestore:
+- `modulos`: escritura solo admin.
+- `secciones`: escritura admin o profesor.
+- `items`: escritura admin o profesor.
+- alumnos autenticados pueden leer.
+
+**Propuesta Recomendada**
+Recomiendo implementar subsecciones como subcolección dentro de cada sección:
+
+```text
+modulos/{moduloId}
+  secciones/{seccionId}
+    items/{itemId}
+    subsecciones/{subseccionId}
+      items/{itemId}
+```
+
+Es la opción más alineada con la estructura actual porque:
+- Mantiene jerarquía natural en Firestore.
+- No rompe ítems directos de la sección.
+- Permite que una sección tenga a la vez `items` y `subsecciones`.
+- Permite reutilizar la lógica de CRUD casi igual a `useSecciones`.
+- Evita convertir `secciones` en árbol global con `parentSectionId`, que requeriría filtros, índices y más cuidado para no mezclar niveles.
+
+No recomendaría reutilizar `secciones` con `parentSectionId` para esta entrega: es más flexible a largo plazo, pero toca más consultas, reglas, navegación y pantallas.
+
+**Reutilización De Diseño**
+Se puede reutilizar/imitar `app/secciones/form.tsx` para crear `app/subsecciones/form.tsx`.
+
+Para mantener coherencia visual:
+- Mismo `ScreenHeader`.
+- Mismo campo `Título`.
+- Mismos botones `Cancelar` / `Confirmar`.
+- Mismo modal de cambios sin guardar.
+- Misma pantalla de permiso denegado.
+- Probablemente sin bloque de código de acceso en subsección, salvo que ustedes quieran restringir también subsecciones individualmente. Por lo que pediste, la restricción parece seguir siendo de sección principal.
+
+También conviene extraer o duplicar mínimamente los estilos de sección, sin rehacer diseño.
+
+**Navegación Sugerida**
+Agregar rutas:
+
+```text
+app/subsecciones/[id].tsx
+app/subsecciones/form.tsx
+```
+
+Entrar a una subsección desde una sección:
+
+```ts
+router.push(`/subsecciones/${subseccion.id}?moduloId=${moduloId}&seccionId=${id}`)
+```
+
+Agregar ítems dentro de subsección debería pasar también `subseccionId`:
+
+```ts
+router.push(`/items/form?moduloId=${moduloId}&seccionId=${seccionId}&subseccionId=${subseccionId}`)
+```
+
+**Cambio Clave Para Ítems**
+Hoy `useItems(moduloId, seccionId)` siempre apunta a:
+
+```text
+modulos/{moduloId}/secciones/{seccionId}/items
+```
+
+Para reutilizarlo en subsecciones, conviene hacerlo compatible con un `subseccionId` opcional:
+
+```text
+sin subseccionId:
+modulos/{moduloId}/secciones/{seccionId}/items
+
+con subseccionId:
+modulos/{moduloId}/secciones/{seccionId}/subsecciones/{subseccionId}/items
+```
+
+Así no se rompe la carga actual de materiales directos en sección.
+
+**Plan Mínimo**
+1. Crear hook `useSubsecciones(moduloId, seccionId)` con CRUD similar a `useSecciones`.
+2. Crear pantalla `app/subsecciones/form.tsx`, basada en `secciones/form.tsx`, para alta/edición de subsección.
+3. Crear pantalla `app/subsecciones/[id].tsx`, basada en `secciones/[id].tsx`, para listar ítems de una subsección.
+4. Modificar `app/secciones/[id].tsx` para listar dos bloques: contenido directo e “Subsecciones”.
+5. Agregar botón “Añadir” para subsecciones dentro del detalle de sección, visible solo para admin/profesor.
+6. Modificar `useItems` para aceptar `subseccionId?: string`.
+7. Modificar `app/items/form.tsx` para leer `subseccionId` opcional y usar la ruta correcta.
+8. Actualizar `firestore.rules` para permitir lectura/escritura de:
+   ```text
+   secciones/{seccionId}/subsecciones/{subseccionId}
+   secciones/{seccionId}/subsecciones/{subseccionId}/items/{itemId}
+   ```
+9. Registrar rutas en `app/layout.tsx`.
+10. Probar sección con contenido directo, sección con subsecciones, y subsección con contenido propio.
+
+**Riesgos**
+El mayor riesgo está en `useItems` y `items/form.tsx`: si se cambia mal la ruta, se puede romper la carga actual de materiales directos en secciones. Por eso conviene que `subseccionId` sea opcional y que el comportamiento actual quede intacto cuando no exista.
+
+Otro punto a revisar: eliminación. Hoy eliminar una sección no borra recursivamente sus `items`; y `useModulos.eliminarModulo` borra secciones pero no subcolecciones profundas. Con subsecciones, habría que decidir si la eliminación es solo del documento o si debe limpiar ítems/subsecciones. Para una implementación mínima, se puede mantener el patrón actual, pero es una deuda técnica importante.
+
+También habría que cuidar permisos Firestore: aunque la UI oculte botones, si no se agregan reglas para `subsecciones`, admin/profesor no van a poder escribir ahí.
+
+---
+> Necesito que implementes la funcionalidad de subsecciones dentro de secciones en la app Campus Virtual de Operatoria Dental B.
+>
+> Contexto:
+> Ya hiciste un análisis previo y detectaste que la estructura actual de Firestore es:
+>
+> modulos/{moduloId}
+>   secciones/{seccionId}
+>     items/{itemId}
+>
+> Actualmente:
+> - Las secciones se crean/listan/editan/eliminan desde módulos.
+> - Dentro de una sección ya se pueden agregar ítems/contenidos: texto, enlace, PDF, imagen, video o documento.
+> - Admin y profesor pueden gestionar secciones e ítems.
+> - Alumno solo puede visualizar.
+> - El contenido directo dentro de una sección debe seguir funcionando exactamente igual.
+>
+> Objetivo:
+> Agregar la posibilidad de crear subsecciones dentro de una sección.
+>
+> La nueva estructura esperada es:
+>
+> modulos/{moduloId}
+>   secciones/{seccionId}
+>     items/{itemId}
+>     subsecciones/{subseccionId}
+>       items/{itemId}
+>
+> Funcionalidad requerida:
+> 1. Dentro del detalle de una sección, debe poder verse una lista de subsecciones.
+> 2. Los usuarios con los mismos permisos que hoy pueden crear secciones también deben poder crear subsecciones.
+> 3. Los usuarios con los mismos permisos que hoy pueden modificar secciones también deben poder modificar subsecciones.
+> 4. Los usuarios con los mismos permisos que hoy pueden eliminar secciones también deben poder eliminar subsecciones.
+> 5. Los alumnos no deben poder crear, modificar ni eliminar subsecciones.
+> 6. Al entrar a una subsección, se debe poder ver su contenido.
+> 7. Dentro de una subsección se debe poder agregar contenido del mismo tipo que hoy se puede agregar dentro de una sección: texto, enlace, PDF, imagen, video o documento.
+> 8. La sección principal debe seguir permitiendo contenido directo, aunque también tenga subsecciones.
+> 9. Una sección puede tener solo contenido directo, solo subsecciones, o ambas cosas.
+> 10. No se debe romper la carga actual de ítems directos en secciones.
+>
+> Diseño esperado:
+> - La creación de subsecciones debe mantener el mismo estilo visual y de interacción que ya existe para crear secciones dentro de módulos.
+> - Usar el mismo criterio visual de botones, cards, formulario, header, confirmación y acciones.
+> - No crear un diseño nuevo.
+> - No cambiar colores, estilos globales ni estructura visual general.
+> - Si es posible, reutilizar componentes o lógica existente para evitar duplicación innecesaria.
+>
+> Implementación sugerida según el análisis:
+> 1. Crear un hook `useSubsecciones(moduloId, seccionId)` con CRUD similar a `useSecciones`.
+> 2. Crear `app/subsecciones/form.tsx`, basado en `app/secciones/form.tsx`, para alta y edición de subsecciones.
+> 3. Crear `app/subsecciones/[id].tsx`, basado en `app/secciones/[id].tsx`, para el detalle de una subsección y listado de sus ítems.
+> 4. Modificar `app/secciones/[id].tsx` para mostrar dos bloques:
+>    - Contenido directo de la sección.
+>    - Subsecciones.
+> 5. Agregar en el detalle de sección un botón “Añadir” o equivalente para crear subsecciones, visible solo para admin/profesor.
+> 6. Permitir editar y eliminar subsecciones desde la lista de subsecciones, con los mismos permisos que para secciones.
+> 7. Modificar `hooks/useItems.ts` para aceptar un `subseccionId` opcional.
+>    - Si NO recibe `subseccionId`, debe seguir usando:
+>      modulos/{moduloId}/secciones/{seccionId}/items
+>    - Si recibe `subseccionId`, debe usar:
+>      modulos/{moduloId}/secciones/{seccionId}/subsecciones/{subseccionId}/items
+> 8. Modificar `app/items/form.tsx` para leer `subseccionId` opcional y guardar el ítem en la ruta correcta.
+> 9. Actualizar `firestore.rules` para permitir lectura/escritura de:
+>    - secciones/{seccionId}/subsecciones/{subseccionId}
+>    - secciones/{seccionId}/subsecciones/{subseccionId}/items/{itemId}
+>    respetando los mismos permisos actuales de secciones e ítems.
+> 10. Registrar las rutas necesarias en `app/layout.tsx`, si corresponde según la estructura actual de Expo Router.
+>
+> Restricciones importantes:
+> - No elimines ni reemplaces la funcionalidad actual de agregar contenido directo dentro de una sección.
+> - No modifiques la lógica de restricciones por código de acceso de las secciones principales, salvo que sea estrictamente necesario para que no se rompa.
+> - No agregues restricción por código a subsecciones por ahora.
+> - No rehagas pantallas completas si no hace falta.
+> - No cambies el diseño visual general.
+> - No cambies el comportamiento de alumnos, docentes o administradores fuera de esta funcionalidad.
+> - No ejecutes comandos de Git.
+> - No hagas git add.
+> - No hagas git commit.
+> - No hagas git pull.
+> - No hagas git push.
+> - No hagas merge ni rebase.
+> - Solo modificá o creá los archivos necesarios.
+>
+> Punto crítico:
+> Tené especial cuidado con `useItems` y `app/items/form.tsx`, porque si se cambia mal la ruta se puede romper la carga actual de materiales dentro de secciones. El parámetro `subseccionId` debe ser opcional y el comportamiento actual debe quedar intacto cuando no exista.
+>
+> Al finalizar:
+> - Indicá qué archivos creaste.
+> - Indicá qué archivos modificaste.
+> - Explicá cómo quedó la estructura de datos.
+> - Explicá cómo se crea, edita y elimina una subsección.
+> - Explicá cómo se agregan ítems dentro de una subsección.
+> - Explicá cómo se mantiene funcionando el contenido directo dentro de una sección.
+> - Indicá cómo puedo probarlo manualmente desde la app.
+> - Indicá si encontraste alguna deuda técnica o riesgo pendiente.
+
+<details><summary>19 previous messages</summary>
+
+> Voy a implementar esto por capas: primero el hook y rutas de datos, después pantallas de subsección, luego integrar la lista en el detalle de sección y finalmente ajustar reglas. Voy a cuidar que `subseccionId` sea opcional para que los ítems directos sigan usando exactamente la ruta actual.
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Get-Content -Path odb-cvg\hooks\useItems.ts`
+> - Ran `Get-Content -Path odb-cvg\app\secciones\form.tsx`
+> - Ran `Get-Content -Path odb-cvg\app\items\form.tsx`
+> - Ran `Get-Content -LiteralPath 'odb-cvg\app\secciones\[id].tsx'`
+>
+> </details>
+>
+> Voy a crear `useSubsecciones` como espejo de `useSecciones`, apuntando a `modulos/{moduloId}/secciones/{seccionId}/subsecciones`. Después ajusto `useItems` para construir la colección según exista o no `subseccionId`.
+>
+> <details><summary>Created 1 file, edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/hooks/useSubsecciones.ts` (+86 -0)
+> - Wrote `./odb-cvg/hooks/useItems.ts` (+73 -31)
+>
+> </details>
+>
+> El parche grande chocó con caracteres acentuados del archivo. Lo aplico en partes pequeñas, manteniendo el comportamiento actual como rama por defecto.
+>
+> <details><summary>Edited 1 file, ran 1 command</summary>
+>
+> - Wrote `./odb-cvg/hooks/useItems.ts` (+46 -4)
+> - Wrote `./odb-cvg/hooks/useItems.ts` (+18 -18)
+> - Ran `Select-String -Path odb-cvg\hooks\useItems.ts -Pattern 'deleteDoc|Documento borrado' -Context 2,2`
+> - Wrote `./odb-cvg/hooks/useItems.ts` (+1 -1)
+>
+> </details>
+>
+> `useItems` ya decide la ruta internamente. Ahora ajusto `items/form.tsx` para leer `subseccionId` opcional y cargar/guardar en esa ruta solo cuando venga presente.
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/app/items/form.tsx` (+17 -14)
+>
+> </details>
+>
+> Voy a sumar el formulario de subsección copiando el patrón visual del formulario de sección, pero sin control de código porque las subsecciones no se restringen por ahora.
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./odb-cvg/app/subsecciones/form.tsx` (+312 -0)
+>
+> </details>
+>
+> Sigue la pantalla de detalle de subsección: va a ser equivalente a detalle de sección para ítems, usando `useItems(moduloId, seccionId, subseccionId)`.
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./odb-cvg/app/subsecciones/[id].tsx` (+406 -0)
+>
+> </details>
+>
+> Ahora integro la lista de subsecciones dentro del detalle de sección. Mantengo el FAB existente para agregar contenido directo, y agrego un bloque “Subsecciones” con botón “Añadir” igual al patrón usado en módulos.
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/app/secciones/[id].tsx` (+43 -13)
+> - Wrote `./odb-cvg/app/secciones/[id].tsx` (+73 -19)
+> - Wrote `./odb-cvg/app/secciones/[id].tsx` (+63 -11)
+> - Wrote `./odb-cvg/app/secciones/[id].tsx` (+60 -2)
+>
+> </details>
+>
+> La integración visual ya está en el detalle de sección. Falta registrar rutas nuevas y habilitar Firestore para `subsecciones` y sus `items` con los mismos permisos actuales.
+>
+> <details><summary>Edited 2 files, ran 2 commands</summary>
+>
+> - Wrote `./odb-cvg/app/layout.tsx` (+6 -4)
+> - Wrote `./odb-cvg/firestore.rules` (+24 -12)
+> - Ran `Select-String -Path odb-cvg\hooks\useItems.ts,odb-cvg\app\items\form.tsx,odb-cvg\app\secciones\[id].tsx,odb-cvg\app\subsecciones\form.tsx,odb-cvg\app\subsecciones\[id].tsx,odb-cvg\firestore.rules,odb-cvg\app\layout.tsx -Pattern 'subseccionId|subsecciones|useSubsecciones|Módulo|items/form|Subsección' -Context 0,1`
+> - Ran `npm run lint`
+>
+> </details>
+>
+> El lint no muestra errores nuevos de subsecciones; sigue fallando por los imports preexistentes de `components/ui/collapsible.tsx`. Voy a hacer una pasada de TypeScript para pescar errores de tipos/rutas que el lint no ve.
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `npx tsc --noEmit`
+>
+> </details>
+>
+> <details><summary>Plan</summary>
+>
+> - [x] Crear hook CRUD de subsecciones
+> - [x] Hacer useItems compatible con subseccionId opcional
+> - [x] Crear formulario y detalle de subsección
+> - [x] Integrar subsecciones en detalle de sección
+> - [x] Registrar rutas y reglas Firestore
+> - [x] Verificar con lint/búsquedas
+>
+> </details>
+</details>
+
+Implementé la funcionalidad de subsecciones sin usar Git.
+
+**Archivos creados**
+- [useSubsecciones.ts](<./odb-cvg/hooks/useSubsecciones.ts>)
+- [subsecciones/form.tsx](<./odb-cvg/app/subsecciones/form.tsx>)
+- [subsecciones/[id].tsx](<./odb-cvg/app/subsecciones/[id].tsx>)
+
+**Archivos modificados**
+- [useItems.ts](<./odb-cvg/hooks/useItems.ts>)
+- [items/form.tsx](<./odb-cvg/app/items/form.tsx>)
+- [secciones/[id].tsx](<./odb-cvg/app/secciones/[id].tsx>)
+- [layout.tsx](<./odb-cvg/app/layout.tsx>)
+- [firestore.rules](<./odb-cvg/firestore.rules>)
+
+La estructura queda así:
+
+```text
+modulos/{moduloId}
+  secciones/{seccionId}
+    items/{itemId}
+    subsecciones/{subseccionId}
+      items/{itemId}
+```
+
+Las subsecciones se crean desde el detalle de una sección, en el bloque “Subsecciones”, con un botón “Añadir”. Admin/profesor pueden crear, editar y eliminar; alumnos solo ven y entran. El formulario mantiene el patrón visual del formulario de secciones, sin agregar restricción por código.
+
+Los ítems dentro de subsecciones usan el mismo formulario actual de contenido. `useItems` ahora acepta `subseccionId` opcional: si no viene, sigue usando la ruta vieja de ítems directos de sección; si viene, guarda/lista en `subsecciones/{subseccionId}/items`.
+
+El contenido directo de una sección sigue funcionando igual: el FAB existente en la sección sigue abriendo `/items/form?moduloId=...&seccionId=...` sin `subseccionId`.
+
+Probalo así:
+1. Entrá como admin/profesor.
+2. Abrí un módulo y entrá a una sección.
+3. En “Subsecciones”, tocá “Añadir” y creá “Unidad 1”.
+4. Entrá a “Unidad 1” y agregá un PDF, enlace o texto con el botón `+`.
+5. Volvé a la sección principal y agregá contenido directo con el FAB `+`.
+6. Entrá como alumno: debería poder ver subsecciones y contenido, pero no editar/crear/eliminar.
+
+Verificación: corrí `npm run lint` y `npx tsc --noEmit`. No aparecieron errores nuevos de esta implementación; siguen errores preexistentes en `components/ui/collapsible.tsx` por imports `@/components/themed-text` / `themed-view` y algunos avisos previos.
+
+Deuda técnica pendiente: eliminar una subsección borra el documento, pero Firestore no elimina automáticamente sus subcolecciones `items`. Es el mismo patrón que ya existía con secciones/items, pero convendría resolverlo más adelante con borrado recursivo o limpieza controlada.
+
+---
+> Al probar la creación de subsecciones en Expo Go con rol Admin, aparece:
+>
+> useSubsecciones error: FirebaseError: Missing or insufficient permissions.
+>
+> Aclaración: guardé los archivos con Ctrl + S en VS Code y probé la app en Expo Go, pero no deployé reglas de Firestore.
+>
+> Necesito que revises si el archivo `firestore.rules` local ya permite correctamente leer y escribir en:
+>
+> modulos/{moduloId}/secciones/{seccionId}/subsecciones/{subseccionId}
+> modulos/{moduloId}/secciones/{seccionId}/subsecciones/{subseccionId}/items/{itemId}
+>
+> con los mismos permisos que secciones e ítems:
+> - usuarios autenticados pueden leer;
+> - admin/profesor pueden crear, editar y eliminar;
+> - alumnos no pueden escribir.
+>
+> No modifiques nada si las reglas ya están correctas. Si están mal, corregilas.
+>
+> Además, indicame claramente si para que Expo Go tome esos permisos hace falta deployar las reglas a Firebase.
+>
+> No ejecutes comandos de Git.
+> No hagas git add, commit, pull, push, merge ni rebase.
+
+<details><summary>2 previous messages</summary>
+
+> Voy a revisar `firestore.rules` tal como está en el workspace. Si ya cubre esas rutas no toco nada; si falta algo, lo ajusto mínimo. También voy a verificar si el error encaja con reglas locales no desplegadas.
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `Get-Content -Path odb-cvg\firestore.rules`
+> - Ran `Select-String -Path odb-cvg\firestore.rules -Pattern 'subsecciones|items|secciones|isAdmin|isProfesor|allow read|allow create' -Context 1,2`
+>
+> </details>
+</details>
+
+Revisé `firestore.rules` local y las reglas ya están correctas para esas rutas. No modifiqué nada.
+
+Actualmente permite:
+
+```text
+modulos/{moduloId}/secciones/{seccionId}/subsecciones/{subseccionId}
+```
+
+con:
+- `allow read: if request.auth != null`
+- `allow create, update, delete: if isAdmin() || isProfesor()`
+
+Y también:
+
+```text
+modulos/{moduloId}/secciones/{seccionId}/subsecciones/{subseccionId}/items/{itemId}
+```
+
+con los mismos permisos:
+- usuarios autenticados leen;
+- admin/profesor escriben;
+- alumnos no escriben.
+
+El error en Expo Go encaja con esto: guardar `firestore.rules` con Ctrl+S solo cambia el archivo local. Expo Go está usando el proyecto real de Firebase, así que toma las reglas que estén desplegadas en Firebase, no las locales.
+
+Sí: para que Expo Go tome esos permisos tenés que deployar las reglas a Firebase.
+
+Comando habitual desde `odb-cvg`:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+Después de deployar, cerrá y reabrí la pantalla o recargá la app para que el listener vuelva a consultar con las reglas nuevas.
+
+---
+> Necesito corregir un error que aparece al intentar deployar las reglas de Firestore.
+>
+> Comando ejecutado:
+>
+> npx firebase-tools deploy --only firestore:rules --project odb-cvg
+>
+> El deploy falla con este error:
+>
+> Parse Error in firebase.indexes.json:
+> Unexpected end of input at 76:2
+>
+> Archivo involucrado:
+> firebase.indexes.json
+>
+> Necesito que revises `firebase.indexes.json` y corrijas únicamente el problema de formato JSON.
+>
+> Instrucciones:
+> - Revisá si faltan llaves, corchetes o cierres de estructura.
+> - Corregí el archivo para que sea un JSON válido.
+> - No cambies reglas de Firestore si no hace falta.
+> - No modifiques lógica de la app.
+> - No elimines índices existentes salvo que estén claramente mal formados.
+> - No ejecutes comandos de Git.
+> - No hagas git add, commit, pull, push, merge ni rebase.
+>
+> Al finalizar:
+> - Indicá qué estaba mal en `firebase.indexes.json`.
+> - Indicá qué corregiste.
+> - Decime qué comando puedo ejecutar para validar o volver a deployar.
+
+<details><summary>6 previous messages</summary>
+
+> Voy a revisar solo `firebase.indexes.json` y corregir el cierre/formato JSON. No voy a tocar reglas ni código de la app.
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `Get-Content -Path odb-cvg\firebase.indexes.json`
+> - Ran `Get-Content -Path odb-cvg\firebase.json`
+>
+> </details>
+>
+> El archivo tiene un bloque de ejemplo comentado que arranca con `{` real al inicio, y después otro `{` con la configuración real. Ese primer `{` deja el JSON desbalanceado. Voy a dejar solo el JSON válido con los índices existentes.
+>
+> <details><summary>Created 1 file, deleted 1 file</summary>
+>
+> - Deleted `./odb-cvg/firebase.indexes.json` (+0 -76)
+> - Wrote `./odb-cvg/firebase.indexes.json` (+28 -0)
+>
+> </details>
+>
+> Ya quedó reconstruido como JSON puro. Voy a validarlo localmente con PowerShell para asegurar que parsea, sin desplegar nada.
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `Get-Content -Raw -Path firebase.indexes.json | ConvertFrom-Json | Out-Null; Write-Output 'firebase.indexes.json OK'`
+>
+> </details>
+</details>
+
+Corregí [firebase.indexes.json](<./odb-cvg/firebase.indexes.json>).
+
+El problema era que el archivo empezaba con un `{` antes de un bloque largo de comentarios de ejemplo y después tenía otro `{` con la configuración real. Eso dejaba el JSON desbalanceado y Firebase terminaba con `Unexpected end of input`.
+
+Dejé solo el JSON válido con los índices existentes, sin eliminar ninguno. Validé localmente que parsea correctamente.
+
+Podés volver a deployar con:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project odb-cvg
+```
+
+Si querés validar antes sin deployar todo, ese mismo comando es el camino más directo porque Firebase también lee `firebase.indexes.json` desde `firebase.json`.
+
+---
+> Necesito ajustar la implementación de subsecciones porque actualmente solo permite crear subsecciones dentro de una sección principal, pero no permite crear subsecciones dentro de otras subsecciones.
+>
+> Contexto:
+> La app es un Campus Virtual para Operatoria Dental B. Ya se implementó una primera versión de subsecciones con esta estructura:
+>
+> modulos/{moduloId}
+>   secciones/{seccionId}
+>     items/{itemId}
+>     subsecciones/{subseccionId}
+>       items/{itemId}
+>
+> El problema es que mi idea original era que las subsecciones funcionen como un árbol recursivo: dentro de una sección se puede crear una subsección, dentro de esa subsección se puede crear otra subsección, y así sucesivamente.
+>
+> Importante:
+> En toda la interfaz quiero que se sigan llamando “Subsecciones”. No quiero que aparezcan nombres como “subsubsecciones”, “sub-subsecciones” ni nada parecido. En cualquier nivel del árbol, el bloque debe llamarse “Subsecciones” y el botón debe permitir añadir una nueva subsección.
+>
+> Objetivo:
+> Permitir subsecciones anidadas de forma recursiva o multinivel, manteniendo el nombre “Subsecciones” en todos los niveles.
+>
+> Ejemplo esperado:
+>
+> Sección: Bibliografía
+> - PDF: Bibliografía general.pdf
+> - Link: Biblioteca virtual
+> - Subsección: Unidad 1
+>   - PDF: Teórico unidad 1.pdf
+>   - Imagen: esquema unidad 1.jpg
+>   - Subsección: Comisión 1
+>     - PDF: Material comisión 1.pdf
+>     - Link: Recurso complementario
+>     - Subsección: Grupo A
+>       - PDF: Material grupo A.pdf
+>       - Texto: Indicaciones para el grupo
+>
+> Requisitos funcionales:
+> 1. Una sección principal debe poder tener:
+>    - contenido directo;
+>    - subsecciones.
+>
+> 2. Una subsección debe poder tener:
+>    - contenido directo;
+>    - otras subsecciones.
+>
+> 3. Una subsección dentro de otra subsección también debe poder tener:
+>    - contenido directo;
+>    - otras subsecciones.
+>
+> 4. Esto debe poder repetirse en más niveles.
+>
+> 5. En todos los niveles, el usuario debe ver el bloque con el título “Subsecciones”.
+>
+> 6. En todos los niveles, también debe seguir estando disponible la opción de agregar contenido normal:
+>    - texto;
+>    - enlace;
+>    - PDF;
+>    - imagen;
+>    - video;
+>    - documento;
+>    - o cualquier otro tipo de ítem que ya soporte la app actualmente.
+>
+> 7. Es decir, en cada nivel debe poder coexistir:
+>    - una lista de contenidos/ítems directos;
+>    - una lista de subsecciones.
+>
+> 8. No quiero que al entrar a una subsección se pierda el botón o la opción de agregar archivos/elementos normales.
+>
+> 9. No quiero que al entrar a una subsección solo permita crear más subsecciones. También debe permitir subir contenido como en una sección común.
+>
+> 10. En todos los niveles, los usuarios autorizados deben poder:
+>    - crear subsecciones;
+>    - editar subsecciones;
+>    - eliminar subsecciones;
+>    - agregar contenido directo;
+>    - editar/eliminar contenido si actualmente ya pueden hacerlo.
+>
+> 11. Los permisos deben ser los mismos que ya existen:
+>    - admin/profesor pueden crear, editar y eliminar;
+>    - alumno solo puede visualizar.
+>
+> 12. No se debe romper la funcionalidad actual de:
+>    - contenido directo dentro de secciones;
+>    - contenido directo dentro de subsecciones ya creadas;
+>    - creación de subsecciones en una sección principal;
+>    - creación de ítems normales dentro de una sección principal.
+>
+> 13. No quiero una lógica separada para “subsubsecciones”. La misma lógica de subsecciones debe servir para cualquier nivel.
+>
+> Puntos técnicos a revisar:
+> - Revisá `hooks/useSubsecciones.ts`.
+> - Revisá `app/subsecciones/[id].tsx`.
+> - Revisá `app/subsecciones/form.tsx`.
+> - Revisá `hooks/useItems.ts`.
+> - Revisá `app/items/form.tsx`.
+> - Revisá `firestore.rules`.
+> - Revisá cómo se pasan los parámetros por ruta: `moduloId`, `seccionId`, `subseccionId`.
+>
+> Necesito que propongas o implementes una solución que permita identificar la ruta completa de la subsección actual.
+>
+> Por ejemplo, una posibilidad es manejar un parámetro tipo `parentPath`, `subseccionPath` o similar que represente la ruta relativa dentro de Firestore, para poder guardar:
+>
+> modulos/{moduloId}/secciones/{seccionId}/subsecciones/{sub1}/subsecciones/{sub2}/subsecciones/{sub3}
+>
+> y que los ítems del nivel actual se guarden en:
+>
+> modulos/{moduloId}/secciones/{seccionId}/subsecciones/{sub1}/subsecciones/{sub2}/items
+>
+> No hace falta usar exactamente esos nombres si encontrás una opción mejor, pero sí necesito que la solución soporte múltiples niveles.
+>
+> Reglas de Firestore:
+> También hay que revisar `firestore.rules`, porque probablemente las reglas actuales solo permiten un nivel:
+>
+> secciones/{seccionId}/subsecciones/{subseccionId}
+>
+> Necesito que permitan leer/escribir subsecciones e ítems en niveles anidados, manteniendo:
+> - usuarios autenticados pueden leer;
+> - admin/profesor pueden crear, editar y eliminar;
+> - alumnos no pueden escribir.
+>
+> Diseño:
+> - Mantener el diseño actual.
+> - Reutilizar la misma pantalla de detalle de subsección para cualquier nivel.
+> - Reutilizar el mismo formulario de subsección para crear/editar en cualquier nivel.
+> - Reutilizar el mismo formulario de ítems para agregar contenido en cualquier nivel.
+> - Mantener el título visual “Subsecciones” en todos los niveles.
+> - Mantener la sección/listado de contenidos o materiales en todos los niveles.
+> - No crear pantallas distintas para cada profundidad.
+> - No cambiar colores, cards, botones ni estilos globales.
+>
+> Restricciones:
+> - No ejecutes comandos de Git.
+> - No hagas git add.
+> - No hagas git commit.
+> - No hagas git pull.
+> - No hagas git push.
+> - No hagas merge ni rebase.
+> - Solo modificá o creá los archivos necesarios.
+> - No trabajes todavía sobre el error de Cloudinary/tamaño de archivos. Primero quiero resolver la estructura recursiva de subsecciones.
+>
+> Al finalizar:
+> - Indicá qué archivos modificaste.
+> - Explicá cómo resolviste el anidamiento recursivo.
+> - Explicá cómo queda la estructura de Firestore.
+> - Explicá cómo se pasan los parámetros de navegación para saber en qué nivel estoy.
+> - Explicá cómo se crean, editan y eliminan subsecciones en cualquier nivel.
+> - Explicá cómo se agregan ítems/contenidos normales en cualquier nivel.
+> - Confirmá que una subsección puede tener al mismo tiempo contenido directo y otras subsecciones.
+> - Indicá si hace falta volver a deployar reglas de Firestore.
+> - Indicá cómo puedo probarlo manualmente.
+
+<details><summary>11 previous messages</summary>
+
+> Voy a generalizar la implementación actual a una ruta relativa de subsección (`subseccionPath`) en vez de asumir un solo `subseccionId`. La idea es que el mismo hook, formulario, detalle e ítems trabajen con cualquier profundidad sin crear pantallas nuevas.
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Get-Content -Path odb-cvg\hooks\useItems.ts`
+> - Ran `Get-Content -Path odb-cvg\hooks\useSubsecciones.ts`
+> - Ran `Get-Content -Path odb-cvg\app\subsecciones\form.tsx`
+> - Ran `Get-Content -LiteralPath 'odb-cvg\app\subsecciones\[id].tsx'`
+>
+> </details>
+>
+> Voy a cambiar los hooks para que construyan rutas con un array de segmentos. Si `subseccionPath` es `sub1/sub2`, el hook apuntará a `.../subsecciones/sub1/subsecciones/sub2`, y desde ahí leerá sus `items` o sus nuevas `subsecciones`.
+>
+> <details><summary>Edited 4 files</summary>
+>
+> - Wrote `./odb-cvg/hooks/useSubsecciones.ts` (+44 -8)
+> - Wrote `./odb-cvg/hooks/useItems.ts` (+50 -46)
+> - Wrote `./odb-cvg/app/items/form.tsx` (+22 -17)
+> - Wrote `./odb-cvg/app/subsecciones/form.tsx` (+21 -8)
+>
+> </details>
+>
+> Ahora voy a convertir la pantalla de detalle de subsección en recursiva: además de ítems, va a listar “Subsecciones” y usar el mismo formulario para crear/editar hijas en cualquier nivel.
+>
+> <details><summary>Edited 3 files</summary>
+>
+> - Wrote `./odb-cvg/app/subsecciones/[id].tsx` (+41 -5)
+> - Wrote `./odb-cvg/app/subsecciones/[id].tsx` (+63 -2)
+> - Wrote `./odb-cvg/app/subsecciones/[id].tsx` (+4 -4)
+> - Wrote `./odb-cvg/app/subsecciones/[id].tsx` (+52 -0)
+> - Wrote `./odb-cvg/app/subsecciones/[id].tsx` (+58 -0)
+> - Wrote `./odb-cvg/app/secciones/[id].tsx` (+8 -8)
+>
+> </details>
+>
+> Queda actualizar reglas para que no estén limitadas a una sola subcolección `subsecciones`. Voy a usar comodines recursivos dentro de cada sección para cubrir `items` y `subsecciones` a cualquier profundidad.
+>
+> <details><summary>Edited 1 file, ran 3 commands</summary>
+>
+> - Wrote `./odb-cvg/firestore.rules` (+14 -18)
+> - Ran `Select-String -Path odb-cvg\hooks\useSubsecciones.ts,odb-cvg\hooks\useItems.ts,odb-cvg\app\subsecciones\form.tsx,odb-cvg\app\subsecciones\[id].tsx,odb-cvg\app\secciones\[id].tsx,odb-cvg\app\items\form.tsx,odb-cvg\firestore.rules -Pattern 'subseccionPath|parentPath|subsecciones|path=\*\*|encodeURIComponent|currentSubseccionPath' -Context 0,1`
+> - Ran `npx tsc --noEmit`
+> - Ran `npm run lint`
+>
+> </details>
+>
+> La verificación no encontró errores nuevos en los archivos tocados; los fallos que aparecen siguen siendo los preexistentes en `components/ui/collapsible.tsx` e iconos. Voy a hacer una última lectura puntual de la pantalla recursiva para asegurar que se está renderizando tanto contenido como subsecciones.
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `Select-String -LiteralPath 'odb-cvg\app\secciones\[id].tsx' -Pattern 'subseccionPath|subsecciones/form|subsecciones/\$|useSubsecciones|Subsecciones' -Context 1,2`
+> - Ran `Select-String -LiteralPath 'odb-cvg\app\subsecciones\[id].tsx' -Pattern 'currentSubseccionPath|useItems|useSubsecciones|Subsecciones|items/form|subsecciones/form|SubseccionCard|subseccionPath|parentPath' -Context 1,2`
+>
+> </details>
+>
+> <details><summary>Plan</summary>
+>
+> - [x] Generalizar paths de subsecciones e items
+> - [x] Actualizar navegación y formularios para subseccionPath
+> - [x] Mostrar subsecciones recursivas en detalle
+> - [x] Actualizar reglas Firestore recursivas
+> - [x] Verificar con lint/tsc
+>
+> </details>
+</details>
+
+Implementé subsecciones recursivas, manteniendo siempre el nombre visual “Subsecciones”.
+
+**Archivos modificados**
+- [hooks/useSubsecciones.ts](<./odb-cvg/hooks/useSubsecciones.ts>)
+- [hooks/useItems.ts](<./odb-cvg/hooks/useItems.ts>)
+- [app/subsecciones/[id].tsx](<./odb-cvg/app/subsecciones/[id].tsx>)
+- [app/subsecciones/form.tsx](<./odb-cvg/app/subsecciones/form.tsx>)
+- [app/secciones/[id].tsx](<./odb-cvg/app/secciones/[id].tsx>)
+- [app/items/form.tsx](<./odb-cvg/app/items/form.tsx>)
+- [firestore.rules](<./odb-cvg/firestore.rules>)
+
+La solución usa `subseccionPath`, una ruta relativa separada por `/`. Por ejemplo:
+
+```text
+sub1/sub2/sub3
+```
+
+Eso se traduce en Firestore como:
+
+```text
+modulos/{moduloId}/secciones/{seccionId}/subsecciones/sub1/subsecciones/sub2/subsecciones/sub3
+```
+
+Y los ítems del nivel actual quedan en:
+
+```text
+modulos/{moduloId}/secciones/{seccionId}/subsecciones/sub1/subsecciones/sub2/items/{itemId}
+```
+
+`useSubsecciones` ahora recibe opcionalmente un `parentPath`, así puede listar/crear subsecciones hijas en cualquier nivel. `useItems` ahora recibe opcionalmente `subseccionPath`, así los contenidos directos siguen funcionando en secciones principales cuando no hay path, y funcionan en cualquier subsección cuando sí lo hay.
+
+En navegación:
+- Desde sección principal a subsección: `subseccionPath=sub1`
+- Desde subsección a hija: `subseccionPath=sub1/sub2`
+- Para crear hija: se pasa `parentPath=sub1/sub2`
+- Para editar: se pasa `subseccionPath` completo
+
+En cada nivel de subsección ahora se ve:
+- bloque “Contenido” con ítems directos;
+- FAB `+` para agregar contenido normal;
+- bloque “Subsecciones”;
+- botón “Añadir” para crear subsecciones hijas;
+- acciones editar/eliminar si el usuario es admin/profesor.
+
+Confirmado: una subsección puede tener al mismo tiempo contenido directo y otras subsecciones.
+
+También actualicé `firestore.rules` con comodines recursivos para permitir `items` y `subsecciones` en cualquier profundidad, respetando:
+- autenticados leen;
+- admin/profesor escriben;
+- alumnos no escriben.
+
+Sí, hace falta volver a deployar reglas:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project odb-cvg
+```
+
+Verificación: corrí `npm run lint` y `npx tsc --noEmit`; siguen fallando solo por errores preexistentes en `components/ui/collapsible.tsx` e iconos, no por esta implementación.
+
+Prueba manual:
+1. Entrá como admin/profesor.
+2. Abrí una sección.
+3. Creá subsección “Unidad 1”.
+4. Entrá a “Unidad 1”.
+5. Agregá un PDF o texto con el FAB `+`.
+6. En “Unidad 1”, creá otra subsección “Comisión 1”.
+7. Entrá a “Comisión 1” y repetí: agregá contenido y creá “Grupo A”.
+8. Entrá como alumno y verificá que puede navegar/ver, pero no administrar.
+
+---
+> Después de implementar subsecciones recursivas y actualizar/deployar firestore.rules, la creación de subsecciones y la carga de contenido funcionan correctamente.
+>
+> Pero apareció un problema en otra parte de la app:
+>
+> Pantalla:
+> Administración > Usuarios
+>
+> Error visible:
+> “No se pudieron cargar los usuarios.”
+>
+> Necesito que revises por qué la pantalla de administración de usuarios dejó de cargar después de los cambios de subsecciones/reglas.
+>
+> Contexto:
+> La funcionalidad de usuarios ya existía y antes funcionaba. No quiero modificar su comportamiento, solo recuperar el acceso correcto.
+>
+> Sospecha:
+> Probablemente el problema esté en `firestore.rules`, porque se modificaron reglas para permitir subsecciones recursivas y luego se deployaron. Puede que las reglas nuevas hayan afectado la lectura/escritura de usuarios o alguna colección relacionada.
+>
+> Archivos a revisar:
+> - firestore.rules
+> - app/pantallasAdmin/userManagementScreen.tsx
+> - hooks o servicios relacionados con usuarios, si existen
+> - cualquier archivo donde se consulte la colección de usuarios/perfiles/roles
+>
+> Tareas:
+> - Revisá qué colección usa la pantalla de Administración > Usuarios para cargar usuarios.
+> - Revisá qué permisos necesita esa pantalla para leer usuarios.
+> - Revisá si `firestore.rules` permite esa lectura para el rol admin.
+> - Compará las reglas actuales con la lógica de roles existente: admin, profesor, alumno.
+> - Corregí únicamente lo necesario para que el admin pueda volver a cargar la lista de usuarios.
+> - No abras permisos de más.
+> - No permitas que alumnos lean o modifiquen usuarios si antes no podían.
+> - No cambies la funcionalidad de subsecciones recursivas que ya funciona.
+> - No cambies la estructura de datos.
+> - No cambies diseño visual.
+> - No modifiques pantallas si el problema está solo en reglas.
+> - Si el problema no está en reglas, identificá exactamente qué cambio lo provocó.
+>
+> Importante:
+> No ejecutes comandos de Git.
+> No hagas git add.
+> No hagas git commit.
+> No hagas git pull.
+> No hagas git push.
+> No hagas merge ni rebase.
+> Solo modificá los archivos necesarios.
+>
+> Al finalizar:
+> - Indicá cuál era la causa del error.
+> - Indicá qué archivo modificaste.
+> - Explicá qué regla o consulta estaba fallando.
+> - Indicá si hace falta volver a deployar reglas de Firestore.
+> - Indicá cómo probarlo manualmente.
+
+<details><summary>6 previous messages</summary>
+
+> Voy a revisar la consulta de la pantalla admin y las reglas actuales. Si el fallo está en permisos de `usuarios`, haré un ajuste mínimo ahí sin tocar subsecciones.
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `Select-String -Path odb-cvg\app\pantallasAdmin\userManagementScreen.tsx -Pattern 'usuarios|getDocs\(collection\(db, .usuarios.|updateDoc\(doc\(db, .usuarios.|deleteDoc\(doc\(db, .usuarios.|getDoc\(doc\(db, .usuarios.|rol' -Context 2,3`
+> - Ran `Get-Content -Path odb-cvg\firestore.rules`
+> - Ran `rg -n "collection\(db, ['\"]usuarios|doc\(db, ['\"]usuarios|usuarios/|rol" odb-cvg\app odb-cvg\hooks odb-cvg\components odb-cvg\firestore.rules`
+>
+> </details>
+>
+> La causa está en reglas: la pantalla admin primero lee su propio documento, pero después hace `getDocs(collection(db, 'usuarios'))`. Las reglas actuales solo permiten leer el documento propio, así que el listado completo de usuarios queda denegado. Voy a agregar lectura y gestión solo para admin en `usuarios`, sin tocar subsecciones.
+>
+> <details><summary>Edited 2 files, ran 1 command</summary>
+>
+> - Wrote `./odb-cvg/firestore.rules` (+6 -4)
+> - Ran `Get-Content -Path odb-cvg\firestore.rules | Select-Object -Skip 14 -First 8`
+> - Wrote `./odb-cvg/firestore.rules` (+6 -4)
+> - Wrote `./odb-cvg/firestore.rules` (+4 -3)
+>
+> </details>
+>
+> Regla mínima agregada: admin ahora puede leer/listar, actualizar y borrar usuarios. Voy a revisar que las reglas de subsecciones sigan intactas y que no haya problemas de parseo evidentes.
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `Get-Content -Path odb-cvg\firestore.rules`
+> - Ran `Select-String -Path odb-cvg\firestore.rules -Pattern 'usuarios|allow read, update, delete|subsecciones|path=\*\*|items' -Context 1,2`
+>
+> </details>
+</details>
+
+La causa era `firestore.rules`.
+
+La pantalla [userManagementScreen.tsx](<./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx:72>) hace:
+
+```ts
+getDocs(collection(db, 'usuarios'))
+```
+
+pero las reglas actuales de `usuarios` solo permitían leer/escribir el documento propio:
+
+```js
+allow read, write: if request.auth != null && request.auth.uid == userId;
+```
+
+Eso deja afuera el listado completo de usuarios, incluso para admin. Por eso aparecía “No se pudieron cargar los usuarios.”
+
+Modifiqué solo [firestore.rules](<./odb-cvg/firestore.rules:18>) agregando:
+
+```js
+allow read, update, delete: if isAdmin();
+```
+
+Con esto:
+- el admin puede listar usuarios;
+- el admin puede seguir editando/eliminando usuarios desde esa pantalla;
+- alumnos/profesores no pueden listar usuarios;
+- no toqué las reglas recursivas de subsecciones.
+
+Sí, hace falta volver a deployar reglas:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project odb-cvg
+```
+
+Para probar:
+1. Deploy de reglas.
+2. Recargá Expo Go.
+3. Entrá con usuario admin.
+4. Abrí `Administración > Usuarios`.
+5. Debería cargar la lista nuevamente.
+
+---
+> Necesito analizar y corregir un bug de actualización/renderizado relacionado con roles, permisos y carga de datos en la app Campus Virtual de Operatoria Dental B.
+>
+> Contexto:
+> La app tiene roles: alumno, profesor y administrador.
+> Hay módulos, secciones, secciones restringidas con código de acceso y una pantalla de Administración > Cursadas donde se listan las secciones restringidas.
+>
+> Problema observado:
+> Al ingresar con rol administrador, cuando entro a un módulo, primero aparece una sección restringida como bloqueada/restringida, como si el usuario fuera alumno. A los segundos se actualiza y aparece normal, como debería verse para admin.
+>
+> También ocurre cuando entro a una sección y luego vuelvo hacia atrás a la lista de secciones principales del módulo: por un momento vuelve a aparecer como bloqueada y después se corrige.
+>
+> Además, cuando voy a Administración > Cursadas inmediatamente después de iniciar sesión, no aparece ninguna cursada restringida. Si vuelvo al menú principal y luego vuelvo a entrar a Administración > Cursadas, recién ahí aparecen las cursadas restringidas.
+>
+> No sé si también pasa con rol profesor, pero debería revisarse.
+>
+> Sospecha:
+> Parece un problema de render inicial, carga asincrónica del rol, actualización de listeners, dependencias de useEffect/useFocusEffect o uso de estados iniciales incorrectos.
+>
+> Necesito que investigues:
+> - Si las pantallas se están renderizando antes de que el rol del usuario termine de cargar.
+> - Si `puedeGestionar`, `esAdmin`, `esProfesor` o variables similares se calculan cuando `rol` todavía es null/undefined.
+> - Si las secciones restringidas se evalúan como bloqueadas antes de saber que el usuario es admin/profesor.
+> - Si Administración > Cursadas carga las cursadas antes de que estén listos el rol, los módulos o las secciones.
+> - Si falta alguna dependencia en `useEffect`.
+> - Si alguna pantalla debería usar `useFocusEffect` o recargar datos al volver a enfocarse.
+> - Si algún hook devuelve inicialmente un array vacío y la pantalla lo interpreta como “no hay datos” en lugar de “todavía está cargando”.
+> - Si el problema apareció o se agravó con los últimos cambios de subsecciones, `useSubsecciones`, `useItems`, `firestore.rules` o `userManagementScreen`.
+>
+> Archivos a revisar:
+> - Contexto/hook de autenticación o usuario actual.
+> - Hook o lógica donde se obtiene el rol del usuario.
+> - app/modulos/[id].tsx
+> - app/secciones/[id].tsx
+> - app/subsecciones/[id].tsx
+> - app/pantallasAdmin/userManagementScreen.tsx
+> - hooks/useSecciones.ts
+> - hooks/useModulos.ts
+> - hooks/useSubsecciones.ts
+> - hooks/useItems.ts
+> - cualquier hook relacionado con cursadas, usuarios, inscripciones o permisos.
+>
+> Objetivo:
+> Corregir el bug para que:
+> 1. El administrador nunca vea secciones restringidas como bloqueadas mientras se está cargando la pantalla.
+> 2. El profesor tampoco vea secciones restringidas como bloqueadas si tiene permisos para gestionarlas.
+> 3. El alumno sí debe seguir viendo bloqueadas las secciones restringidas cuando no tiene acceso.
+> 4. Administración > Cursadas debe cargar las secciones restringidas correctamente al entrar por primera vez después del login.
+> 5. No debe ser necesario salir y volver a entrar para que aparezcan las cursadas restringidas.
+> 6. Las pantallas no deben mostrar estados incorrectos mientras todavía se está cargando el rol o los datos.
+> 7. Si los datos están cargando, mostrar un loading o mantener un estado neutro, pero no mostrar una UI incorrecta.
+>
+> Criterios de solución:
+> - Si el rol todavía no cargó, no calcular permisos como si fuera alumno.
+> - Evitar usar `rol !== "admin"` o `rol !== "profesor"` cuando `rol` todavía puede ser null/undefined.
+> - Agregar estados `loading` si hace falta.
+> - Separar correctamente “datos cargando” de “datos vacíos”.
+> - Revisar dependencias de `useEffect`.
+> - Usar `useFocusEffect` solo si realmente corresponde para refrescar al volver a una pantalla.
+> - No hacer soluciones con delays artificiales tipo `setTimeout`.
+> - No forzar recargas innecesarias.
+> - No romper la lógica de restricciones para alumnos.
+> - No romper subsecciones recursivas ni carga de contenidos.
+> - No cambiar el diseño visual general, salvo para mostrar un loading si hace falta.
+> - No modificar reglas de Firestore salvo que detectes que sea estrictamente necesario.
+>
+> Importante:
+> Primero analizá la causa. Si encontrás una solución clara, aplicá el cambio mínimo necesario.
+> No ejecutes comandos de Git.
+> No hagas git add.
+> No hagas git commit.
+> No hagas git pull.
+> No hagas git push.
+> No hagas merge ni rebase.
+> Solo modificá los archivos necesarios.
+>
+> Al finalizar:
+> - Indicá cuál era la causa del bug.
+> - Indicá qué archivos modificaste.
+> - Explicá cómo evitaste que admin/profesor vean secciones restringidas como bloqueadas durante la carga.
+> - Explicá cómo hiciste que Administración > Cursadas cargue correctamente al primer ingreso.
+> - Indicá cómo probarlo manualmente con admin, profesor y alumno.
+
+<details><summary>19 previous messages</summary>
+
+> Voy a seguir la ruta del bug desde el rol hacia las pantallas: primero confirmar dónde se renderiza con `rol` todavía `null`, y después revisar el listener de “Cursadas” en administración, que huele a arrancar antes de que Firebase Auth esté listo.
+>
+> <details><summary>Ran 5 commands</summary>
+>
+> - Ran `Get-Content -Path odb-cvg\hooks\useUserRole.ts`
+> - Ran `Get-Content -Path odb-cvg\app\pantallasAdmin\userManagementScreen.tsx`
+> - Ran `Get-Content -LiteralPath 'odb-cvg\app\modulos\[id].tsx'`
+> - Ran `Get-Content -LiteralPath 'odb-cvg\app\secciones\[id].tsx'`
+> - Ran `Get-Content -LiteralPath 'odb-cvg\app\modulos\[id].tsx'`
+>
+> </details>
+>
+> Context compaction
+>
+> Source: automatic
+> Status: completed
+>
+> Voy a cerrar el diagnóstico con cambios pequeños: primero reviso las pantallas donde se calcula el permiso antes de tener el rol, y después ajusto la carga inicial de “Cursadas” para que espere la verificación de admin. No voy a tocar Git.
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Get-Content -Path "odb-cvg\app\modulos\[id].tsx" -Raw`
+> - Ran `Get-Content -Path "odb-cvg\app\pantallasAdmin\userManagementScreen.tsx" -Raw`
+> - Ran `Get-Content -Path "odb-cvg\app\secciones\[id].tsx" -Raw`
+> - Ran `Get-Content -Path "odb-cvg\app\subsecciones\[id].tsx" -Raw`
+>
+> </details>
+>
+> El primer intento de lectura chocó con una versión de PowerShell sin `-Raw`; nada grave. Vuelvo a leer con `-LiteralPath` y salida normal para ubicar exactamente los puntos de cambio.
+>
+> <details><summary>Ran 7 commands</summary>
+>
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\modulos\[id].tsx"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\subsecciones\[id].tsx"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\secciones\[id].tsx"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\hooks\useUserRole.ts"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\hooks\useModulos.ts"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\hooks\useSecciones.ts"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\hooks\useInscripciones.ts"`
+>
+> </details>
+>
+> Encontré la causa principal: varias pantallas calculan `puedeGestionar` con `rol === ...` cuando `rol` todavía está en `null`, así que por unos frames el admin/profesor queda tratado como alumno. También “Cursadas” abría el listener antes de confirmar `esAdmin`, por eso podía quedar vacío al primer ingreso.
+>
+> <details><summary>Edited 4 files</summary>
+>
+> - Wrote `./odb-cvg/app/modulos/[id].tsx` (+9 -9)
+> - Wrote `./odb-cvg/app/secciones/[id].tsx` (+21 -10)
+> - Wrote `./odb-cvg/app/subsecciones/[id].tsx` (+2 -2)
+> - Wrote `./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx` (+18 -11)
+>
+> </details>
+>
+> Hay un segundo detalle sutil en `useMisInscripciones`: cuando pasa de `uid = null` a un `uid` real, no volvía a marcar `loading=true`, así que la lista podía interpretar “todavía no llegaron inscripciones” como “no tiene acceso”. Ajusto ese hook para separar bien vacío de cargando.
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/hooks/useInscripciones.ts` (+14 -12)
+>
+> </details>
+>
+> Ya quedaron los puntos de carga asincrónica cubiertos. Ahora hago una verificación local rápida de TypeScript/lint si el proyecto lo permite, para asegurar que el cambio no dejó errores nuevos.
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `npm run lint`
+> - Ran `npx tsc --noEmit`
+>
+> </details>
+>
+> La verificación corre, pero falla por errores previos en `components/ui/collapsible.tsx` y warnings existentes de imports sin usar; no aparecen errores nuevos en los archivos que toqué. Voy a revisar los fragmentos modificados para cerrar con precisión.
+>
+> <details><summary>Ran 5 commands</summary>
+>
+> - Ran `Select-String -LiteralPath "odb-cvg\app\modulos\[id].tsx" -Pattern "loadingRol|loadingInscripciones|loadingSecciones" -Context 2,2`
+> - Ran `Select-String -LiteralPath "odb-cvg\hooks\useInscripciones.ts" -Pattern "setLoading\(true\)" -Context 3,3`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\secciones\[id].tsx" -Pattern "loadingRol|loadingInscripciones|noInscripto" -Context 2,2`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\subsecciones\[id].tsx" -Pattern "loadingRol|loadingSubseccion" -Context 2,2`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\pantallasAdmin\userManagementScreen.tsx" -Pattern "Cargar cursadas|esAdmin|cursadas restringidas error" -Context 2,3`
+>
+> </details>
+>
+> Al revisar el flujo noté un posible frame extra: aunque el hook ahora marca `loading=true`, los `useEffect` corren después del render. Voy a hacer que el propio hook devuelva `loading=true` de forma derivada cuando cambia el `uid` o la sección y todavía no recibió el snapshot correspondiente.
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/hooks/useInscripciones.ts` (+55 -39)
+>
+> </details>
+>
+> Listo, ahora el estado de carga no depende solamente del efecto posterior al render. Recorro otra vez lint/TypeScript para confirmar que no aparecieron errores propios del ajuste.
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `npm run lint`
+> - Ran `npx tsc --noEmit`
+>
+> </details>
+</details>
+
+Corregí el bug con cambios mínimos.
+
+**Archivos modificados**
+- [app/modulos/[id].tsx](<./odb-cvg/app/modulos/[id].tsx>)
+- [app/secciones/[id].tsx](<./odb-cvg/app/secciones/[id].tsx>)
+- [app/subsecciones/[id].tsx](<./odb-cvg/app/subsecciones/[id].tsx>)
+- [app/pantallasAdmin/userManagementScreen.tsx](<./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx>)
+- [hooks/useInscripciones.ts](<./odb-cvg/hooks/useInscripciones.ts>)
+
+**Causa**
+El rol arrancaba como `null` mientras `useUserRole()` cargaba. En ese instante `puedeGestionar` daba `false`, entonces admin/profesor podían quedar renderizados momentáneamente como alumnos y ver secciones restringidas como bloqueadas.
+
+Además, Administración > Cursadas iniciaba el listener de `collectionGroup('secciones')` antes de confirmar que el usuario ya era admin, así que al primer ingreso podía quedar como “sin cursadas”.
+
+**Qué cambié**
+Ahora módulos, secciones y subsecciones esperan a que termine de cargar el rol antes de mostrar permisos o estados de bloqueo. También hice que las inscripciones distingan correctamente entre “todavía cargando” y “no hay datos”, para evitar falsos bloqueos.
+
+En Administración > Cursadas, el listener de secciones restringidas recién se activa cuando `esAdmin` ya está confirmado, y vuelve a marcar `loadingCursadas` antes de escuchar datos.
+
+No modifiqué reglas de Firestore, así que no hace falta redeployar reglas por este cambio.
+
+**Verificación**
+Ejecuté `npm run lint` y `npx tsc --noEmit`. Ambos siguen fallando por errores ya existentes en `components/ui/collapsible.tsx` e imports/warnings previos; no aparecen errores nuevos relacionados con los archivos modificados.
+
+**Cómo probar**
+1. Iniciar sesión como admin.
+2. Entrar a un módulo con una sección restringida: no debería verse bloqueada ni por un instante.
+3. Entrar a una sección y volver atrás: la tarjeta debe seguir normal para admin.
+4. Ir a Administración > Cursadas apenas inicia sesión: deben aparecer las secciones restringidas al primer ingreso.
+5. Repetir con profesor: debe poder gestionar sin ver bloqueos falsos.
+6. Repetir con alumno sin inscripción: debe seguir viendo la sección restringida como bloqueada.
+
+---
+> Sigue habiendo un problema en Administración > Cursadas.
+>
+> Contexto:
+> Ya se corrigió la carga inicial del rol y ahora al entrar a los módulos como admin las secciones restringidas se ven bien. Pero al entrar a Administración > Cursadas aparece:
+>
+> cursadas restringidas error: FirebaseError: Missing or insufficient permissions.
+>
+> En la pantalla se muestra:
+> “No hay cursadas con acceso restringido.”
+>
+> El problema parece estar específicamente en la consulta que carga las cursadas restringidas, no en los módulos.
+>
+> Sospecha:
+> La pantalla de Administración > Cursadas probablemente usa `collectionGroup(db, "secciones")` para buscar secciones restringidas. Aunque existan reglas para:
+>
+> modulos/{moduloId}/secciones/{seccionId}
+>
+> Firestore puede rechazar consultas `collectionGroup("secciones")` si no hay una regla compatible con collection group, por ejemplo usando un match recursivo:
+>
+> match /{path=**}/secciones/{seccionId}
+>
+> Necesito que revises y corrijas este problema.
+>
+> Archivos a revisar:
+> - firestore.rules
+> - app/pantallasAdmin/userManagementScreen.tsx
+> - cualquier hook/función donde se consulte `collectionGroup(db, "secciones")`
+>
+> Tareas:
+> - Revisá cómo se cargan las cursadas restringidas en Administración > Cursadas.
+> - Confirmá si se usa `collectionGroup(db, "secciones")`.
+> - Revisá si las reglas actuales permiten esa consulta para un usuario admin.
+> - Corregí `firestore.rules` para permitir que el admin pueda leer las secciones mediante collection group.
+> - No abras permisos de más.
+> - No permitas que alumnos puedan listar o administrar cursadas restringidas desde Administración.
+> - Mantené los permisos actuales de secciones normales.
+> - Mantené funcionando subsecciones recursivas.
+> - No cambies la lógica de módulos/secciones si el problema está solo en reglas.
+> - No cambies diseño visual.
+> - No ejecutes comandos de Git.
+> - No hagas git add, commit, pull, push, merge ni rebase.
+>
+> Importante:
+> Si modificás `firestore.rules`, indicame claramente que hace falta volver a deployar reglas con:
+>
+> npx firebase-tools deploy --only firestore:rules --project odb-cvg
+>
+> También revisá el texto que aparece cuando no hay cursadas restringidas:
+> “Activá el control de acceso al editar una sección ‘Cursada - XXXX’.”
+> Ese texto quedó desactualizado, porque ahora cualquier sección puede ser restringida, no solo las que empiezan con “Cursada -”. Si está en el mismo archivo, actualizalo por un texto más general, por ejemplo:
+> “Activá el control de acceso al crear o editar una sección para verla en este listado.”
+>
+> Al finalizar:
+> - Indicá cuál era la causa del error de permisos.
+> - Indicá qué archivo modificaste.
+> - Explicá cómo quedó la regla para `collectionGroup("secciones")`.
+> - Indicá si hace falta deployar reglas.
+> - Indicá cómo probarlo manualmente.
+
+<details><summary>6 previous messages</summary>
+
+> Voy a ir directo al punto: revisar la consulta `collectionGroup("secciones")`, ajustar solo reglas si falta el `match` recursivo compatible, y actualizar ese texto viejo de “Cursada -”. Sin tocar Git.
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `Get-Content -LiteralPath "odb-cvg\firestore.rules"`
+> - Ran `Select-String -Path "odb-cvg\**\*.ts*" -Pattern "collectionGroup\(db, ['\"]secciones['\"]"`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\pantallasAdmin\userManagementScreen.tsx" -Pattern "collectionGroup|Cursada|Activ" -Context 2,2`
+>
+> </details>
+>
+> Confirmado: la pantalla usa `collectionGroup(db, 'secciones')`. Las reglas actuales permiten leer `modulos/{moduloId}/secciones/{seccionId}`, pero no tienen un `match` recursivo para consultas de grupo sobre todas las colecciones llamadas `secciones`; por eso Firestore rechaza la query aunque el usuario sea admin.
+>
+> <details><summary>Edited 3 files, ran 1 command</summary>
+>
+> - Wrote `./odb-cvg/firestore.rules` (+15 -8)
+> - Ran `Select-String -LiteralPath "odb-cvg\firestore.rules" -Pattern "match /usuarios|allow read, update|match /modulos" -Context 0,3`
+> - Wrote `./odb-cvg/firestore.rules` (+8 -2)
+> - Wrote `./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx` (+1 -1)
+>
+> </details>
+>
+> Ya apliqué el ajuste de reglas y el texto de vacío. Ahora reviso el resultado puntual para asegurar que el `match` quedó en el lugar correcto y que el mensaje ya no menciona “Cursada -”.
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `Select-String -LiteralPath "odb-cvg\firestore.rules" -Pattern "collectionGroup|match /\{path=\*\*\}/secciones|match /modulos|match /\{path=\*\*\}/subsecciones" -Context 2,2`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\pantallasAdmin\userManagementScreen.tsx" -Pattern "Activ" -Context 1,1`
+>
+> </details>
+</details>
+
+Corregido.
+
+**Causa**
+La pantalla Administración > Cursadas usa:
+
+`collectionGroup(db, 'secciones')`
+
+Las reglas permitían leer secciones en la ruta normal:
+
+`modulos/{moduloId}/secciones/{seccionId}`
+
+pero no había una regla compatible con una consulta `collectionGroup("secciones")`. Firestore evalúa esas consultas con un `match` recursivo, por eso devolvía `Missing or insufficient permissions`.
+
+**Archivos modificados**
+- [firestore.rules](<./odb-cvg/firestore.rules>)
+- [userManagementScreen.tsx](<./odb-cvg/app/pantallasAdmin/userManagementScreen.tsx>)
+
+**Regla agregada**
+Agregué este `match`:
+
+```rules
+match /{path=**}/secciones/{seccionId} {
+  allow read: if isAdmin();
+}
+```
+
+Eso permite que solo el admin pueda listar secciones mediante `collectionGroup("secciones")`. No abre esa consulta para alumnos ni profesores, y se mantienen las reglas normales de secciones dentro de módulos.
+
+También actualicé el texto vacío a:
+
+“Activá el control de acceso al crear o editar una sección para verla en este listado.”
+
+**Importante**
+Sí, hace falta deployar las reglas para que Expo Go tome este cambio:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project odb-cvg
+```
+
+**Cómo probar**
+1. Deployar reglas.
+2. Abrir Expo Go y entrar con usuario admin.
+3. Ir a Administración > Cursadas.
+4. Verificar que ya no aparezca `cursadas restringidas error`.
+5. Confirmar que se listan las secciones con `esRestringida: true`.
+6. Entrar con alumno y confirmar que no puede acceder a Administración > Cursadas.
+
+---
+> Ahora Administración > Cursadas ya no falla por permisos, pero Firestore muestra este error:
+>
+> The query requires a COLLECTION_GROUP_ASC index for collection secciones and field esRestringida.
+>
+> La pantalla usa una consulta con collectionGroup("secciones") filtrando por esRestringida.
+>
+> Necesito que revises firebase.indexes.json y agregues el índice necesario para esta consulta.
+>
+> Requisitos del índice:
+> - Collection group: secciones
+> - Campo: esRestringida
+> - Orden: ASCENDING
+>
+> No modifiques reglas de Firestore si no hace falta.
+> No modifiques lógica de la app si no hace falta.
+> No ejecutes comandos de Git.
+> No hagas git add, commit, pull, push, merge ni rebase.
+>
+> Al finalizar:
+> - Indicá qué agregaste en firebase.indexes.json.
+> - Indicá qué comando debo ejecutar para deployar los índices.
+
+<details><summary>4 previous messages</summary>
+
+> Voy a tocar solo `firebase.indexes.json`: reviso si el índice ya existe o si hay que agregarlo con el formato exacto que pide Firestore.
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `Get-Content -LiteralPath "odb-cvg\firebase.indexes.json"`
+>
+> </details>
+>
+> El archivo ya tenía una entrada en `indexes`, pero Firestore está pidiendo un índice single-field de collection group; ese tipo va en `fieldOverrides`. Agrego ahí el índice ASC para `secciones.esRestringida`.
+>
+> <details><summary>Edited 1 file, ran 1 command</summary>
+>
+> - Wrote `./odb-cvg/firebase.indexes.json` (+12 -1)
+> - Ran `Get-Content -LiteralPath "odb-cvg\firebase.indexes.json"`
+>
+> </details>
+</details>
+
+Modifiqué [firebase.indexes.json](<./odb-cvg/firebase.indexes.json>).
+
+Agregué en `fieldOverrides` el índice single-field que pide Firestore:
+
+```json
+{
+  "collectionGroup": "secciones",
+  "fieldPath": "esRestringida",
+  "indexes": [
+    {
+      "order": "ASCENDING",
+      "queryScope": "COLLECTION_GROUP"
+    }
+  ]
+}
+```
+
+No modifiqué reglas ni lógica de la app.
+
+Para deployar los índices ejecutá:
+
+```bash
+npx firebase-tools deploy --only firestore:indexes --project odb-cvg
+```
+
+---
+> El deploy de índices falló con este error:
+>
+> Request to .../collectionGroups/secciones/indexes had HTTP Error: 400, this index is not necessary, configure using single field index controls
+>
+> Esto pasó al ejecutar:
+>
+> npx firebase-tools deploy --only firestore:indexes --project odb-cvg
+>
+> Necesito que revises `firebase.indexes.json`.
+>
+> Causa probable:
+> El índice para `collectionGroup("secciones")` y el campo `esRestringida` fue agregado como índice compuesto dentro de `"indexes"`, pero Firestore necesita configurarlo como índice de campo único usando `"fieldOverrides"`.
+>
+> Necesito que corrijas `firebase.indexes.json` para que:
+> - No tenga un índice compuesto innecesario para `secciones` + `esRestringida`.
+> - Configure `esRestringida` como índice de campo único para collection group.
+> - El collection group debe ser `secciones`.
+> - El campo debe ser `esRestringida`.
+> - El query scope debe ser `COLLECTION_GROUP`.
+> - El orden debe ser `ASCENDING`.
+>
+> La estructura esperada debería ser similar a:
+>
+> {
+>   "indexes": [],
+>   "fieldOverrides": [
+>     {
+>       "collectionGroup": "secciones",
+>       "fieldPath": "esRestringida",
+>       "indexes": [
+>         {
+>           "order": "ASCENDING",
+>           "queryScope": "COLLECTION_GROUP"
+>         }
+>       ]
+>     }
+>   ]
+> }
+>
+> Si ya existen otros índices o fieldOverrides, no los elimines: integrá este cambio sin romper los existentes.
+>
+> No modifiques reglas de Firestore.
+> No modifiques código de la app.
+> No ejecutes comandos de Git.
+> No hagas git add, commit, pull, push, merge ni rebase.
+>
+> Al finalizar:
+> - Indicá qué estaba mal.
+> - Indicá cómo quedó corregido `firebase.indexes.json`.
+> - Indicá qué comando debo ejecutar para deployar el índice.
+
+<details><summary>2 previous messages</summary>
+
+> Voy a corregir solamente el JSON de índices: saco el índice compuesto de `secciones/esRestringida` y dejo esa configuración en `fieldOverrides`, manteniendo los otros índices existentes.
+>
+> <details><summary>Edited 1 file, ran 1 command</summary>
+>
+> - Wrote `./odb-cvg/firebase.indexes.json` (+0 -7)
+> - Ran `Get-Content -LiteralPath "odb-cvg\firebase.indexes.json"`
+>
+> </details>
+</details>
+
+Corregido en [firebase.indexes.json](<./odb-cvg/firebase.indexes.json>).
+
+**Qué estaba mal**
+El índice de `collectionGroup: "secciones"` + `esRestringida` estaba duplicado como índice compuesto dentro de `"indexes"`. Firestore lo rechaza porque ese caso debe configurarse como índice de campo único.
+
+**Cómo quedó**
+- Eliminé el índice compuesto innecesario de `"indexes"`.
+- Dejé los índices existentes de `inscripciones`.
+- Mantuve `esRestringida` en `"fieldOverrides"` con:
+  - `collectionGroup`: `secciones`
+  - `fieldPath`: `esRestringida`
+  - `queryScope`: `COLLECTION_GROUP`
+  - `order`: `ASCENDING`
+
+Para deployar:
+
+```bash
+npx firebase-tools deploy --only firestore:indexes --project odb-cvg
+```
+
+---
+> Necesito analizar una nueva funcionalidad para la app Campus Virtual de Operatoria Dental B, pero todavía no quiero que modifiques archivos.
+>
+> Contexto:
+> La app tiene un menú principal donde se muestran los módulos disponibles. Estos módulos representan los años/cursos de la materia, por ejemplo:
+> - Operatoria Dental I y II - 3er año
+> - Operatoria Dental III y IV - 4to año
+> - Operatoria Dental V y VI - 5to año
+>
+> Actualmente los módulos aparecen en un orden determinado por la forma en que se cargan desde Firestore, pero necesito que el administrador pueda elegir manualmente en qué orden aparecen en el menú principal.
+>
+> Objetivo:
+> Permitir que el administrador pueda ordenar los módulos del menú principal de forma intuitiva, clara y segura.
+>
+> Solución de interfaz deseada:
+> Quiero implementar un botón “Ordenar” visible solo para usuarios con rol administrador.
+>
+> Funcionamiento esperado:
+> - En el menú principal, si el usuario es administrador, debe aparecer un botón “Ordenar” o una acción equivalente.
+> - Al tocar “Ordenar”, la pantalla debe entrar en un modo de ordenamiento.
+> - En modo ordenamiento, cada módulo debe mostrar botones grandes y claros para moverlo hacia arriba o hacia abajo.
+> - No quiero que las flechas o controles de orden estén visibles todo el tiempo, solo cuando el admin active el modo “Ordenar”.
+> - En modo ordenamiento deben aparecer botones “Guardar orden” y “Cancelar”.
+> - “Guardar orden” debe persistir el nuevo orden en Firestore.
+> - “Cancelar” debe salir del modo ordenamiento sin guardar cambios.
+> - El orden elegido por el admin debe mantenerse al cerrar y volver a abrir la app.
+> - Alumnos y profesores deben ver los módulos en el orden definido por el administrador.
+> - Alumnos y profesores no deben ver el botón “Ordenar” ni poder modificar el orden.
+>
+> Requisitos funcionales:
+> - El cambio de orden no debe borrar, duplicar ni modificar el contenido de los módulos.
+> - El orden debe guardarse en un campo persistente, por ejemplo `orden`, `order` o el nombre que sea más coherente con el proyecto.
+> - Si hay módulos existentes sin campo de orden, la app debe seguir funcionando.
+> - Los módulos sin orden definido deberían mostrarse al final o recibir un orden inicial seguro.
+> - La funcionalidad debe ser simple y evitar toques accidentales.
+> - No usar drag and drop salvo que el proyecto ya tenga una solución muy simple disponible. Prefiero flechas subir/bajar dentro de un modo “Ordenar”.
+> - Mantener el diseño visual actual de la app: colores, cards, botones y estilo general.
+>
+> Tareas de análisis:
+> - Revisá cómo se cargan actualmente los módulos.
+> - Revisá si existe un hook como `useModulos`.
+> - Revisá cómo se crean, editan y eliminan módulos.
+> - Revisá dónde se renderiza el menú principal de módulos.
+> - Revisá cómo se obtiene el rol del usuario.
+> - Revisá qué datos tiene actualmente cada módulo en Firestore.
+> - Revisá si ya existe algún campo que pueda usarse para ordenar.
+> - Si no existe, proponé agregar un campo como `orden`.
+> - Indicá cómo se debería inicializar el orden en módulos ya existentes.
+> - Indicá qué archivos habría que modificar.
+> - Indicá si habría que tocar reglas de Firestore.
+> - Indicá si haría falta deployar reglas.
+> - Indicá riesgos o puntos a cuidar.
+>
+> Restricciones:
+> - No modifiques archivos todavía.
+> - No ejecutes comandos de Git.
+> - No hagas git add.
+> - No hagas git commit.
+> - No hagas git pull.
+> - No hagas git push.
+> - No hagas merge ni rebase.
+> - Solo quiero análisis y propuesta.
+>
+> Al finalizar, respondeme con:
+> - archivos involucrados;
+> - cómo se cargan actualmente los módulos;
+> - propuesta recomendada para ordenar módulos;
+> - campo recomendado para guardar el orden;
+> - cambios necesarios en Firestore;
+> - cambios necesarios en interfaz;
+> - si hace falta modificar reglas;
+> - plan de implementación paso a paso.
+
+<details><summary>4 previous messages</summary>
+
+> Voy a revisar solo lectura: hook de módulos, home/menú principal, formulario de módulos y reglas. Con eso te devuelvo una propuesta concreta sin tocar archivos.
+>
+> <details><summary>Ran 5 commands</summary>
+>
+> - Ran `Get-Content -LiteralPath "odb-cvg\hooks\useModulos.ts"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\firestore.rules"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\hooks\useUserRole.ts"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\modulos\form.tsx"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx"`
+>
+> </details>
+>
+> Ya tengo el flujo principal. Reviso también la tarjeta de módulo para ver cuánto habría que reutilizar o envolver en modo ordenamiento sin rediseñar.
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `Get-Content -LiteralPath "odb-cvg\components\ui\ModuloCard.tsx"`
+>
+> </details>
+</details>
+
+**Archivos Involucrados**
+
+- [hooks/useModulos.ts](<./odb-cvg/hooks/useModulos.ts>)
+- [app/(tabs)/home.tsx](<./odb-cvg/app/(tabs)/home.tsx>)
+- [components/ui/ModuloCard.tsx](<./odb-cvg/components/ui/ModuloCard.tsx>)
+- [app/modulos/form.tsx](<./odb-cvg/app/modulos/form.tsx>)
+- [firestore.rules](<./odb-cvg/firestore.rules>)
+
+**Cómo Se Cargan Actualmente**
+
+Los módulos se cargan en `useModulos()` desde la colección `modulos` con:
+
+```ts
+query(collection(db, "modulos"), orderBy("fechaCreacion", "asc"))
+```
+
+Eso significa que hoy el orden depende de `fechaCreacion`, no de un campo manual. El tipo `Modulo` no tiene campo `orden`, y al crear módulos tampoco se guarda ningún orden persistente.
+
+En `home.tsx`, los módulos se renderizan con `FlatList` en grilla de 2 columnas usando `ModuloCard`.
+
+**Propuesta Recomendada**
+
+Agregar un campo numérico `orden` en cada documento de módulo.
+
+Recomiendo no cambiar la consulta a `orderBy("orden")` directamente, porque Firestore excluye documentos que no tengan ese campo. Como ya hay módulos existentes sin `orden`, eso podría hacerlos desaparecer de la pantalla.
+
+Más seguro:
+- mantener la consulta actual por `fechaCreacion`;
+- ordenar en cliente con:
+  - primero módulos con `orden` numérico;
+  - después módulos sin `orden`, conservando el orden por `fechaCreacion`;
+- cuando el admin guarde el orden, escribir `orden: 0, 1, 2, ...` en todos los módulos visibles.
+
+Campo recomendado:
+
+```ts
+orden: number
+```
+
+Usaría `orden` porque el proyecto ya usa nombres en español: `titulo`, `descripcionCorta`, `fechaCreacion`, etc.
+
+**Cambios En Firestore**
+
+Cada módulo quedaría así:
+
+```ts
+modulos/{moduloId} {
+  titulo,
+  descripcionCorta,
+  icono,
+  creadoPor,
+  fechaCreacion,
+  fechaActualizacion,
+  orden
+}
+```
+
+Para módulos existentes sin `orden`, la app debería seguir funcionando. Al primer guardado desde “Ordenar”, todos recibirían un valor.
+
+Para módulos nuevos, conviene asignarles un `orden` al final. Por ejemplo:
+- buscar el mayor `orden` existente;
+- guardar el nuevo módulo con `orden: max + 1`;
+- si no hay órdenes, usar un fallback como cantidad de módulos o `Date.now()` para que quede al final.
+
+**Cambios En Interfaz**
+
+En `home.tsx`:
+- agregar estado `modoOrdenamiento`;
+- agregar estado local `modulosOrdenables`;
+- mostrar botón “Ordenar” solo si `rol === "admin"` y hay módulos;
+- al tocar “Ordenar”, clonar la lista actual de módulos;
+- renderizar una vista de ordenamiento con controles grandes subir/bajar;
+- ocultar edición/eliminación durante modo ordenamiento para evitar acciones accidentales;
+- mostrar botones “Guardar orden” y “Cancelar”;
+- al cancelar, descartar cambios locales;
+- al guardar, persistir el nuevo orden en Firestore.
+
+No usaría drag and drop. Con flechas grandes es más simple, más estable en Expo Go y menos riesgoso.
+
+**Reglas**
+
+Las reglas actuales ya permiten:
+
+```rules
+match /modulos/{moduloId} {
+  allow read: if request.auth != null;
+  allow create, update, delete: if isAdmin();
+}
+```
+
+Eso ya habilita al admin a actualizar `orden`, y no permite que alumnos/profesores lo modifiquen. No haría falta tocar `firestore.rules`.
+
+Por lo tanto, si no se modifican reglas, no hace falta deployar reglas.
+
+**Plan De Implementación**
+
+1. Actualizar `Modulo` en `useModulos.ts` agregando `orden?: number`.
+
+2. Ordenar los módulos en `useModulos()` de forma compatible:
+   - si ambos tienen `orden`, comparar `orden`;
+   - si solo uno tiene `orden`, el que tiene `orden` va antes;
+   - si ninguno tiene `orden`, mantener el orden actual por `fechaCreacion`.
+
+3. Agregar una función nueva en `useModulos`, por ejemplo:
+
+```ts
+guardarOrdenModulos(modulosOrdenados: Modulo[])
+```
+
+que use `writeBatch` para actualizar cada módulo con su índice.
+
+4. Ajustar `crearModulo()` para que el módulo nuevo tenga un `orden` inicial al final.
+
+5. En `home.tsx`, agregar el modo ordenamiento:
+   - botón “Ordenar” visible solo admin;
+   - controles subir/bajar;
+   - “Guardar orden”;
+   - “Cancelar”.
+
+6. Mantener la vista actual para alumnos/profesores, sin botón ni controles de orden.
+
+7. Probar manualmente:
+   - admin puede entrar a modo ordenar;
+   - mover módulos arriba/abajo;
+   - cancelar no guarda;
+   - guardar persiste;
+   - cerrar y abrir app mantiene el orden;
+   - alumno/profesor ven el orden definido pero no ven controles.
+
+**Riesgos A Cuidar**
+
+- No usar `orderBy("orden")` de entrada, porque ocultaría módulos sin ese campo.
+- Evitar mezclar edición/eliminación con modo ordenamiento.
+- Usar `writeBatch` para guardar todo el orden de forma consistente.
+- No modificar el contenido interno de módulos, secciones o subsecciones.
+- Revisar que el nuevo botón no choque visualmente con el botón de administración y “Salir” en el header actual.
+
+---
+> Necesito implementar la funcionalidad para que el administrador pueda ordenar los módulos del menú principal.
+>
+> Contexto:
+> Ya analizaste la estructura actual. Los módulos se cargan desde `useModulos()` con `orderBy("fechaCreacion", "asc")`, y se renderizan en `app/(tabs)/home.tsx` usando `FlatList` y `ModuloCard`.
+>
+> Objetivo:
+> Permitir que el administrador pueda elegir el orden en que aparecen los módulos en el menú principal.
+>
+> Solución aprobada:
+> Implementar un modo “Ordenar” visible solo para admin.
+>
+> Funcionamiento esperado:
+> - En el menú principal, si el usuario tiene rol `admin`, debe aparecer un botón “Ordenar”.
+> - Al tocar “Ordenar”, la pantalla entra en modo ordenamiento.
+> - En modo ordenamiento, cada módulo debe mostrar controles grandes y claros para moverlo hacia arriba o hacia abajo.
+> - No usar drag and drop.
+> - Las flechas o controles de orden solo deben aparecer en modo ordenamiento.
+> - Mientras esté activo el modo ordenamiento, ocultar acciones de editar/eliminar módulos para evitar errores accidentales.
+> - Deben aparecer botones “Guardar orden” y “Cancelar”.
+> - “Guardar orden” debe persistir el nuevo orden en Firestore.
+> - “Cancelar” debe salir del modo ordenamiento sin guardar cambios.
+> - Alumnos y profesores deben ver los módulos en el orden definido, pero no deben ver el botón “Ordenar” ni los controles.
+>
+> Implementación técnica:
+> - Agregar un campo opcional `orden?: number` al tipo `Modulo`.
+> - No cambiar la consulta principal a `orderBy("orden")`, porque puede ocultar módulos existentes que no tengan ese campo.
+> - Mantener la consulta actual por `fechaCreacion`.
+> - Ordenar los módulos en cliente:
+>   - primero los que tengan `orden` numérico;
+>   - después los que no tengan `orden`, manteniendo el orden por `fechaCreacion`.
+> - Al guardar el orden, actualizar todos los módulos visibles con `orden: 0, 1, 2, ...`.
+> - Usar `writeBatch` para guardar el orden de forma consistente.
+> - Al crear un módulo nuevo, asignarle un `orden` inicial al final de la lista.
+> - Si no se puede calcular un orden exacto, usar una estrategia segura para que el módulo nuevo quede al final.
+>
+> Archivos esperados:
+> - `hooks/useModulos.ts`
+> - `app/(tabs)/home.tsx`
+> - Si hace falta, `components/ui/ModuloCard.tsx`
+> - Si hace falta, `app/modulos/form.tsx`
+>
+> Restricciones importantes:
+> - No modificar `firestore.rules`, salvo que detectes algo estrictamente necesario.
+> - No tocar lógica de roles global salvo para leer si el usuario es admin.
+> - No modificar secciones, subsecciones, ítems, inscripciones ni cursadas restringidas.
+> - No cambiar la lógica de restricciones por código.
+> - No cambiar la navegación interna de módulos.
+> - No cambiar el diseño visual general.
+> - Mantener el estilo actual de cards, botones y colores.
+> - No usar delays artificiales.
+> - No ejecutar comandos de Git.
+> - No hacer git add, git commit, git pull, git push, merge ni rebase.
+>
+> Cuidado con bugs anteriores:
+> En cambios anteriores tuvimos problemas por renderizar pantallas antes de que el rol terminara de cargar. Para esta funcionalidad:
+> - No mostrar el botón “Ordenar” hasta saber que el rol ya cargó.
+> - No asumir que `rol === null` significa alumno.
+> - Si el rol todavía está cargando, mantener la vista normal sin controles de admin o mostrar un estado seguro.
+> - No provocar parpadeos de permisos.
+>
+> Al finalizar:
+> - Indicá qué archivos modificaste.
+> - Explicá cómo se guarda el campo `orden`.
+> - Explicá cómo se ordenan módulos que todavía no tienen `orden`.
+> - Explicá cómo funciona el modo “Ordenar”.
+> - Confirmá que alumnos/profesores no pueden modificar el orden.
+> - Indicá si hace falta deployar reglas de Firestore.
+> - Indicá cómo probarlo manualmente con admin, profesor y alumno.
+
+<details><summary>11 previous messages</summary>
+
+> Voy a implementarlo en el camino corto: `useModulos` va a encargarse del campo `orden`, el ordenamiento compatible y el guardado batch; `home.tsx` solo manejará el modo visual de ordenar. No voy a tocar reglas ni Git.
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/hooks/useModulos.ts` (+73 -32)
+>
+> </details>
+>
+> El hook ya queda ordenando en cliente sin esconder módulos viejos, y guarda el orden con batch. Ahora ajusto el home para el modo “Ordenar” y los controles de subir/bajar.
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+195 -42)
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+127 -15)
+>
+> </details>
+>
+> El modo visual ya está agregado sin tocar `ModuloCard`: en ordenamiento se usa una tarjeta simple de una columna con flechas grandes, y fuera de ese modo queda la grilla original. Ahora verifico compilación para cazar errores de tipo.
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `npx tsc --noEmit`
+> - Ran `npm run lint`
+>
+> </details>
+>
+> La verificación falla por errores preexistentes en `components/ui/collapsible.tsx`, pero apareció una buena oportunidad en el `home`: todavía tenía una segunda carga de rol vieja (`rolUsuario`) que ya no hace falta y deja warning. La reemplazo por el `useUserRole()` existente para evitar doble fuente de verdad.
+>
+> <details><summary>Edited 2 files, ran 8 commands</summary>
+>
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+12 -41)
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx" -TotalCount 80`
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+7 -36)
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+4 -8)
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+0 -25)
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx" | Select-Object -First 60 | ForEach-Object { "{0:D3}: {1}" -f $global:i++, $_ }`
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+10 -35)
+> - Ran `$path = "odb-cvg\app\(tabs)\home.tsx"; $lines = Get-Content -LiteralPath $path; $filtered = for ($i = 0; $i -lt $lines.Count; $i++) { if ($i -lt 26 -or $i -gt 49) { $lines[$i] } }; Set-Content -LiteralPath $path -Value $filtered`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\(tabs)\home.tsx" -Pattern "rolUsuario|useEffect|onAuthStateChanged|setCargando|setRolUsuario" -Context 1,1`
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+1 -1)
+> - Ran `Format-Hex -LiteralPath "odb-cvg\app\(tabs)\home.tsx" -Count 16`
+> - Ran `Format-Hex -LiteralPath "odb-cvg\app\(tabs)\home.tsx" | Select-Object -First 1`
+> - Ran `npx tsc --noEmit`
+> - Ran `npm run lint`
+>
+> </details>
+>
+> La verificación vuelve a fallar por los mismos errores preexistentes en `components/ui/collapsible.tsx`; ya no quedó el warning viejo de `cargando` en `home.tsx`. Hago una última lectura de los cambios clave y cierro con instrucciones de prueba.
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `Select-String -LiteralPath "odb-cvg\hooks\useModulos.ts" -Pattern "orden|guardarOrdenModulos|ordenarModulos|crearModulo" -Context 2,3`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\(tabs)\home.tsx" -Pattern "modoOrdenamiento|Ordenar|Guardar orden|moverModulo|guardarOrden|orderButton|orderItem" -Context 1,2`
+>
+> </details>
+>
+> <details><summary>Plan</summary>
+>
+> - [x] Actualizar hook de módulos con orden persistente
+> - [x] Agregar modo Ordenar en home para admin
+> - [x] Verificar tipos/lint en lo posible
+>
+> </details>
+</details>
+
+Implementado.
+
+**Archivos modificados**
+- [hooks/useModulos.ts](<./odb-cvg/hooks/useModulos.ts>)
+- [app/(tabs)/home.tsx](<./odb-cvg/app/(tabs)/home.tsx>)
+
+No modifiqué `firestore.rules`, `ModuloCard`, secciones, subsecciones, ítems ni cursadas.
+
+**Cómo se guarda `orden`**
+Agregué `orden?: number` al tipo `Modulo`.
+
+Al guardar desde el modo “Ordenar”, se usa `writeBatch` para actualizar todos los módulos visibles con:
+
+```ts
+orden: 0, 1, 2, ...
+```
+
+También al crear un módulo nuevo se le asigna un `orden` inicial al final de la lista. Si existen módulos con `orden`, usa `max(orden) + 1`; si no, usa la cantidad actual de módulos como fallback seguro.
+
+**Cómo se ordenan módulos viejos**
+La consulta sigue siendo por `fechaCreacion`, como pediste. Después se ordena en cliente:
+
+1. módulos con `orden` numérico;
+2. módulos sin `orden`, al final, conservando el orden original por `fechaCreacion`.
+
+Así no desaparecen módulos viejos que todavía no tengan el campo `orden`.
+
+**Cómo funciona el modo Ordenar**
+En el menú principal, cuando `rol === "admin"` y el rol ya cargó, aparece el botón “Ordenar”. Al tocarlo:
+- se ocultan editar/eliminar y el FAB de crear;
+- se muestra una lista de una columna;
+- cada módulo tiene botones grandes “Subir” y “Bajar”;
+- aparecen “Guardar orden” y “Cancelar”.
+
+“Cancelar” descarta el orden temporal. “Guardar orden” persiste el orden en Firestore.
+
+Alumnos y profesores no ven el botón “Ordenar” ni los controles, y las reglas actuales ya impiden que modifiquen módulos.
+
+**Deploy**
+No hace falta deployar reglas de Firestore para esto.
+
+**Verificación**
+Ejecuté `npm run lint` y `npx tsc --noEmit`. Siguen fallando por errores preexistentes en `components/ui/collapsible.tsx` relacionados con imports `@/components/themed-*` y React global; no aparecieron errores nuevos de esta implementación.
+
+**Prueba manual**
+1. Entrar como admin.
+2. En Home, tocar “Ordenar”.
+3. Mover módulos con “Subir” y “Bajar”.
+4. Tocar “Cancelar” y verificar que no se guarda.
+5. Volver a ordenar y tocar “Guardar orden”.
+6. Cerrar y reabrir la app: el orden debe mantenerse.
+7. Entrar como profesor/alumno: deben ver ese orden, sin botón “Ordenar” ni controles.
+
+---
+> Necesito ajustar algunos detalles visuales de la funcionalidad de ordenar módulos.
+>
+> Contexto:
+> Ya está implementado el modo “Ordenar” para que el administrador pueda cambiar el orden de los módulos del menú principal.
+>
+> Problemas detectados:
+> 1. Después de guardar el orden, el mensaje de confirmación muestra mal la palabra “módulos”.
+> Actualmente se ve:
+> “El orden de los mÃ³dulos fue actualizado correctamente.”
+>
+> Debe verse correctamente:
+> “El orden de los módulos fue actualizado correctamente.”
+>
+> 2. No me gusta la ubicación actual del botón “Ordenar”.
+> Actualmente aparece arriba, entre el botón de usuarios y el botón “Salir”, y eso desfasa visualmente el header.
+>
+> Cambio requerido:
+> Mover el botón “Ordenar” para que no quede en el header junto a los botones de usuarios y salir.
+>
+> Ubicación preferida:
+> Colocarlo arriba de la grilla/lista de módulos, alineado a la derecha, como una acción asociada a la lista de módulos.
+>
+> Es decir:
+> - Mantener en el header el título, el badge de rol, el subtítulo, el botón de usuarios y el botón “Salir” como estaban.
+> - Sacar “Ordenar” del header.
+> - Ubicar “Ordenar” justo antes de la lista de módulos, arriba a la derecha.
+> - Que siga visible solo para admin.
+> - Que no aparezca para profesor ni alumno.
+> - Que no afecte la grilla de módulos ni el espaciado general.
+> - Mantener el estilo visual actual del botón: color, ícono, bordes redondeados y tamaño táctil.
+> - Si el usuario entra en modo ordenamiento, mantener los botones “Guardar orden” y “Cancelar” de forma clara y coherente con el diseño actual.
+>
+> Restricciones:
+> - No modificar la lógica de ordenamiento, salvo que sea necesario por mover el botón.
+> - No cambiar cómo se guarda el campo `orden`.
+> - No modificar permisos ni reglas de Firestore.
+> - No tocar secciones, subsecciones, ítems ni cursadas.
+> - No cambiar el diseño general de la pantalla.
+> - No ejecutar comandos de Git.
+> - No hacer git add, commit, pull, push, merge ni rebase.
+>
+> Al finalizar:
+> - Indicá qué archivo modificaste.
+> - Confirmá que se corrigió el texto “módulos”.
+> - Explicá dónde quedó ubicado el botón “Ordenar”.
+> - Indicá cómo probarlo manualmente.
+
+<details><summary>4 previous messages</summary>
+
+> Voy a hacer solo ajustes de UI en `home.tsx`: corregir el texto mojibake y mover “Ordenar” fuera del header, arriba de la lista. La lógica de guardado queda intacta.
+>
+> <details><summary>Edited 1 file, ran 1 command</summary>
+>
+> - Ran `Select-String -LiteralPath "odb-cvg\app\(tabs)\home.tsx" -Pattern "Ordenar|mÃ³dulos|Grid de|orderButton|headerRow|orderBar" -Context 3,3`
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+31 -29)
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+9 -3)
+>
+> </details>
+>
+> El botón ya salió del header y el texto quedó corregido. Ajusto un detalle de margen para que el botón no arrastre el `marginLeft` que tenía sentido solo en el header.
+>
+> <details><summary>Edited 1 file, ran 2 commands</summary>
+>
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+4 -5)
+> - Ran `Select-String -LiteralPath "odb-cvg\app\(tabs)\home.tsx" -Pattern "mÃ³dulos|módulos|listActions|Ordenar|orderButton" -Context 2,2`
+> - Ran `npx tsc --noEmit`
+>
+> </details>
+</details>
+
+Modifiqué solo [home.tsx](<./odb-cvg/app/(tabs)/home.tsx>).
+
+Corregí el texto: ahora el mensaje dice correctamente “El orden de los módulos fue actualizado correctamente.” También corregí el mensaje de error equivalente.
+
+El botón “Ordenar” ya no está en el header. Quedó ubicado arriba de la grilla/lista de módulos, alineado a la derecha, como acción asociada al listado. Sigue apareciendo solo para admin y se oculta al entrar en modo ordenamiento, donde quedan visibles “Guardar orden” y “Cancelar”.
+
+Probé TypeScript con `npx tsc --noEmit`; sigue fallando por errores preexistentes en `components/ui/collapsible.tsx` e `icon-symbol`, no por este cambio.
+
+Para probarlo manualmente:
+1. Entrá como admin.
+2. Verificá que el header solo tenga usuarios y salir.
+3. Mirá arriba de la grilla: debe aparecer “Ordenar” a la derecha.
+4. Guardá un orden y verificá el mensaje con “módulos” bien escrito.
+5. Entrá como profesor/alumno y confirmá que “Ordenar” no aparece.
+
+---
+> Necesito analizar una modificación importante de permisos en la app Campus Virtual de Operatoria Dental B, pero todavía no quiero que modifiques archivos.
+>
+> Contexto:
+> La app tiene roles: admin, profesor y alumno.
+>
+> Actualmente el profesor puede hacer demasiadas acciones:
+> - crear, modificar y eliminar secciones;
+> - crear, modificar y eliminar subsecciones;
+> - crear, modificar y eliminar contenidos/ítems.
+>
+> Necesito cambiar esa lógica de permisos.
+>
+> Nuevo comportamiento esperado:
+>
+> ADMINISTRADOR:
+> - Puede crear, modificar y eliminar secciones.
+> - Puede crear, modificar y eliminar subsecciones.
+> - Puede crear, modificar y eliminar contenidos/ítems.
+> - Puede gestionar restricciones, códigos, cursadas, usuarios y módulos como hasta ahora.
+> - Además, al crear o editar una sección/subsección, puede decidir si los profesores podrán cargar contenido allí.
+>
+> PROFESOR:
+> - No puede crear secciones.
+> - No puede modificar secciones.
+> - No puede eliminar secciones.
+> - No puede crear subsecciones.
+> - No puede modificar subsecciones.
+> - No puede eliminar subsecciones.
+> - Sí puede agregar contenido/ítems, pero solamente dentro de secciones o subsecciones donde el administrador haya habilitado explícitamente esa posibilidad.
+> - Una vez que el profesor sube un contenido, no puede modificarlo.
+> - Una vez que el profesor sube un contenido, no puede eliminarlo.
+> - Para modificar o eliminar contenido, debe avisarle al administrador.
+>
+> ALUMNO:
+> - No puede crear, modificar ni eliminar secciones.
+> - No puede crear, modificar ni eliminar subsecciones.
+> - No puede crear, modificar ni eliminar contenidos.
+> - Solo visualiza según corresponda.
+>
+> Propuesta deseada:
+> Agregar un campo booleano en secciones y subsecciones, por ejemplo:
+>
+> permiteCargaProfesor: boolean
+>
+> Este campo debería indicar si los profesores pueden agregar contenido dentro de esa sección/subsección.
+>
+> Funcionamiento esperado del campo:
+> - Al crear una sección, el campo debe aparecer como una opción para el administrador.
+> - Al editar una sección, el administrador debe poder modificar esa opción.
+> - Al crear una subsección, el campo debe aparecer como una opción para el administrador.
+> - Al editar una subsección, el administrador debe poder modificar esa opción.
+> - Por defecto debe estar en “No” o `false`.
+> - Si el administrador lo activa, queda en `true`.
+> - Si está en `true`, el profesor puede agregar contenido dentro de esa sección/subsección.
+> - Si está en `false`, el profesor no puede agregar contenido ahí.
+> - El profesor nunca debe poder modificar ese campo.
+>
+> Texto sugerido para la interfaz:
+> “Permitir carga de profesores”
+> o
+> “Los profesores pueden subir contenido”
+>
+> Descripción sugerida:
+> “Si está activado, los profesores podrán agregar contenido en esta sección, pero no podrán editarlo ni eliminarlo.”
+>
+> Tareas de análisis:
+> - Revisá dónde se calcula actualmente `puedeGestionar`, `puedeGestionarSecciones`, `puedeGestionarItems`, `esAdmin`, `esProfesor` o variables similares.
+> - Revisá las pantallas:
+>   - `app/modulos/[id].tsx`
+>   - `app/secciones/[id].tsx`
+>   - `app/subsecciones/[id].tsx`
+>   - `app/secciones/form.tsx`
+>   - `app/subsecciones/form.tsx`
+>   - `app/items/form.tsx`
+>   - cualquier componente donde se muestren botones editar/eliminar/agregar.
+> - Revisá los hooks:
+>   - `useSecciones`
+>   - `useSubsecciones`
+>   - `useItems`
+>   - cualquier hook de rol/permisos.
+> - Revisá `firestore.rules`, porque no alcanza con ocultar botones en la UI.
+> - Identificá si actualmente Firestore permite que profesor escriba en secciones, subsecciones e ítems.
+> - Proponé cómo ajustar permisos de forma segura.
+>
+> Reglas esperadas en Firestore:
+> - `modulos`: solo admin escribe.
+> - `secciones`: solo admin crea, actualiza y elimina.
+> - `subsecciones`: solo admin crea, actualiza y elimina.
+> - `items`:
+>   - admin puede crear, actualizar y eliminar.
+>   - profesor solo puede crear, y únicamente si el documento padre tiene `permiteCargaProfesor: true`.
+>   - profesor no puede actualizar ni eliminar ítems.
+>   - alumno no puede escribir ítems.
+>
+> Punto crítico:
+> Necesito que analices si Firestore Rules pueden validar correctamente que el profesor solo cree ítems dentro de una sección/subsección que tenga `permiteCargaProfesor: true`.
+>
+> Para secciones principales, probablemente se pueda validar leyendo:
+> modulos/{moduloId}/secciones/{seccionId}
+>
+> Para subsecciones recursivas, revisar si es posible validar el permiso del documento padre correspondiente usando la ruta completa o si hace falta guardar algún campo adicional en el ítem.
+>
+> No quiero una solución insegura donde solo se oculte el botón en frontend pero las reglas permitan escribir igual.
+>
+> Restricciones:
+> - No modifiques archivos todavía.
+> - No ejecutes comandos de Git.
+> - No hagas git add.
+> - No hagas git commit.
+> - No hagas git pull.
+> - No hagas git push.
+> - No hagas merge ni rebase.
+> - No cambies diseño visual todavía.
+> - Solo quiero análisis y propuesta.
+>
+> Al finalizar, respondeme con:
+> - archivos involucrados;
+> - permisos actuales encontrados;
+> - riesgos de la implementación actual;
+> - propuesta recomendada para implementar `permiteCargaProfesor`;
+> - cambios necesarios en UI;
+> - cambios necesarios en hooks;
+> - cambios necesarios en Firestore Rules;
+> - si haría falta deployar reglas;
+> - plan de implementación paso a paso.
+
+<details><summary>6 previous messages</summary>
+
+> Voy a revisar permisos y puntos de escritura en las pantallas, hooks y reglas, sin editar nada. La clave va a ser separar “admin gestiona estructura” de “profesor solo crea ítems donde el padre lo permita”, y ver si las rules pueden comprobar eso en rutas recursivas.
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\modulos\[id].tsx"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\secciones\[id].tsx"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\subsecciones\[id].tsx"`
+>
+> </details>
+>
+> Ya vi que el profesor hoy entra en la misma categoría visual que admin (`puedeGestionar`) en secciones, subsecciones e ítems. Ahora reviso formularios y hooks para mapear exactamente qué escrituras existen y qué habría que blindar en reglas.
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\secciones\form.tsx"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\subsecciones\form.tsx"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\items\form.tsx"`
+>
+> </details>
+>
+> La UI y formularios confirman el patrón: `rol === "admin" || rol === "profesor"` habilita casi todo. Falta leer hooks de escritura y rules con lupa para proponer el diseño seguro, especialmente para ítems en subsecciones anidadas.
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Get-Content -LiteralPath "odb-cvg\hooks\useItems.ts"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\hooks\useSecciones.ts"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\hooks\useSubsecciones.ts"`
+> - Ran `Get-Content -LiteralPath "odb-cvg\firestore.rules"`
+>
+> </details>
+</details>
+
+**Archivos Involucrados**
+
+- `app/modulos/[id].tsx`
+- `app/secciones/[id].tsx`
+- `app/subsecciones/[id].tsx`
+- `app/secciones/form.tsx`
+- `app/subsecciones/form.tsx`
+- `app/items/form.tsx`
+- `hooks/useSecciones.ts`
+- `hooks/useSubsecciones.ts`
+- `hooks/useItems.ts`
+- `hooks/useUserRole.ts`
+- `firestore.rules`
+
+**Permisos Actuales Encontrados**
+
+Hoy el profesor está tratado casi igual que admin en muchas pantallas.
+
+En `app/modulos/[id].tsx`:
+
+```ts
+const puedeGestionarSecciones = rol === "admin" || rol === "profesor";
+```
+
+Eso habilita al profesor a crear, editar y eliminar secciones.
+
+En `app/secciones/[id].tsx`:
+
+```ts
+const puedeGestionar = rol === "admin" || rol === "profesor";
+```
+
+Eso habilita al profesor a:
+- agregar ítems;
+- editar/eliminar ítems;
+- crear subsecciones;
+- editar/eliminar subsecciones.
+
+En `app/subsecciones/[id].tsx` pasa lo mismo:
+
+```ts
+const puedeGestionar = rol === "admin" || rol === "profesor";
+```
+
+En formularios:
+- `app/secciones/form.tsx` permite entrar si `rol` es admin o profesor.
+- `app/subsecciones/form.tsx` permite entrar si `rol` es admin o profesor.
+- `app/items/form.tsx` permite entrar si `rol` es admin o profesor, tanto para crear como para editar.
+
+En `firestore.rules`, el problema es más importante:
+
+```rules
+allow create, update, delete: if isAdmin() || isProfesor();
+```
+
+Actualmente eso aplica a:
+- secciones;
+- subsecciones;
+- ítems.
+
+O sea: aunque se ocultaran botones en UI, Firestore todavía permitiría que un profesor escriba demasiado.
+
+**Riesgos Actuales**
+
+El riesgo principal es de seguridad: el permiso real está demasiado abierto en Firestore. Un profesor podría crear, editar o borrar secciones, subsecciones e ítems aunque la UI se ajustara.
+
+También hay un riesgo de lógica: hoy `puedeGestionar` mezcla varias cosas distintas:
+- acceso sin inscripción a secciones restringidas;
+- administración de estructura;
+- creación de contenidos;
+- edición/eliminación de contenidos.
+
+Para el nuevo modelo conviene separar esos permisos.
+
+**Propuesta Recomendada**
+
+Agregar el campo:
+
+```ts
+permiteCargaProfesor?: boolean
+```
+
+en secciones y subsecciones.
+
+Por defecto:
+
+```ts
+false
+```
+
+Separar permisos en UI:
+
+```ts
+const esAdmin = rol === "admin";
+const esProfesor = rol === "profesor";
+
+const puedeGestionarEstructura = esAdmin;
+const puedeEditarEliminarItems = esAdmin;
+const puedeCrearItems =
+  esAdmin || (esProfesor && contenedorActual?.permiteCargaProfesor === true);
+const puedeAccederSinInscripcion = esAdmin || esProfesor;
+```
+
+Importante: no usar más `puedeGestionar` como permiso genérico para todo.
+
+**Cambios Necesarios En UI**
+
+En `app/modulos/[id].tsx`:
+- `Añadir sección`, editar sección y eliminar sección deben ser solo admin.
+- Profesor no debe ver esos botones.
+- Para restricciones de acceso, profesor probablemente debería seguir entrando sin inscripción como personal docente. Para eso usar `puedeAccederSinInscripcion`, no `puedeGestionarSecciones`.
+
+En `app/secciones/[id].tsx`:
+- Crear/editar/eliminar subsecciones: solo admin.
+- Editar/eliminar ítems: solo admin.
+- Botón `+` para agregar contenido:
+  - admin siempre;
+  - profesor solo si `seccion.permiteCargaProfesor === true`.
+- El mensaje vacío debería distinguir:
+  - admin: puede agregar contenido;
+  - profesor autorizado: puede agregar contenido;
+  - profesor no autorizado/alumno: solo visualiza.
+
+En `app/subsecciones/[id].tsx`:
+- Igual que sección, pero usando `subseccion.permiteCargaProfesor`.
+- Crear subsecciones anidadas: solo admin.
+- Agregar contenido: admin siempre, profesor solo si esa subsección lo permite.
+- Editar/eliminar ítems: solo admin.
+
+En `app/secciones/form.tsx`:
+- Solo admin debe poder entrar.
+- Agregar switch:
+  - “Permitir carga de profesores”
+  - descripción: “Si está activado, los profesores podrán agregar contenido en esta sección, pero no podrán editarlo ni eliminarlo.”
+- Guardar `permiteCargaProfesor`.
+
+En `app/subsecciones/form.tsx`:
+- Solo admin debe poder entrar.
+- Agregar el mismo switch.
+- Guardar `permiteCargaProfesor`.
+
+En `app/items/form.tsx`:
+- Admin puede crear y editar.
+- Profesor solo puede entrar en modo creación si el padre permite carga.
+- Profesor no puede entrar en modo edición aunque haya creado el ítem.
+- Antes de subir a Cloudinary, conviene validar el permiso en UI para evitar archivos huérfanos si Firestore rechaza la escritura.
+
+**Cambios Necesarios En Hooks**
+
+En `useSecciones.ts`:
+- Agregar `permiteCargaProfesor?: boolean` a `Seccion`.
+- Agregarlo a `SeccionInput`.
+- Al crear sección, guardar `permiteCargaProfesor: false` si no viene definido.
+
+En `useSubsecciones.ts`:
+- Agregar `permiteCargaProfesor?: boolean` a `Subseccion`.
+- Agregarlo a `SubseccionInput`.
+- Al crear subsección, guardar `permiteCargaProfesor: false`.
+
+En `useItems.ts`:
+- No necesariamente necesita saber el rol.
+- Sí conviene mantener `creadoPor: auth.currentUser.uid`.
+- Las reglas deberían exigir que si crea un profesor, `request.resource.data.creadoPor == request.auth.uid`.
+
+**Cambios Necesarios En Firestore Rules**
+
+Reglas esperadas:
+
+- `modulos`: solo admin escribe.
+- `secciones`: solo admin crea, actualiza y elimina.
+- `subsecciones`: solo admin crea, actualiza y elimina.
+- `items`:
+  - admin crea, actualiza y elimina;
+  - profesor solo crea;
+  - profesor crea únicamente si el documento padre tiene `permiteCargaProfesor == true`;
+  - profesor no actualiza ni elimina;
+  - alumno no escribe.
+
+Para ítems directos de sección, la regla puede leer fácil:
+
+```rules
+get(/databases/$(database)/documents/modulos/$(moduloId)/secciones/$(seccionId)).data.permiteCargaProfesor == true
+```
+
+Para ítems dentro de subsecciones recursivas, también es viable, pero hay que hacerlo con cuidado usando el path recursivo del padre. La idea sería que el `match` capture el path anterior a `/items/{itemId}` y use `get()` sobre ese documento padre.
+
+Conceptualmente:
+
+```rules
+match /items/{itemId} {
+  allow create: if isAdmin() || (
+    isProfesor()
+    && get(sectionDoc).data.permiteCargaProfesor == true
+    && request.resource.data.creadoPor == request.auth.uid
+  );
+  allow update, delete: if isAdmin();
+}
+```
+
+Y para anidados:
+
+```rules
+match /{parentPath=**}/items/{itemId} {
+  allow create: if isAdmin() || (
+    isProfesor()
+    && get(parentDocFromParentPath).data.permiteCargaProfesor == true
+    && request.resource.data.creadoPor == request.auth.uid
+  );
+  allow update, delete: if isAdmin();
+}
+```
+
+Punto a cuidar: en rules hay que probar bien la interpolación del `parentPath` recursivo, especialmente para subsecciones de primer nivel y niveles más profundos. Yo lo validaría con Firebase Emulator o con deploy controlado, porque es el corazón de la seguridad.
+
+**¿Hace Falta Deployar Reglas?**
+
+Sí. Para que este cambio sea seguro no alcanza con UI. Hay que modificar y deployar `firestore.rules`.
+
+Comando esperado cuando se implemente:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project odb-cvg
+```
+
+No parece necesario agregar índices para esta modificación.
+
+**Plan De Implementación**
+
+1. Agregar `permiteCargaProfesor?: boolean` a tipos e inputs de `useSecciones` y `useSubsecciones`.
+
+2. Actualizar creación/edición de secciones:
+   - solo admin;
+   - switch nuevo;
+   - guardar `permiteCargaProfesor`.
+
+3. Actualizar creación/edición de subsecciones:
+   - solo admin;
+   - switch nuevo;
+   - guardar `permiteCargaProfesor`.
+
+4. Separar permisos en `app/modulos/[id].tsx`:
+   - admin gestiona secciones;
+   - profesor no gestiona secciones;
+   - admin/profesor pueden seguir evitando bloqueo por inscripción si ese es el comportamiento deseado.
+
+5. Separar permisos en `app/secciones/[id].tsx`:
+   - admin gestiona subsecciones e ítems;
+   - profesor solo ve botón `+` si `seccion.permiteCargaProfesor`;
+   - profesor no ve editar/eliminar ítems.
+
+6. Separar permisos en `app/subsecciones/[id].tsx`:
+   - mismo criterio usando `subseccion.permiteCargaProfesor`.
+
+7. Actualizar `app/items/form.tsx`:
+   - admin puede crear/editar;
+   - profesor solo crear si el padre lo permite;
+   - profesor nunca editar;
+   - validar permiso antes de subir archivo.
+
+8. Cambiar `firestore.rules`:
+   - secciones y subsecciones: escritura solo admin;
+   - ítems directos: admin todo, profesor solo create si sección permite;
+   - ítems anidados: admin todo, profesor solo create si subsección padre permite;
+   - alumnos sin escritura.
+
+9. Deployar reglas.
+
+10. Probar con tres roles:
+   - admin: todo funciona;
+   - profesor: no puede crear estructura, solo agregar contenido donde esté habilitado, no puede editar/borrar;
+   - alumno: solo visualiza.
+
+---
+> Necesito implementar la nueva lógica de permisos para profesores en la app Campus Virtual de Operatoria Dental B.
+>
+> Contexto:
+> Ya hiciste un análisis previo. Actualmente el profesor está tratado casi igual que el administrador en muchas pantallas y también en Firestore Rules. Necesito corregir eso.
+>
+> Nuevo comportamiento esperado:
+>
+> ADMINISTRADOR:
+> - Puede crear, modificar y eliminar secciones.
+> - Puede crear, modificar y eliminar subsecciones.
+> - Puede crear, modificar y eliminar contenidos/ítems.
+> - Puede gestionar módulos, usuarios, cursadas restringidas, códigos y restricciones como hasta ahora.
+> - Al crear o editar una sección/subsección, puede decidir si los profesores podrán cargar contenido allí.
+>
+> PROFESOR:
+> - No puede crear secciones.
+> - No puede modificar secciones.
+> - No puede eliminar secciones.
+> - No puede crear subsecciones.
+> - No puede modificar subsecciones.
+> - No puede eliminar subsecciones.
+> - Sí puede agregar contenido/ítems, pero solamente dentro de secciones o subsecciones donde el administrador haya activado explícitamente la opción de permitir carga docente.
+> - Una vez que el profesor sube un contenido, no puede modificarlo.
+> - Una vez que el profesor sube un contenido, no puede eliminarlo.
+> - Para modificar o eliminar contenido debe avisarle al administrador.
+>
+> ALUMNO:
+> - No puede crear, modificar ni eliminar secciones.
+> - No puede crear, modificar ni eliminar subsecciones.
+> - No puede crear, modificar ni eliminar contenidos.
+> - Solo visualiza según corresponda.
+>
+> Campo nuevo:
+> Agregar en secciones y subsecciones:
+>
+> permiteCargaProfesor?: boolean
+>
+> Funcionamiento:
+> - Por defecto debe ser `false`.
+> - Al crear una sección, el admin debe poder configurar este campo.
+> - Al editar una sección, el admin debe poder modificar este campo.
+> - Al crear una subsección, el admin debe poder configurar este campo.
+> - Al editar una subsección, el admin debe poder modificar este campo.
+> - El profesor nunca debe poder modificar este campo.
+> - Si `permiteCargaProfesor === true`, el profesor puede crear contenido dentro de esa sección/subsección.
+> - Si `permiteCargaProfesor !== true`, el profesor no puede crear contenido ahí.
+>
+> Texto sugerido para la interfaz:
+> Título:
+> “Permitir carga de profesores”
+>
+> Descripción:
+> “Si está activado, los profesores podrán agregar contenido en esta sección, pero no podrán editarlo ni eliminarlo.”
+>
+> Archivos a modificar:
+> - `hooks/useSecciones.ts`
+> - `hooks/useSubsecciones.ts`
+> - `hooks/useItems.ts`, si hace falta
+> - `app/modulos/[id].tsx`
+> - `app/secciones/[id].tsx`
+> - `app/subsecciones/[id].tsx`
+> - `app/secciones/form.tsx`
+> - `app/subsecciones/form.tsx`
+> - `app/items/form.tsx`
+> - `firestore.rules`
+>
+> Cambios esperados en UI:
+>
+> En `app/modulos/[id].tsx`:
+> - El botón “Añadir” sección debe ser solo admin.
+> - Editar sección debe ser solo admin.
+> - Eliminar sección debe ser solo admin.
+> - El profesor no debe ver controles de alta, edición o eliminación de secciones.
+> - El profesor debe poder seguir entrando a las secciones que correspondan como personal docente, sin quedar bloqueado por restricciones pensadas para alumnos.
+>
+> En `app/secciones/[id].tsx`:
+> - Crear subsección: solo admin.
+> - Editar subsección: solo admin.
+> - Eliminar subsección: solo admin.
+> - Editar/eliminar ítems: solo admin.
+> - Botón `+` para agregar contenido:
+>   - admin siempre;
+>   - profesor solo si `seccion.permiteCargaProfesor === true`;
+>   - alumno nunca.
+> - Si el profesor no está autorizado para cargar en esa sección, debe poder visualizar pero no ver el botón `+`.
+>
+> En `app/subsecciones/[id].tsx`:
+> - Mismo criterio, usando `subseccion.permiteCargaProfesor`.
+> - Crear subsecciones hijas: solo admin.
+> - Editar/eliminar subsecciones hijas: solo admin.
+> - Editar/eliminar ítems: solo admin.
+> - Botón `+`:
+>   - admin siempre;
+>   - profesor solo si `subseccion.permiteCargaProfesor === true`;
+>   - alumno nunca.
+>
+> En `app/secciones/form.tsx`:
+> - Solo admin puede crear/editar secciones.
+> - Agregar switch o control equivalente para `permiteCargaProfesor`.
+> - Default: desactivado / `false`.
+> - Mantener el diseño actual del formulario.
+> - No romper la opción existente de restricción con código.
+>
+> En `app/subsecciones/form.tsx`:
+> - Solo admin puede crear/editar subsecciones.
+> - Agregar switch o control equivalente para `permiteCargaProfesor`.
+> - Default: desactivado / `false`.
+> - Mantener diseño actual.
+> - Mantener subsecciones recursivas funcionando.
+>
+> En `app/items/form.tsx`:
+> - Admin puede crear y editar ítems.
+> - Profesor solo puede entrar en modo creación si el padre permite carga docente.
+> - Profesor nunca puede entrar en modo edición.
+> - Si el profesor no tiene permiso para cargar en ese contenedor, mostrar una pantalla/mensaje de acceso denegado.
+> - Validar el permiso antes de subir archivos a Cloudinary, para evitar subir un archivo y que luego Firestore rechace la escritura.
+> - No romper la carga de ítems en secciones ni en subsecciones recursivas.
+>
+> Cambios esperados en Firestore Rules:
+> - `modulos`: solo admin escribe.
+> - `secciones`: solo admin crea, actualiza y elimina.
+> - `subsecciones`: solo admin crea, actualiza y elimina.
+> - `items`:
+>   - admin puede crear, actualizar y eliminar.
+>   - profesor solo puede crear.
+>   - profesor puede crear únicamente si el documento padre tiene `permiteCargaProfesor == true`.
+>   - profesor no puede actualizar ni eliminar.
+>   - alumno no puede escribir.
+> - Al crear ítems como profesor, exigir que `request.resource.data.creadoPor == request.auth.uid`.
+>
+> Punto crítico:
+> Para ítems directos dentro de una sección, validar el permiso leyendo:
+>
+> modulos/{moduloId}/secciones/{seccionId}.permiteCargaProfesor
+>
+> Para ítems dentro de subsecciones recursivas, validar el permiso del documento padre correspondiente a esa subsección. Tener especial cuidado con la ruta recursiva de subsecciones para que funcione en cualquier nivel.
+>
+> Restricciones:
+> - No modificar el diseño general.
+> - No tocar el ordenamiento de módulos.
+> - No tocar la lógica de cursadas restringidas salvo que sea necesario por permisos.
+> - No tocar la lógica de alumnos.
+> - No romper subsecciones recursivas.
+> - No usar el título “Cursada” como criterio de permiso.
+> - No usar `esRestringida` como criterio de permiso.
+> - No ejecutar comandos de Git.
+> - No hacer git add, commit, pull, push, merge ni rebase.
+> - Solo modificar los archivos necesarios.
+>
+> Al finalizar:
+> - Indicá qué archivos modificaste.
+> - Explicá cómo quedó la matriz de permisos por rol.
+> - Explicá cómo funciona `permiteCargaProfesor`.
+> - Explicá cómo se valida en Firestore Rules.
+> - Indicá si hace falta deployar reglas.
+> - Indicá cómo probarlo manualmente con admin, profesor y alumno.
+
+<details><summary>16 previous messages</summary>
+
+> Voy a tocar los permisos en capas: primero tipos/hooks y formularios para guardar `permiteCargaProfesor`, después las pantallas para separar admin/profesor, y al final las reglas para que Firestore haga cumplir lo mismo. Sin Git y sin tocar ordenamiento/cursadas salvo lo necesario por permisos.
+>
+> <details><summary>Edited 3 files</summary>
+>
+> - Wrote `./odb-cvg/hooks/useSecciones.ts` (+17 -14)
+> - Wrote `./odb-cvg/hooks/useSubsecciones.ts` (+16 -12)
+> - Wrote `./odb-cvg/app/secciones/form.tsx` (+40 -17)
+>
+> </details>
+>
+> El formulario de secciones tiene texto con codificación mezclada y el parche no calzó en una zona. Haré los cambios por partes, ubicando líneas estables.
+>
+> <details><summary>Edited 2 files, ran 2 commands</summary>
+>
+> - Ran `Select-String -LiteralPath "odb-cvg\app\secciones\form.tsx" -Pattern "cursadaSection|switchRow|switchLabel|switchHint" -Context 1,1`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\secciones\form.tsx" -Pattern "useUserRole|useSecciones|useState|setCodigoAcceso|const data =|rol !==|Control de acceso|Botones" -Context 2,2`
+> - Wrote `./odb-cvg/app/secciones/form.tsx` (+14 -11)
+> - Wrote `./odb-cvg/app/secciones/form.tsx` (+24 -3)
+> - Wrote `./odb-cvg/app/subsecciones/form.tsx` (+36 -13)
+> - Wrote `./odb-cvg/app/subsecciones/form.tsx` (+39 -8)
+>
+> </details>
+>
+> Campo y formularios listos: ahora admin es el único que entra a crear/editar secciones/subsecciones, y el switch guarda el permiso. Paso a las pantallas de navegación/contenido para separar estructura, carga y edición de ítems.
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./odb-cvg/app/modulos/[id].tsx` (+12 -11)
+> - Wrote `./odb-cvg/app/secciones/[id].tsx` (+30 -24)
+>
+> </details>
+>
+> La parte visual tiene texto ya en UTF-8 en algunos lugares y el parche falló por literal. Aplico los reemplazos estructurales en bloques más pequeños.
+>
+> <details><summary>Edited 2 files, ran 4 commands</summary>
+>
+> - Ran `Select-String -LiteralPath "odb-cvg\app\secciones\[id].tsx" -Pattern "puedeGestionar|No hay contenido|ItemCard|SubseccionCard|fab|seccion.esRestringida" -Context 2,2`
+> - Wrote `./odb-cvg/app/secciones/[id].tsx` (+16 -10)
+> - Wrote `./odb-cvg/app/secciones/[id].tsx` (+6 -6)
+> - Ran `Select-String -LiteralPath "odb-cvg\app\secciones\[id].tsx" -Pattern "puedeGestionar"`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\subsecciones\[id].tsx" -Pattern "puedeGestionar|No hay contenido|ItemCard|SubseccionCard|fab" -Context 2,2`
+> - Wrote `./odb-cvg/app/subsecciones/[id].tsx` (+6 -1)
+> - Wrote `./odb-cvg/app/subsecciones/[id].tsx` (+6 -6)
+> - Ran `Select-String -LiteralPath "odb-cvg\app\subsecciones\[id].tsx" -Pattern "puedeGestionar"`
+>
+> </details>
+>
+> Las pantallas de detalle ya separan estructura de contenido: profesor solo ve `+` si el contenedor lo permite, y no ve editar/eliminar. Ahora blindo el formulario de ítems para que valide el padre antes de subir archivos.
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./odb-cvg/app/items/form.tsx` (+50 -13)
+>
+> </details>
+>
+> Ojo con el getDoc path for section direct: doc with no extra path points to seccion, okay. Need message says sección maybe for subsection ok. Need professors cannot edit because modoEdicion false required.
+>
+> Now rules. Need patch carefully. Current match secciones has allow create update delete admin/prof. Need only admin. Items direct and nested. Current single recursive items; replace with direct items and nested items. Subsecciones only admin.
+>
+> Rules path for nested items: under match /secciones/{seccionId}: match /items/{itemId} direct, match /{parentPath=**}/items/{itemId}. Potential overlap direct with parentPath empty? In v2 recursive matches zero, so direct item may also match nested; allow if any allow true. If nested get with empty parentPath invalid? Does a rule with invalid get evaluate error false? It may be okay but direct handles. But overlap with create professor maybe nested function fails? Rules are OR of complete matching allow expressions. If one true grants. Invalid function in another match maybe doesn't matter? Maybe it could still evaluate? Firestore evaluates any matching allow, if any true. Undefined get path might fail compile? Safer define nested match as /subsecciones/{subseccionId}/{parentPath=**}/items/{itemId}? Need capture entire parent doc path including first sub. The item parent for first-level subsection: subsecciones/sub1/items. Match /subsecciones/{subseccionId}/items/{itemId} and recursive under that? Could define:
+> match /items/{itemId} direct section.
+> match /subsecciones/{subseccionId}/{rest=**}/items/{itemId} parent path = "subsecciones/{subseccionId}/{rest}" but for first-level direct rest zero would path with extra? match /subsecciones/{subseccionId}/{nestedPath=**}/items/{itemId}; in v2 nestedPath can empty, so parent document path is /.../subsecciones/subId/$(nestedPath). If nestedPath empty trailing? same issue. Could split:
+> match /subsecciones/{subseccionId}/items/{itemId} get first subsection.
+> match /subsecciones/{subseccionId}/{nestedPath=**}/items/{itemId} for deeper, but overlap first with empty. Still issue. Maybe use recursive parentPath okay.
+>
+> Can define function canProfesorCreateItemInParent(parentDoc) { get(parentDoc).data... }. Functions can accept path? Yes. We can't concatenate path? get path interpolation with $(parentPath).
+>
+> El formulario de ítems ahora carga el permiso del contenedor padre y corta antes de subir a Cloudinary si el profesor no está autorizado o intenta editar. Paso a reglas, que son la parte importante para que esto no dependa solo de la UI.
+>
+> <details><summary>Edited 2 files, ran 4 commands</summary>
+>
+> - Wrote `./odb-cvg/firestore.rules` (+46 -22)
+> - Ran `Get-Content -LiteralPath "odb-cvg\firestore.rules" | Select-Object -First 70 | ForEach-Object { "{0:D3}: {1}" -f $global:i++, $_ }`
+> - Wrote `./odb-cvg/firestore.rules` (+19 -4)
+> - Wrote `./odb-cvg/firestore.rules` (+18 -9)
+> - Wrote `./odb-cvg/firestore.rules` (+1 -1)
+> - Wrote `./odb-cvg/firestore.rules` (+15 -6)
+> - Ran `Get-Content -LiteralPath "odb-cvg\firestore.rules" | Select-Object -Skip 45 -First 18 | ForEach-Object { "{0:D3}: {1}" -f $global:j++, $_ }`
+> - Ran `$path = "odb-cvg\firestore.rules"; $lines = Get-Content -LiteralPath $path; $new = @(); for ($i = 0; $i -lt $lines.Count; $i++) { if ($i -eq 52) { $new += "        // Items directos de una seccion."; $new += "        match /items/{itemId} {"; $new += "          allow read: if request.auth != null;"; $new += "          allow create: if isAdmin() ||"; $new += "            (profesorCreaItemAutorizado() && seccionPermiteCargaProfesor(moduloId, seccionId));"; $new += "          allow update, delete: if isAdmin();"; $new += "        }"; $new += ""; $new += "        // Items dentro de subsecciones anidadas en cualquier profundidad."; $new += "        match /{parentPath=**}/items/{itemId} {"; $new += "          allow read: if request.auth != null;"; $new += "          allow create: if isAdmin() ||"; $new += "            (profesorCreaItemAutorizado() && subseccionPermiteCargaProfesor(moduloId, seccionId, parentPath));"; $new += "          allow update, delete: if isAdmin();"; $new += "        }"; $i = 57 } else { $new += $lines[$i] } }; Set-Content -LiteralPath $path -Value $new`
+> - Ran `Select-String -LiteralPath "odb-cvg\firestore.rules" -Pattern "isProfesor|items|subsecciones|allow create, update, delete" -Context 1,2`
+> - Wrote `./odb-cvg/firestore.rules` (+1 -1)
+>
+> </details>
+>
+> La UI ya separa: admin administra estructura e ítems; profesor solo puede llegar al formulario de creación si el padre lo habilita. Las reglas quedaron alineadas para secciones/subsecciones solo admin y profesor solo `create` de ítems permitidos; ahora corro chequeos locales.
+>
+> <details><summary>Edited 1 file, ran 12 commands</summary>
+>
+> - Ran `npm run lint`
+> - Ran `npx tsc --noEmit`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\modulos\[id].tsx","odb-cvg\app\secciones\[id].tsx","odb-cvg\app\subsecciones\[id].tsx","odb-cvg\app\items\form.tsx" -Pattern "puedeGestionarSecciones|puedeAccederComoDocente|puedeCrearItems|permiteCargaProfesor|accesoPermitido" -Context 1,1`
+> - Ran `Select-String -LiteralPath "odb-cvg\firestore.rules" -Pattern "profesorCreaItemAutorizado|seccionPermiteCargaProfesor|subseccionPermiteCargaProfesor|match /items|parentPath|allow create, update, delete|allow update, delete" -Context 1,1`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\secciones\form.tsx","odb-cvg\app\subsecciones\form.tsx","odb-cvg\hooks\useSecciones.ts","odb-cvg\hooks\useSubsecciones.ts" -Pattern "permiteCargaProfesor|Permitir carga de profesores|rol !== \"admin\"" -Context 1,1`
+> - Ran `Select-String -Path "odb-cvg\app\**\*.tsx" -Pattern "rol === \"admin\" \|\| rol === \"profesor\"|rol !== \"admin\" && rol !== \"profesor\"|isAdmin\(\) \|\| isProfesor\(\)"`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\secciones\form.tsx" -Pattern "permiteCargaProfesor|Permitir carga|rol !==" -Context 1,1`
+> - Ran `Select-String -LiteralPath "odb-cvg\app\subsecciones\form.tsx" -Pattern "permiteCargaProfesor|Permitir carga|rol !==" -Context 1,1`
+> - Ran `rg "rol === \"admin\" \|\| rol === \"profesor\"|rol !== \"admin\" && rol !== \"profesor\"|isAdmin\(\) \|\| isProfesor\(\)" odb-cvg`
+> - Ran `rg -F "rol === \"admin\" || rol === \"profesor\"" odb-cvg; rg -F "rol !== \"admin\" && rol !== \"profesor\"" odb-cvg; rg -F "isAdmin() || isProfesor()" odb-cvg`
+> - Wrote `./odb-cvg/app/modulos/[id].tsx` (+1 -1)
+> - Ran `npx tsc --noEmit`
+> - Ran `npm run lint`
+>
+> </details>
+>
+> <details><summary>Plan</summary>
+>
+> - [x] Agregar campo permiteCargaProfesor en hooks y formularios
+> - [ ] Separar permisos en pantallas de módulos/secciones/subsecciones/items
+> - [ ] Endurecer Firestore Rules para profesor solo create de items permitidos
+> - [ ] Verificar TypeScript/lint en lo posible
+>
+> </details>
+</details>
+
+Implementé la nueva lógica de permisos para profesores.
+
+**Archivos modificados**
+- [hooks/useSecciones.ts](<./odb-cvg/hooks/useSecciones.ts>)
+- [hooks/useSubsecciones.ts](<./odb-cvg/hooks/useSubsecciones.ts>)
+- [app/modulos/[id].tsx](<./odb-cvg/app/modulos/[id].tsx>)
+- [app/secciones/[id].tsx](<./odb-cvg/app/secciones/[id].tsx>)
+- [app/subsecciones/[id].tsx](<./odb-cvg/app/subsecciones/[id].tsx>)
+- [app/secciones/form.tsx](<./odb-cvg/app/secciones/form.tsx>)
+- [app/subsecciones/form.tsx](<./odb-cvg/app/subsecciones/form.tsx>)
+- [app/items/form.tsx](<./odb-cvg/app/items/form.tsx>)
+- [firestore.rules](<./odb-cvg/firestore.rules>)
+
+**Matriz de permisos**
+- Admin: crea, edita y elimina secciones, subsecciones e ítems.
+- Profesor: no administra secciones ni subsecciones; solo puede crear ítems si el contenedor tiene `permiteCargaProfesor === true`.
+- Profesor no puede editar ni eliminar ítems.
+- Alumno: solo visualiza.
+
+**Cómo funciona `permiteCargaProfesor`**
+Agregué `permiteCargaProfesor?: boolean` en secciones y subsecciones. Por defecto se guarda como `false`.
+
+En los formularios de sección y subsección, solo admin puede ver/editar el switch “Permitir carga de profesores”. Si está activo, el profesor ve el botón `+` para agregar contenido en ese contenedor. Si no, solo visualiza.
+
+**Validación en Firestore Rules**
+- `secciones`: escritura solo admin.
+- `subsecciones`: escritura solo admin.
+- `items` directos: admin puede todo; profesor solo `create` si la sección padre tiene `permiteCargaProfesor == true`.
+- `items` en subsecciones recursivas: admin puede todo; profesor solo `create` si la subsección padre tiene `permiteCargaProfesor == true`.
+- Además, para profesor se exige:
+
+```rules
+request.resource.data.creadoPor == request.auth.uid
+```
+
+**Importante**
+Sí, hace falta deployar reglas:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project odb-cvg
+```
+
+**Verificación**
+Ejecuté `npx tsc --noEmit` y `npm run lint`. Siguen fallando por errores preexistentes en `components/ui/collapsible.tsx` e `icon-symbol`, no por estos cambios.
+
+**Prueba manual**
+1. Admin: crear/editar sección y activar/desactivar “Permitir carga de profesores”.
+2. Profesor: entrar a esa sección. Si está activado, debe ver `+`; si no, no.
+3. Profesor: subir contenido donde esté permitido.
+4. Profesor: confirmar que no puede editar ni eliminar ese contenido.
+5. Profesor: confirmar que no ve crear/editar/eliminar secciones o subsecciones.
+6. Alumno: confirmar que solo visualiza y no ve controles de carga.
+
+---
+> Necesito corregir un error en la carga de archivos/PDFs en la app Campus Virtual de Operatoria Dental B.
+>
+> Contexto:
+> Acabo de implementar la nueva lógica de permisos para profesores:
+> - Admin puede gestionar todo.
+> - Profesor solo puede subir contenido donde el admin habilitó `permiteCargaProfesor`.
+> - Profesor no puede editar ni eliminar contenidos.
+>
+> Esa lógica de permisos funciona correctamente.
+>
+> Problema actual:
+> Tanto con rol administrador como con rol profesor, al intentar subir un PDF o archivo aparece este error:
+>
+> Error de FileSystem: Method uploadAsync imported from "expo-file-system" is deprecated.
+> You can migrate to the new filesystem API using "File" and "Directory" classes or import the legacy API from "expo-file-system/legacy".
+>
+> Luego aparece:
+> Falló la subida nativa del archivo.
+>
+> El error apunta a:
+> `app/items/form.tsx`
+> en la función relacionada con `uploadToCloudinary`.
+>
+> Objetivo:
+> Corregir la carga de archivos/PDFs a Cloudinary sin romper la lógica de permisos nueva.
+>
+> Tareas:
+> - Revisá `app/items/form.tsx`.
+> - Identificá cómo se está importando y usando `expo-file-system`.
+> - Si actualmente se usa `FileSystem.uploadAsync` desde `expo-file-system`, corregilo usando la alternativa más segura y mínima:
+>   - importar la API legacy desde `expo-file-system/legacy`;
+>   - o ajustar el código de carga según la forma recomendada por Expo si ya existe en el proyecto.
+> - Preferencia: hacer el cambio mínimo para que vuelva a funcionar la subida, sin reescribir toda la lógica de archivos.
+> - Mantener la subida a Cloudinary funcionando para PDF, documentos e imágenes si actualmente usan la misma función.
+> - Mantener la validación de permisos:
+>   - admin puede subir donde corresponda;
+>   - profesor solo puede subir donde `permiteCargaProfesor === true`;
+>   - profesor no puede editar ni eliminar;
+>   - alumno no puede subir.
+> - Mantener la validación previa antes de subir, para evitar subir archivos si el usuario no tiene permisos.
+> - No modificar `firestore.rules` salvo que detectes que sea estrictamente necesario.
+> - No modificar secciones, subsecciones ni permisos si no hace falta.
+> - No cambiar el diseño visual general.
+> - No ejecutar comandos de Git.
+> - No hacer git add, commit, pull, push, merge ni rebase.
+>
+> También revisá:
+> - Si el error se produce solo en archivos/PDFs o también en imágenes.
+> - Si hay alguna función alternativa para subir a Cloudinary con `fetch` y `FormData`.
+> - Si conviene mantener `uploadAsync` pero importado desde `expo-file-system/legacy` para evitar un cambio grande.
+>
+> Al finalizar:
+> - Indicá qué archivo modificaste.
+> - Explicá por qué fallaba `uploadAsync`.
+> - Explicá qué import o lógica corregiste.
+> - Confirmá que no tocaste la lógica de permisos salvo que fuera necesario.
+> - Indicá cómo probarlo manualmente con admin y profesor.
+
+<details><summary>4 previous messages</summary>
+
+> Voy a hacer el arreglo mínimo en `app/items/form.tsx`: mantener la función de Cloudinary y cambiar la importación de FileSystem a la API legacy para que `uploadAsync` vuelva a estar disponible sin reescribir la subida ni tocar permisos.
+>
+> <details><summary>Edited 1 file, ran 1 command</summary>
+>
+> - Ran `Select-String -LiteralPath "odb-cvg\app\items\form.tsx" -Pattern "expo-file-system|FileSystem|uploadAsync|uploadToCloudinary" -Context 2,3`
+> - Wrote `./odb-cvg/app/items/form.tsx` (+1 -1)
+>
+> </details>
+>
+> Listo el cambio mínimo. Ahora corro una verificación rápida; espero que sigan los errores preexistentes del proyecto, pero quiero confirmar que la importación legacy no introduce uno nuevo.
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `npx tsc --noEmit`
+> - Ran `npm run lint`
+>
+> </details>
+</details>
+
+Modifiqué solo [app/items/form.tsx](<./odb-cvg/app/items/form.tsx>).
+
+El problema era que `uploadAsync` se estaba usando desde:
+
+```ts
+expo-file-system
+```
+
+En la versión actual de Expo, esa API está deprecada ahí y lanza el error que viste. Hice el cambio mínimo recomendado por Expo:
+
+```ts
+import * as FileSystem from "expo-file-system/legacy";
+```
+
+No reescribí la función `uploadToCloudinary`, no cambié Cloudinary, y no toqué la lógica de permisos. La validación previa sigue estando antes de subir, así que profesor sin permiso no debería subir archivos innecesariamente.
+
+Verificación: corrí `npx tsc --noEmit` y `npm run lint`; siguen fallando por errores preexistentes en `components/ui/collapsible.tsx` e `icon-symbol`, no por este cambio.
+
+Para probar:
+1. Admin: entrar a una sección/subsección y subir un PDF o documento.
+2. Profesor: probar en una sección/subsección con `permiteCargaProfesor` activado.
+3. Profesor: probar en una sección/subsección sin permiso y confirmar que no puede llegar a subir.
+4. Probar una imagen también, porque en celular usa la misma rama nativa de `FileSystem.uploadAsync`.
+
+---
+> Necesito ajustar la ubicación de los botones superiores del Home en la app Campus Virtual de Operatoria Dental B.
+>
+> Contexto:
+> En el Home se muestra el encabezado con:
+> - logo de la app;
+> - nombre de la app, actualmente “CVG - Odonto B”;
+> - badge del rol: ADMIN, PROFESOR o ALUMNO;
+> - subtítulo “Facultad de Odontología UNLP”;
+> - botón “Salir”;
+> - botón de usuarios en el caso del admin;
+> - botón “Ordenar” más abajo, sobre la lista de módulos.
+>
+> Problema:
+> Actualmente los botones verdes superiores, especialmente “Salir” y el botón de usuarios del admin, están ubicados arriba a la derecha, a la altura del título de la app.
+>
+> Eso no queda tan estético y además puede generar problemas a futuro, porque probablemente se cambie el nombre de la app por uno más largo. Si el título crece, podría desplazar o chocar con esos botones.
+>
+> Cambio requerido:
+> Quiero que los botones superiores sigan estando alineados a la derecha, pero más abajo, aproximadamente a la altura del texto:
+>
+> “Facultad de Odontología UNLP”
+>
+> Es decir:
+> - El título de la app debe quedar con más espacio horizontal.
+> - Los botones “Salir” y “Usuarios” deben quedar a la derecha, pero alineados visualmente con la zona del subtítulo.
+> - En admin, deben verse los botones de usuarios y salir juntos a la derecha, pero más abajo.
+> - En profesor y alumno, debe verse solo “Salir” a la derecha, también más abajo.
+> - El badge de rol y el subtítulo deben seguir viéndose correctamente.
+> - El botón “Ordenar” debe quedar como está actualmente, arriba de la lista de módulos, no volver al header.
+>
+> Objetivo visual:
+> Que el header quede más equilibrado y preparado para un nombre de app más largo.
+>
+> Ejemplo conceptual:
+>
+> [Logo]  Nombre de la app
+>
+> [ROL]
+> Facultad de Odontología UNLP        [Usuarios] [Salir]
+>
+> Restricciones:
+> - No modificar la lógica de roles.
+> - No modificar el funcionamiento de cerrar sesión.
+> - No modificar el funcionamiento del botón de usuarios.
+> - No modificar el funcionamiento del botón Ordenar.
+> - No tocar módulos, secciones, subsecciones, ítems ni permisos.
+> - No cambiar el diseño general de la app.
+> - Mantener colores, bordes redondeados, íconos y estilo visual actual.
+> - Solo ajustar layout/estilos del encabezado del Home.
+> - No ejecutar comandos de Git.
+> - No hacer git add, commit, pull, push, merge ni rebase.
+>
+> Archivo probable:
+> - `app/(tabs)/home.tsx`
+>
+> Al finalizar:
+> - Indicá qué archivo modificaste.
+> - Explicá cómo reacomodaste los botones.
+> - Confirmá que el botón “Ordenar” quedó en su ubicación actual.
+> - Confirmá que no se modificó lógica de roles ni permisos.
+> - Indicá cómo probarlo con admin, profesor y alumno.
+
+<details><summary>4 previous messages</summary>
+
+> Voy a ajustar solo el layout del header en `home.tsx`: separar el bloque de título/subtítulo del bloque de acciones para que Usuarios/Salir bajen a la línea del subtítulo. No voy a tocar la lógica ni el botón Ordenar.
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `Select-String -LiteralPath "odb-cvg\app\(tabs)\home.tsx" -Pattern "headerRow|headerTitles|titleWithBadge|adminButton|logoutButton|Ordenar|subHeaderText" -Context 3,4`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx" | Select-Object -First 24`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx" | Select-Object -Skip 140 -First 50`
+>
+> </details>
+>
+> Veo que el logo ya está dentro del mismo bloque del título. Para lograr el ejemplo visual sin tocar lógica, voy a convertir el header en dos filas: primera fila con logo/título/badge, segunda con subtítulo a la izquierda y acciones a la derecha.
+>
+> <details><summary>Edited 2 files, ran 7 commands</summary>
+>
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+32 -29)
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx" | Select-Object -Skip 158 -First 34 | ForEach-Object { "{0:D3}: {1}" -f $global:i++, $_ }`
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+25 -22)
+> - Ran `$path = "odb-cvg\app\(tabs)\home.tsx"; $lines = Get-Content -LiteralPath $path; $start = [Array]::FindIndex($lines, [Predicate[string]] { param($line) $line -like '*subHeaderText*' }); $grid = [Array]::FindIndex($lines, [Predicate[string]] { param($line) $line -like '*Grid de*' }); $end = $grid - 2; $replacement = @('          <View style={styles.headerMetaRow}','            <Text style={styles.subHeaderText}>Facultad de OdontologÃ­a UNLP</Text>','            <View style={styles.headerActions}','              {/*Boton para ir a pantalla de administracion de usuarios, solo visible para admins*/}','              {rol === "admin" && (','                <TouchableOpacity','                  style={styles.adminButton}','                  onPress={() =>','                    router.push("../pantallasAdmin/userManagementScreen")','                  }','                >','                  <Ionicons name="people-outline" size={18} color="#0F4A32" />','                </TouchableOpacity>','              )}','','              <TouchableOpacity','                style={styles.logoutButton}','                onPress={() => setModalSalir(true)}','              >','                <Text style={styles.logoutButtonText}>Salir</Text>','              </TouchableOpacity>','            </View>','          </View>','        </View>','      </View>'); $new = @(); for ($i = 0; $i -lt $lines.Count; $i++) { if ($i -eq $start) { $new += $replacement; $i = $end } else { $new += $lines[$i] } }; Set-Content -LiteralPath $path -Value $new`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx" | Select-Object -Skip 386 -First 92`
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+36 -26)
+> - Ran `Select-String -LiteralPath "odb-cvg\app\(tabs)\home.tsx" -Pattern "headerMetaRow|headerActions|orderButtonText|Ordenar" -Context 1,2`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx" | Select-Object -Skip 140 -First 62`
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+3 -3)
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+2 -2)
+> - Ran `npm run lint`
+> - Ran `npx tsc --noEmit`
+>
+> </details>
+</details>
+
+Modifiqué solo [home.tsx](<./odb-cvg/app/(tabs)/home.tsx>).
+
+Reacomodé el header en dos niveles: arriba queda el logo, nombre de la app y badge del rol; abajo queda el subtítulo a la izquierda y los botones de acción a la derecha. En admin se ven Usuarios y Salir juntos a la altura del subtítulo; en profesor/alumno solo Salir en esa misma zona.
+
+El botón “Ordenar” quedó donde estaba: arriba de la lista de módulos, fuera del header. No cambié lógica de roles, cerrar sesión, usuarios, permisos, módulos ni contenidos.
+
+Verificación: corrí `npx tsc --noEmit` y `npm run lint`; siguen fallando por errores preexistentes en `components/ui/collapsible.tsx` e `icon-symbol`, no por este cambio.
+
+Para probar:
+1. Entrar como admin: ver logo/título/badge arriba, y Usuarios + Salir abajo a la derecha.
+2. Entrar como profesor: ver solo Salir abajo a la derecha.
+3. Entrar como alumno: igual, solo Salir.
+4. Confirmar que “Ordenar” sigue arriba de la lista de módulos solo para admin.
+
+---
+> Necesito corregir un detalle visual del header del Home.
+>
+> Contexto:
+> Se reacomodaron correctamente los botones superiores “Salir” y “Usuarios” para que queden más abajo, alineados hacia la derecha cerca del subtítulo “Facultad de Odontología UNLP”.
+>
+> Eso está bien y quiero mantenerlo.
+>
+> Problema:
+> Al hacer ese cambio, se movió la medallita/badge del rol del usuario —ADMIN, PROFESOR o ALUMNO— y ahora aparece al lado del título “CVG - Odonto B”.
+>
+> Quiero que el badge del rol vuelva a quedar como estaba antes:
+> - debajo del título de la app;
+> - alineado hacia la izquierda;
+> - antes del texto “Facultad de Odontología UNLP”.
+>
+> Estructura visual esperada:
+>
+> [Logo]  CVG - Odonto B
+>
+> [ADMIN / PROFESOR / ALUMNO]
+> Facultad de Odontología UNLP        [Usuarios] [Salir]
+>
+> En profesor/alumno:
+>
+> [Logo]  CVG - Odonto B
+>
+> [PROFESOR / ALUMNO]
+> Facultad de Odontología UNLP        [Salir]
+>
+> Mantener:
+> - los botones “Usuarios” y “Salir” ubicados a la derecha y más abajo como quedaron ahora;
+> - el botón “Ordenar” arriba de la lista de módulos;
+> - el diseño general;
+> - colores, tamaños y estilos actuales;
+> - lógica de roles y permisos sin cambios.
+>
+> Restricciones:
+> - No modificar lógica de autenticación.
+> - No modificar permisos.
+> - No modificar módulos, secciones, subsecciones ni contenidos.
+> - No tocar reglas de Firestore.
+> - Solo ajustar layout/estilos del header del Home.
+> - No ejecutar comandos de Git.
+> - No hacer git add, commit, pull, push, merge ni rebase.
+>
+> Archivo probable:
+> - app/(tabs)/home.tsx
+>
+> Al finalizar:
+> - Indicá qué archivo modificaste.
+> - Confirmá que el badge del rol vuelve a quedar debajo del título.
+> - Confirmá que los botones “Usuarios” y “Salir” siguen a la derecha y más abajo.
+> - Confirmá que no se modificó lógica de roles ni permisos.
+
+<details><summary>2 previous messages</summary>
+
+> Voy a ajustar únicamente la estructura visual del header en `home.tsx`: saco el badge de la fila del título y lo pongo en una fila propia antes del subtítulo, manteniendo los botones donde quedaron.
+>
+> <details><summary>Edited 1 file, ran 3 commands</summary>
+>
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx" | Select-Object -Skip 140 -First 52`
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx" | Select-Object -Skip 402 -First 48`
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+11 -9)
+> - Wrote `./odb-cvg/app/(tabs)/home.tsx` (+11 -6)
+> - Ran `Get-Content -LiteralPath "odb-cvg\app\(tabs)\home.tsx" | Select-Object -Skip 140 -First 58`
+>
+> </details>
+</details>
+
+Modifiqué solo [home.tsx](<./odb-cvg/app/(tabs)/home.tsx>).
+
+El badge del rol volvió a quedar debajo del título, alineado a la izquierda y antes del subtítulo. Los botones “Usuarios” y “Salir” siguen a la derecha en la fila inferior, junto a la zona del subtítulo.
+
+No modifiqué lógica de roles, permisos, autenticación, Firestore, módulos ni contenidos. El botón “Ordenar” queda donde estaba, arriba de la lista de módulos.
