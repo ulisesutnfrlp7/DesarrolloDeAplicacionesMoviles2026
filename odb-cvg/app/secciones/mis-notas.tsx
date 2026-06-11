@@ -19,6 +19,7 @@ import {
   View,
 } from "react-native";
 import BuscadorAlumnos from "../../components/ui/BuscadorAlumnos";
+import ExportarNotas from "../../components/ui/ExportarNotas";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
@@ -267,6 +268,25 @@ export default function MisNotasScreen() {
                         {promedio.toFixed(1)}
                       </Text>
                     </View>
+                    <ExportarNotas
+                      nombreExamen={grupo.nombreExamen}
+                      notas={grupo.notas
+                        .filter((nota) => {
+                          if (!filtroTexto.trim()) return true;
+                          const nombre = (nota.nombreAlumno ?? nota.alumnoId).toLowerCase();
+                          return nombre.includes(filtroTexto.toLowerCase().trim());
+                        })
+                        .sort((a, b) =>
+                          (a.nombreAlumno ?? "").localeCompare(
+                            b.nombreAlumno ?? "",
+                          ),
+                        )
+                        .map((nota) => ({
+                          nombre: nota.nombreAlumno ?? nota.alumnoId,
+                          nota: nota.nota,
+                        }))
+                      }
+                    />
                   </>
                 )}
               </View>

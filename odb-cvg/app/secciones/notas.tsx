@@ -206,7 +206,7 @@ export default function NotasScreen() {
           placeholder="Escribí el nombre del exámen..."
           placeholderTextColor="#9CA3AF"
           value={nombreExamen}
-          onChangeText={setNombreExamen}
+          onChangeText={(text) => setNombreExamen(text.replace(/\//g, "-"))}
           autoCapitalize="sentences"
         />
 
