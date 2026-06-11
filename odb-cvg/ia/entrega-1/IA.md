@@ -21245,3 +21245,443 @@ tsx
 
 ¿Querés que te arme un **CustomTextInput** que ya tenga `autoCorrect` y `autoCapitalize="words"` por defecto, para que lo uses en toda la app sin tener que repetir esas props en cada input?
 
+### Q&A de la sesión 5
+
+dame un prompt para pedirle a una IA que implemente 2 nuevas funcionalidades en la aplicación: cargar notas de exámenes (parciales) y consultar notas. básicamente, la funcionalidad para cargar notas debería preguntarse para cualquier sección que se vaya a crear, tal como se pregunta para estos casos:
+
+{/* Control de acceso */}
+        <View style={styles.cursadaSection}>
+          <Text style={styles.cursadaSectionTitulo}>Control de acceso</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Requerir código de inscripción</Text>
+              <Text style={styles.switchHint}>
+                Los alumnos deberán ingresar un código para acceder.
+              </Text>
+            </View>
+            <Switch
+              value={esRestringida}
+              onValueChange={(v) => {
+                setEsRestringida(v);
+                if (v && !codigoAcceso) {
+                  setCodigoAcceso(generarCodigoAleatorio());
+                }
+                if (!v) setCodigoAcceso("");
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          {esRestringida && codigoAcceso ? (
+            <View style={styles.codigoContainer}>
+              <Text style={styles.codigoLabel}>Código de acceso actual</Text>
+              <View style={styles.codigoRow}>
+                <Text style={styles.codigoText}>{codigoAcceso}</Text>
+                <TouchableOpacity
+                  style={styles.compartirBtn}
+                  onPress={() =>
+                    Share.share({
+                      message: `Código de acceso para ${titulo.trim()}: ${codigoAcceso}`,
+                    })
+                  }
+                >
+                  <Ionicons name="share-outline" size={16} color="#0F4A32" />
+                  <Text style={styles.compartirBtnText}>Compartir</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.codigoHint}>
+                Compartí este código con los alumnos. Para rotarlo, usá el
+                panel de administración de cursadas.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.cursadaSection}>
+          <Text style={styles.cursadaSectionTitulo}>Permitir carga de profesores</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Los profesores pueden subir contenido</Text>
+              <Text style={styles.switchHint}>
+                Si está activado, los profesores podrán agregar contenido en esta sección, pero no podrán editarlo ni eliminarlo.
+              </Text>
+            </View>
+            <Switch
+              value={permiteCargaProfesor}
+              onValueChange={(v) => {
+                setPermiteCargaProfesor(v);
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
+diseñá el prompt como lo consideres implementar. por ejemplo, podría ser que aparezcan todos los alumnos inscriptos en la cursada y al lado un espacio para poder cargar su nota.
+
+Acá tenés una propuesta de prompt. Está armado para que la IA entienda perfectamente el estilo visual que ya manejás en tu código y estructure tanto el frontend como el backend de manera lógica.
+
+Podés copiar y pegar el siguiente texto directamente a Codex, ChatGPT o Claude:
+
+Actuando como desarrollador Full-Stack y experto en React Native, necesito que implementes un sistema de Carga y Consulta de Notas de Exámenes (Parciales) para la aplicación móvil de la cátedra de Operatoria Dental B (UNLP).
+
+La funcionalidad se divide en tres partes principales. Por favor, estructurá tu respuesta y el código paso a paso:
+
+1. Configuración de la Sección (UI Admin/Docente)
+Al igual que configuramos si una sección es restringida o si permite carga de profesores, necesitamos un nuevo Switch en el formulario de creación/edición de la sección para habilitar la "Carga de notas" (ej. estado permiteCargaNotas).
+
+Contexto de UI: Deberás seguir exactamente el mismo estilo de este código que ya usamos para otras configuraciones:
+
+<View style={styles.cursadaSection}>
+  <Text style={styles.cursadaSectionTitulo}>Habilitar carga de notas</Text>
+  <View style={styles.switchRow}>
+    <View style={{ flex: 1 }}>
+      <Text style={styles.switchLabel}>Es una instancia de evaluación</Text>
+      <Text style={styles.switchHint}>
+        Si está activado, se habilitará una lista para calificar a los alumnos inscriptos en esta cursada.
+      </Text>
+    </View>
+    <Switch
+      value={permiteCargaNotas}
+      onValueChange={(v) => {
+        setPermiteCargaNotas(v);
+        setHayCambios(true);
+      }}
+      trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+      thumbColor="#FFFFFF"
+    />
+  </View>
+</View>
+
+(Necesito que me confirmes los cambios en el modelo de base de datos para guardar este nuevo flag permiteCargaNotas).
+
+2. Pantalla de Carga de Notas (UI Admin/Docente)
+Si la sección tiene permiteCargaNotas === true, el docente/admin debe poder acceder a una pantalla específica de calificación.
+
+Diseño requerido: Una lista (FlatList) que renderice a todos los alumnos inscriptos en esa cursada. Cada fila debe mostrar el nombre del alumno y, a la derecha, un TextInput para ingresar la nota (numérica o texto como "Ausente").
+
+Acción: Un botón al final (o un autoguardado por fila) para impactar estas notas en la base de datos.
+
+Entregable: Escribí el componente de React Native para esta pantalla, manejando el estado local de las notas antes de enviarlas al backend.
+
+3. Consulta de Notas (UI Alumno)
+Cuando el alumno ingresa a esta sección (si permiteCargaNotas === true), en lugar del contenido normal (o además de él), debe ver un componente destacado que le informe su calificación obtenida, o un mensaje de "Nota aún no cargada" si el profesor todavía no la subió.
+
+4. Impacto en el Backend y Base de Datos
+Explicá brevemente:
+
+¿Cómo estructurarías la tabla/colección de Notas? (Teniendo en cuenta que relaciona al Alumno, la Sección/Examen y la Cursada).
+
+¿Qué endpoints necesitamos (ej. GET /secciones/:id/notas, POST /secciones/:id/notas con un array de calificaciones para carga masiva)?
+
+Asegurate de que el código React Native sea limpio, use hooks modernos (useState, useEffect) y mantenga la paleta de colores del ejemplo (#25B471, #E5E7EB).
+
+¿Por qué este prompt te va a dar el mejor resultado?
+Le da tu código como plantilla: Al pasarle el fragmento de los Switch que ya tenés, la IA no va a inventar clases CSS ni componentes raros; va a usar styles.cursadaSection, styles.switchRow, etc., logrando que el código nuevo encaje perfecto con el viejo.
+
+Separa los roles: Le deja clarísimo a la IA que hay una vista para el que carga la nota (con el TextInput al lado del nombre) y otra para el que recibe la nota (el alumno).
+
+Pide carga masiva: Al sugerir que el docente vea toda la lista y guarde, obligamos a la IA a pensar en un endpoint de backend que reciba un array de notas de una sola vez, lo cual es mucho más eficiente y rápido para el profesor que ir guardando alumno por alumno en pantallas separadas.
+
+Vamos a planear. necesito implementar lo siguiente:
+
+1. El panelcito "NOTAS DE EXÁMENES" (Habilitar carga de notas) tendría que aparecer también como posibilidad en las subsecciones (además del panelcito "PERMITIR CARGA DE PROFESORES".
+
+2. Cuando se cargan notas, luego, en "Ver Notas", aparecen todas las notas de todos los exámenes cargados en esa sección. Ahora bien. No hay opción para eliminar esa carga / ese exámen si se desea.
+
+Plan: Notas en Subsecciones + Eliminar Examen
+Dos features independientes que se implementan en 4 fases.
+
+TL;DR: (1) Agregar el toggle "Habilitar carga de notas" al form de subsecciones y mostrar el banner Cargar/Ver Notas en la vista de detalle. (2) Agregar un botón "eliminar examen" (todo el grupo de notas) en la pantalla Ver Notas, visible solo para admin. Las notas de subsecciones se identifican con un campo subseccionPath para ser independientes de las de la sección padre.
+
+Fase A — Data model (hooks)
+1. useSubsecciones.ts
+
+Agregar permiteNotas?: boolean a la interfaz Subseccion.
+2. useNotas.ts
+
+Agregar subseccionPath?: string a Nota y NotaInput.
+Actualizar guardarNotas: guardar campo subseccionPath: subseccionPath ?? "" en el doc; actualizar el ID compuesto para incluir subseccionPath cuando no es vacío (evitar colisiones de ID entre sección y subsección con mismo examen).
+Actualizar useNotasPorSeccion: tercer param opcional subseccionPath?; cuando se provee, agrega where("subseccionPath", "==", subseccionPath) al query.
+Agregar eliminarNotasPorExamen(seccionId, nombreExamen, subseccionPath?): query + batch delete.
+Fase B — Formulario de subsección
+3. form.tsx
+
+Agregar estado permiteNotas.
+Cargar y guardar el campo en Firestore.
+Agregar panel UI verde "NOTAS DE EXÁMENES" (mismo diseño que en secciones/form.tsx) debajo del panel de profesores.
+Fase C — Detalle de subsección
+4. [id].tsx
+
+Agregar notasBanner cuando subseccion.permiteNotas === true (mismo bloque que en secciones/[id].tsx).
+"Cargar Notas" → navega a /secciones/notas con params { moduloId, seccionId, subseccionPath }.
+"Ver Notas" → navega a /secciones/mis-notas con params { moduloId, seccionId, subseccionPath }.
+Fase D — Pantallas de notas (reutilizadas)
+5. notas.tsx
+
+Leer subseccionPath de los params (opcional).
+Pasar a useNotasPorSeccion para precargar notas existentes.
+Pasar a guardarNotas.
+6. mis-notas.tsx (afecta a AMBOS features)
+
+Leer subseccionPath de params; cuando está presente, filtrar el query de Firestore por ese campo.
+Feature 2: agregar estado examenAEliminar; botón papelera en header de cada grupoCard (admin only); ModalConfirmacion + ModalAlerta; llamar eliminarNotasPorExamen al confirmar.
+Archivos a modificar
+useSubsecciones.ts
+useNotas.ts
+form.tsx
+app/subsecciones/[id].tsx
+notas.tsx
+mis-notas.tsx
+Verificación
+Crear/editar subsección con toggle activado → campo permiteNotas: true en Firestore.
+En detalle de subsección con permiteNotas=true, ver el banner Cargar/Ver Notas.
+Cargar notas desde una subsección → doc en Firestore tiene subseccionPath correcto.
+Ver Notas desde subsección → solo muestra las notas de esa subsección.
+Ver Notas desde sección → muestra notas de sección (query sin filtro adicional, backward compatible con notas viejas).
+Como admin, eliminar un examen en Ver Notas → modal de confirmación, docs eliminados, lista actualizada en tiempo real.
+Como alumno o profesor, el botón de eliminar NO aparece.
+Consideraciones
+Firestore indexes: el query seccionId + nombreExamen + subseccionPath puede requerir un índice compuesto en la colección notas. Habrá que verificar en la consola de Firebase.
+Notas viejas: las notas de sección ya existentes (sin campo subseccionPath) siguen apareciendo en "Ver Notas" de la sección porque ese query no filtra por subseccionPath. No hay migración necesaria.
+Firma de crearSubseccion/actualizarSubseccion: revisar que acepten el campo permiteNotas antes de implementar la Fase B.
+
+Todo listo, sin errores. Resumen de lo implementado:
+
+Feature 1 — Notas en subsecciones (6 archivos):
+
+useSubsecciones.ts: permiteNotas?: boolean en la interfaz y en crearSubseccion.
+form.tsx: estado + carga desde Firestore + guardado + panel UI verde "NOTAS DE EXÁMENES" (idéntico al de secciones).
+app/subsecciones/[id].tsx: banner con botones "Cargar Notas" / "Ver Notas" cuando subseccion.permiteNotas === true; navega a las mismas pantallas de secciones pasando subseccionPath.
+useNotas.ts: campo subseccionPath en Nota / NotaInput; ID compuesto actualizado para evitar colisiones; useNotasPorSeccion acepta tercer param opcional para filtrar.
+notas.tsx: lee subseccionPath de params y lo pasa al hook y a guardarNotas.
+mis-notas.tsx: cuando llega subseccionPath, agrega where("subseccionPath", "==", ...) al query → muestra solo las notas de esa subsección.
+Feature 2 — Eliminar examen (2 archivos):
+
+useNotas.ts: nueva función eliminarNotasPorExamen(seccionId, nombreExamen, subseccionPath?) — batch delete con query filtrado.
+mis-notas.tsx: ícono papelera en el header de cada grupo (solo admin), ModalConfirmacion + ModalAlerta para confirmar y notificar.
+Nota Firestore: si al usar el filtro por subseccionPath aparece un error de índice compuesto, Firestore incluirá en el log el link directo para crearlo en la consola.
+
+ ERROR  useInscripcionesPorSeccion error: [FirebaseError: Missing or insufficient permissions.] FirebaseError: Missing or insufficient permissions.
+ ERROR  useInscripcionesPorSeccion error: [FirebaseError: Missing or insufficient permissions.] FirebaseError: Missing or insufficient permissions.
+ ERROR  useInscripcionesPorSeccion error: [FirebaseError: Missing or insufficient permissions.] FirebaseError: Missing or insufficient permissions.
+ ERROR  useInscripcionesPorSeccion error: [FirebaseError: Missing or insufficient permissions.] FirebaseError: Missing or insufficient permissions.
+ ERROR  useInscripcionesPorSeccion error: [FirebaseError: Missing or insufficient permissions.] FirebaseError: Missing or insufficient permissions.
+
+cuando ingreso como profesor
+
+El problema está claro. La regla de inscripciones solo permite read al propio alumno (resource.data.alumnoId == request.auth.uid) o al admin. El profesor no tiene permiso para leer la colección inscripciones, pero notas.tsx llama a useInscripcionesPorSeccion para listar los alumnos a quienes cargarle notas.
+
+La solución es agregar isProfesor() a la regla de lectura de inscripciones:
+
+Estoy en modo Ask — no puedo editar archivos. Pero el fix es simple y puntual.
+
+Causa: en firestore.rules:82, la regla de inscripciones solo permite read al propio alumno o al admin. El rol profesor no está incluido, pero notas.tsx llama a useInscripcionesPorSeccion (que hace un query de inscripciones por seccionId) para mostrar la lista de alumnos a quienes cargar notas.
+
+Fix — cambiar la línea en firestore.rules:82-84:
+
+- // El propio alumno o el admin pueden leer
+- allow read: if request.auth != null &&
+-   (resource.data.alumnoId == request.auth.uid || isAdmin());
+
++ // El propio alumno, el admin o el profesor pueden leer
++ allow read: if request.auth != null &&
++   (resource.data.alumnoId == request.auth.uid || isAdmin() || isProfesor());
+
+Luego desplegás las reglas con:
+
+firebase deploy --only firestore:rules
+
+Esta es la única regla que hay que cambiar. La lógica de que el profesor solo puede cargar notas (no manejar inscripciones) ya está controlada a nivel de app — la pantalla notas.tsx usa las inscripciones solo para listar alumnos y rellenar notas, no para crear/eliminar inscripciones.
+
+tengo una pregunta... por qué en el proyecto cuando un profesor entra a cargar notas o a ver notas ve el id del alumno y no el nombre? si entro como admin si me deja ver el nombre del alumno.
+
+orque el proyecto sí intenta mostrar el nombre, pero cuando entra un profesor Firestore no le deja leer los documentos de otros usuarios.
+
+En app/secciones/notas.tsx (line 50), la pantalla hace esto:
+
+getDoc(doc(db, "usuarios", insc.alumnoId))
+Si lo puede leer, muestra snap.data().nombre. Si falla, cae acá:
+
+temp[insc.alumnoId] = insc.alumnoId;
+Y por eso ves el id del alumno.
+
+La diferencia está en firestore.rules (line 30):
+
+match /usuarios/{userId} {
+  allow read, write: if request.auth != null && request.auth.uid == userId;
+  allow read, update, delete: if isAdmin();
+}
+Eso significa:
+
+un usuario puede leer solo su propio documento
+un admin puede leer usuarios
+un profesor no puede leer documentos de alumnos
+Entonces como admin funciona, pero como profesor Firestore devuelve permission-denied, el catch lo tapa y la app muestra el alumnoId.
+
+Pasa lo mismo en “Ver Notas”, en app/secciones/mis-notas.tsx (line 78): también intenta resolver usuarios/{alumnoId} y si falla usa el id.
+
+La solución más directa sería ajustar las reglas para permitir que profesores lean datos mínimos de alumnos, por ejemplo allow read: if isAdmin() || isProfesor() || request.auth.uid == userId;. La solución más prolija a nivel privacidad sería guardar nombreAlumno en inscripciones o notas al momento de inscribir/cargar, así el profesor no necesita leer toda la colección usuarios.
+
+10:56 PM
+bueno hacelo
+10:57 PM
+
+Worked for 3m 13s
+Hecho. Cambié firestore.rules (line 30) para que los profesores puedan leer documentos de usuarios y así resolver el nombre del alumno en notas.tsx y mis-notas.tsx.
+
+Quedó así en esencia:
+
+allow read: if request.auth != null &&
+  (request.auth.uid == userId || isAdmin() || isProfesor());
+Importante: esto está aplicado localmente, pero el deploy a Firebase no se ejecutó porque rechazaste el permiso. Para que funcione en la app real, hay que desplegar:
+
+npx firebase deploy --only firestore:rules --project odb-cvg
+También vi que firestore.rules ya tenía otros cambios pendientes en inscripciones y notas; no los toqué.
+
+necesito que, para cada lugar en el que se puedan cargar notas, exista un buscador de alumnos.
+
+El usuario quiere que agregue un buscador de alumnos en cada lugar donde se puedan cargar notas. Para entender bien el alcance, necesito:
+
+1. Leer el archivo `app/secciones/notas.tsx` que está abierto (probablemente es donde se cargan notas)
+2. Explorar las demás pantallas en las carpetas para encontrar otros lugares donde se carguen notas (por ejemplo en `app/pantallasAdmin/`, `app/modulos/`, `app/subsecciones/`, etc.)
+3. Entender el componente `ModalAlerta` y otros componentes UI disponibles
+4. Crear un componente reutilizable de buscador de alumnos
+5. Integrarlo en todos los lugares relevantes
+
+Primero leamos los archivos clave.
+
+Cline read 4 files, 4 folders:
+
+app/secciones/notas.tsx · lines 1-387
+
+app/modulos/
+
+app/secciones/
+
+app/secciones/mis-notas.tsx · lines 1-405
+
+components/ui/
+
+app/pantallasAdmin/userManagementScreen.tsx · lines 1-753
+
+app/subsecciones/
+
+app/subsecciones/[id].tsx · lines 1-690
+
+Cline wants to execute this command:
+
+Skipped
+
+```shell
+mkdir -p components/ui
+```
+
+Checkpoint
+
+Compare
+
+Restore
+
+Thinking
+
+La carpeta `components/ui/` ya existe. Crearé el componente `BuscadorAlumnos` reutilizable.
+
+Cline wants to create a new file:
+
+/components/ui/BuscadorAlumnos.tsx
+
+Checkpoint
+
+Compare
+
+Restore
+
+Thinking
+
+Now let me add the search functionality to the `app/secciones/notas.tsx` file. I'll add:
+
+1. Import for BuscadorAlumnos
+2. A `filtroTexto` state
+3. Filter logic
+4. Render the BuscadorAlumnos component before the student list
+
+Cline wants to edit this file:
+
+/app/secciones/notas.tsx
+
+3
+
+Checkpoint
+
+Compare
+
+Restore
+
+Thinking
+
+The JSX structure got broken. Let me re-read the file to see the current state and fix it properly.
+
+Cline read 1 file:
+
+app/secciones/notas.tsx · lines 188-290
+
+Cline wants to edit this file:
+
+/app/secciones/notas.tsx
+
+Checkpoint
+
+Compare
+
+Restore
+
+Thinking
+
+Now let me add the buscador to `app/secciones/mis-notas.tsx`:
+
+Cline wants to edit this file:
+
+/app/secciones/mis-notas.tsx
+
+4
+
+Checkpoint
+
+Compare
+
+Restore
+
+Thinking
+
+Let me verify both files compile correctly by checking for any remaining issues:
+
+Cline read 1 file:
+
+app/secciones/notas.tsx · lines 180-260
+
+Task Completed
+
+Se implementó el buscador de alumnos en todos los lugares donde se cargan/muestran notas:
+
+__1. Componente reutilizable `components/ui/BuscadorAlumnos.tsx`__
+
+- Input con icono de búsqueda y botón de limpiar
+- Props: `valor`, `onChangeText`, `placeholder` (opcional)
+
+__2. `app/secciones/notas.tsx` - Cargar Notas__
+
+- Se agregó estado `filtroTexto` y filtrado de `inscripciones` por nombre de alumno
+- El `BuscadorAlumnos` se renderiza antes de la lista de alumnos
+- Muestra contador de alumnos filtrados: "Alumnos Inscriptos (N)"
+- Si el filtro no encuentra coincidencias, muestra mensaje "No se encontraron alumnos con ese nombre"
+- Se corrigió el tipo `notasAGuardar` para incluir `subseccionPath` (el type original no lo tenía)
+
+__3. `app/secciones/mis-notas.tsx` - Ver Notas__
+
+- Se agregó estado `filtroTexto` y `BuscadorAlumnos` visible solo para admin/profesor
+- Filtra las notas de cada grupo de examen por nombre de alumno antes de mostrarlas en la tabla
+- Los alumnos ven su propia nota sin buscador (solo ven su propia info)
