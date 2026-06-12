@@ -3,7 +3,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helpers de rol — leen el documento del usuario autenticado
     function isAdmin() {
       return request.auth != null &&
         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
@@ -37,39 +36,50 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
-    // Consulta collectionGroup('secciones') usada por Administracion > Cursadas.
-    // La lectura normal de secciones sigue definida dentro de modulos.
     match /{path=**}/secciones/{seccionId} {
       allow read: if isAdmin();
     }
 
-    // Colección 'modulos': lectura para todos los autenticados, escritura solo admin
     match /modulos/{moduloId} {
       allow read: if request.auth != null;
       allow create, update, delete: if isAdmin();
 
-      // Subcollección 'secciones': lectura para todos, escritura para admin y profesor
       match /secciones/{seccionId} {
         allow read: if request.auth != null;
         allow create, update, delete: if isAdmin();
-        // Items directos de una seccion.
+
         match /items/{itemId} {
           allow read: if request.auth != null;
           allow create: if isAdmin() ||
             (profesorCreaItemAutorizado() && seccionPermiteCargaProfesor(moduloId, seccionId));
           allow update, delete: if isAdmin();
+
+          match /entregas_alumnos/{entregaId} {
+            allow read: if request.auth != null &&
+              (resource.data.alumnoId == request.auth.uid || isAdmin() || isProfesor());
+            allow create: if request.auth != null &&
+              request.auth.uid == request.resource.data.alumnoId;
+            allow update: if false;
+            allow delete: if isAdmin();
+          }
         }
 
-        // Items dentro de subsecciones anidadas en cualquier profundidad.
         match /{parentPath=**}/items/{itemId} {
           allow read: if request.auth != null;
           allow create: if isAdmin() ||
             (profesorCreaItemAutorizado() && subseccionPermiteCargaProfesor(moduloId, seccionId, parentPath));
           allow update, delete: if isAdmin();
+
+          match /entregas_alumnos/{entregaId} {
+            allow read: if request.auth != null &&
+              (resource.data.alumnoId == request.auth.uid || isAdmin() || isProfesor());
+            allow create: if request.auth != null &&
+              request.auth.uid == request.resource.data.alumnoId;
+            allow update: if false;
+            allow delete: if isAdmin();
+          }
         }
 
-        // Subcolección 'subsecciones': lectura para todos, escritura para admin y profesor.
-        // El comodín recursivo permite subsecciones en cualquier profundidad.
         match /{path=**}/subsecciones/{subseccionId} {
           allow read: if request.auth != null;
           allow create, update, delete: if isAdmin();
@@ -77,25 +87,19 @@ service cloud.firestore {
       }
     }
 
-    // Colección 'inscripciones': gestión de matrículas por cursada
     match /inscripciones/{inscripcionId} {
       // El propio alumno, el admin o el profesor pueden leer
       allow read: if request.auth != null &&
         (resource.data.alumnoId == request.auth.uid || isAdmin() || isProfesor());
 
-      // Auto-matriculación por código: el alumno crea la propia inscripción
-      // y el código debe coincidir con el almacenado en la sección
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.alumnoId
         && request.resource.data.tipo == 'codigo'
         && get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId))
             .data.codigoAcceso == request.resource.data.codigoUsado;
 
-      // Asignación manual y eliminación: solo admin
       allow create: if isAdmin() && request.resource.data.tipo == 'manual';
       allow delete: if isAdmin();
-
-      // Las inscripciones son inmutables (el admin elimina y recrea si es necesario)
       allow update: if false;
     }
     

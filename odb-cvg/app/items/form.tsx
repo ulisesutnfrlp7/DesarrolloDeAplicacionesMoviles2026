@@ -23,6 +23,7 @@ const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "imagen", label: "Imagen", icono: "image-outline" },
   { key: "video", label: "Video", icono: "videocam-outline" },
   { key: "documento", label: "Doc.", icono: "attach-outline" },
+  { key: "entrega", label: "Entrega", icono: "cloud-upload-outline" },
 ];
 
 export default function ItemFormScreen() {
@@ -130,6 +131,12 @@ export default function ItemFormScreen() {
               url: data.url ?? "",
               storageRef: data.storageRef ?? "",
             });
+          }
+          if (data.tipo === "enlace") {
+            setUrlEnlace(data.url ?? "");
+          }
+          if (data.tipo === "entrega") {
+            setUrlEnlace(data.fechaLimite ?? "");
           }
         }
       } catch (error) {
@@ -325,7 +332,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
       setAlerta({ visible: true, titulo: "Campo requerido", mensaje: "Por favor ingresá un enlace válido.", tipo: "error", cerrarAlSalir: false });
       return;
     }
-    if (tipo !== "texto" && tipo !== "enlace" && !archivo && !modoEdicion) {
+    if (tipo !== "texto" && tipo !== "enlace" && tipo !== "entrega" && !archivo && !modoEdicion) {
       setAlerta({ visible: true, titulo: "Sin archivo", mensaje: "Por favor seleccioná un archivo.", tipo: "error", cerrarAlSalir: false });
       return;
     }
@@ -333,42 +340,60 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
     setSubiendo(true);
     try {
       if (modoEdicion && itemId) {
-        if (tipo === "texto") {
-          await actualizarItem(itemId, { titulo: titulo.trim() || "Texto", contenido: contenido.trim() });
-        } else if (tipo === "enlace") {
-          await actualizarItem(itemId, { titulo: titulo.trim() || "Enlace", url: urlEnlace.trim() });
-        } else if (archivo) {
-          const cloudRes = await uploadToCloudinary(archivo.uri, tipo, archivo.nombre);
-          
-          await actualizarItem(itemId, {
-            titulo: titulo.trim() || archivo.nombre,
-            url: cloudRes.url,
-            storageRef: cloudRes.publicId,
-            nombreArchivo: archivo.nombre,
-          });
-        } else {
-          await actualizarItem(itemId, { titulo: titulo.trim() || archivoExistente?.nombre || "" });
-        }
-        setAlerta({ visible: true, titulo: "Actualizado", mensaje: "El elemento fue actualizado correctamente.", tipo: "exito", cerrarAlSalir: true });
-      } else {
-        if (tipo === "texto") {
-           await crearItem({ tipo: "texto", titulo: titulo.trim() || "Texto", contenido: contenido.trim(), url: "", storageRef: "", nombreArchivo: "" });
-        } else if (tipo === "enlace") {
-           await crearItem({ tipo: "enlace", titulo: titulo.trim() || "Enlace", contenido: "", url: urlEnlace.trim(), storageRef: "", nombreArchivo: "" });
-        } else {
-          const cloudRes = await uploadToCloudinary(archivo!.uri, tipo, archivo!.nombre);
-          
-          await crearItem({
-            tipo,
-            titulo: titulo.trim() || archivo!.nombre,
-            contenido: "",
-            url: cloudRes.url,
-            storageRef: cloudRes.publicId,
-            nombreArchivo: archivo!.nombre,
-          });
-        }
-        setAlerta({ visible: true, titulo: "Guardado", mensaje: "El elemento fue agregado correctamente.", tipo: "exito", cerrarAlSalir: true });
-      }
+  // ── EDICIÓN ──
+  if (tipo === "texto") {
+    await actualizarItem(itemId, { titulo: titulo.trim() || "Texto", contenido: contenido.trim() });
+  } else if (tipo === "enlace") {
+    await actualizarItem(itemId, { titulo: titulo.trim() || "Enlace", url: urlEnlace.trim() });
+  } else if (tipo === "entrega") {
+    await actualizarItem(itemId, {
+      titulo: titulo.trim() || "Entrega",
+      contenido: contenido.trim(),
+      descripcionEntrega: contenido.trim(),
+      fechaLimite: urlEnlace.trim() || null,
+    });
+  } else if (archivo) {
+    const cloudRes = await uploadToCloudinary(archivo.uri, tipo, archivo.nombre);
+    await actualizarItem(itemId, {
+      titulo: titulo.trim() || archivo.nombre,
+      url: cloudRes.url,
+      storageRef: cloudRes.publicId,
+      nombreArchivo: archivo.nombre,
+    });
+  } else {
+    await actualizarItem(itemId, { titulo: titulo.trim() || archivoExistente?.nombre || "" });
+  }
+  setAlerta({ visible: true, titulo: "Actualizado", mensaje: "El elemento fue actualizado correctamente.", tipo: "exito", cerrarAlSalir: true });
+} else {
+  // ── CREACIÓN ──
+  if (tipo === "texto") {
+    await crearItem({ tipo: "texto", titulo: titulo.trim() || "Texto", contenido: contenido.trim(), url: "", storageRef: "", nombreArchivo: "" });
+  } else if (tipo === "enlace") {
+    await crearItem({ tipo: "enlace", titulo: titulo.trim() || "Enlace", contenido: "", url: urlEnlace.trim(), storageRef: "", nombreArchivo: "" });
+  } else if (tipo === "entrega") {
+    await crearItem({
+      tipo: "entrega",
+      titulo: titulo.trim() || "Entrega",
+      contenido: contenido.trim(),
+      url: "",
+      storageRef: "",
+      nombreArchivo: "",
+      descripcionEntrega: contenido.trim(),
+      fechaLimite: urlEnlace.trim() || null,
+    });
+  } else {
+    const cloudRes = await uploadToCloudinary(archivo!.uri, tipo, archivo!.nombre);
+    await crearItem({
+      tipo,
+      titulo: titulo.trim() || archivo!.nombre,
+      contenido: "",
+      url: cloudRes.url,
+      storageRef: cloudRes.publicId,
+      nombreArchivo: archivo!.nombre,
+    });
+  }
+  setAlerta({ visible: true, titulo: "Guardado", mensaje: "El elemento fue agregado correctamente.", tipo: "exito", cerrarAlSalir: true });
+}
     } catch (error) {
       console.error(error);
       setAlerta({ visible: true, titulo: "Error", mensaje: "No se pudo guardar el archivo. Intentá nuevamente.", tipo: "error", cerrarAlSalir: false });
@@ -544,8 +569,33 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
           </>
         )}
 
+        {tipo === "entrega" && (
+          <>
+            <Text style={styles.label}>Consigna / Descripción</Text>
+            <TextInput
+              style={[styles.input, styles.inputMultiline]}
+              placeholder="Describí qué deben entregar los alumnos..."
+              placeholderTextColor="#9CA3AF"
+              value={contenido}
+              onChangeText={(v) => { setContenido(v); setHayCambios(true); }}
+              multiline
+              textAlignVertical="top"
+              autoCorrect={true}
+              autoCapitalize="sentences"
+            />
+            <Text style={styles.label}>Fecha límite (opcional)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Ej: 30/06/2026"
+              placeholderTextColor="#9CA3AF"
+              value={urlEnlace}  // reutilizamos urlEnlace como campo de fecha límite
+              onChangeText={(v) => { setUrlEnlace(v); setHayCambios(true); }}
+            />
+          </>
+        )}
+
         {/* Selector de archivo para tipos que NO son texto y NO son enlace */}
-        {(tipo !== "texto" && tipo !== "enlace") && (
+        {(tipo !== "texto" && tipo !== "enlace" && tipo !== "entrega") && (
           <>
             <Text style={styles.label}>
               Archivo{!modoEdicion && <Text style={styles.required}> *</Text>}

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { auth, db } from "../config/firebaseConfig";
 import CryptoJS from 'crypto-js';
 
-export type ItemTipo = "texto" | "pdf" | "imagen" | "documento" | "video" | "enlace";
+export type ItemTipo = "texto" | "pdf" | "imagen" | "documento" | "video" | "enlace" | "entrega";
 
 export interface Item {
   id: string;
@@ -17,6 +17,8 @@ export interface Item {
   creadoPor: string;
   fechaCreacion: any;
   fechaActualizacion: any;
+  descripcionEntrega?: string;
+  fechaLimite?: string | null;
 }
 
 export type ItemInput = Omit<Item, "id" | "creadoPor" | "fechaCreacion" | "fechaActualizacion">;
