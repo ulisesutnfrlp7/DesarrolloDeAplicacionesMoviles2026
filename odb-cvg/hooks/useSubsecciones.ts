@@ -1,13 +1,13 @@
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    onSnapshot,
+    orderBy,
+    query,
+    serverTimestamp,
+    updateDoc,
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { auth, db } from "../config/firebaseConfig";
@@ -19,10 +19,12 @@ export interface Subseccion {
   fechaCreacion: any;
   fechaActualizacion: any;
   permiteCargaProfesor?: boolean;
+  permiteNotas?: boolean;
 }
 
 export type SubseccionInput = Pick<Subseccion, "titulo"> & {
   permiteCargaProfesor?: boolean;
+  permiteNotas?: boolean;
 };
 
 const getSubseccionPathSegments = (subseccionPath?: string) =>
@@ -96,6 +98,7 @@ export function useSubsecciones(moduloId: string, seccionId: string, parentPath?
     await addDoc(getSubseccionesCollection(moduloId, seccionId, parentPath), {
       ...data,
       permiteCargaProfesor: data.permiteCargaProfesor ?? false,
+      permiteNotas: data.permiteNotas ?? false,
       creadoPor: user.uid,
       fechaCreacion: serverTimestamp(),
       fechaActualizacion: serverTimestamp(),

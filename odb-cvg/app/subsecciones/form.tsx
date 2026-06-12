@@ -32,6 +32,7 @@ export default function SubseccionFormScreen() {
 
   const [titulo, setTitulo] = useState("");
   const [permiteCargaProfesor, setPermiteCargaProfesor] = useState(false);
+  const [permiteNotas, setPermiteNotas] = useState(false);
   const [cargandoDatos, setCargandoDatos] = useState(modoEdicion);
   const [guardando, setGuardando] = useState(false);
   const [hayCambios, setHayCambios] = useState(false);
@@ -66,6 +67,7 @@ export default function SubseccionFormScreen() {
           const data = docSnap.data();
           setTitulo(data.titulo ?? "");
           setPermiteCargaProfesor(data.permiteCargaProfesor ?? false);
+          setPermiteNotas(data.permiteNotas ?? false);
         }
       } catch (error) {
         console.error("Error al cargar subsección:", error);
@@ -89,7 +91,7 @@ export default function SubseccionFormScreen() {
     }
     setGuardando(true);
     try {
-      const data = { titulo: titulo.trim(), permiteCargaProfesor };
+      const data = { titulo: titulo.trim(), permiteCargaProfesor, permiteNotas };
       if (modoEdicion && currentSubseccionPath) {
         await actualizarSubseccion(currentSubseccionPath, data);
         setAlerta({
@@ -217,6 +219,27 @@ export default function SubseccionFormScreen() {
               value={permiteCargaProfesor}
               onValueChange={(v) => {
                 setPermiteCargaProfesor(v);
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
+        <View style={styles.profesorSection}>
+          <Text style={styles.profesorSectionTitulo}>Notas de exámenes</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Habilitar carga de notas</Text>
+              <Text style={styles.switchHint}>
+                Permite que admins y profesores carguen notas de exámenes para los alumnos inscriptos en esta sección.
+              </Text>
+            </View>
+            <Switch
+              value={permiteNotas}
+              onValueChange={(v) => {
+                setPermiteNotas(v);
                 setHayCambios(true);
               }}
               trackColor={{ false: "#E5E7EB", true: "#25B471" }}
