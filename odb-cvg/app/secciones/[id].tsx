@@ -318,7 +318,11 @@ export default function SeccionDetalleScreen() {
       <ModalConfirmacion
         visible={itemAEliminar !== null}
         titulo="Eliminar Elemento"
-        mensaje="¿Estás seguro de que deseas eliminar este elemento? Esta acción es permanente."
+        mensaje={
+          itemAEliminar?.tipo === "entrega"
+            ? "Este apartado es una Entrega. Si la eliminás, también se borrarán TODAS las entregas que los alumnos hayan subido, junto con sus archivos, notas y retroalimentaciones. Esta acción es permanente."
+            : "¿Estás seguro de que deseas eliminar este elemento? Esta acción es permanente."
+        }
         textoConfirmar="Sí, eliminar"
         textoCancelar="Cancelar"
         onConfirm={handleEliminarItem}

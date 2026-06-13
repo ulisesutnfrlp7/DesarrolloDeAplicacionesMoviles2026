@@ -15,6 +15,7 @@ import { useUserRole } from "../../hooks/useUserRole";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "texto", label: "Texto", icono: "document-text-outline" },
@@ -25,6 +26,19 @@ const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "documento", label: "Doc.", icono: "attach-outline" },
   { key: "entrega", label: "Entrega", icono: "cloud-upload-outline" },
 ];
+
+const formatearFecha = (iso: string) => {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+};
+
+const detectarTipoArchivo = (nombre: string): ItemTipo => {
+  const ext = nombre.split(".").pop()?.toLowerCase() ?? "";
+  if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) return "imagen";
+  if (["mp4", "mov", "avi", "mkv"].includes(ext)) return "video";
+  if (ext === "pdf") return "pdf";
+  return "documento";
+};
 
 export default function ItemFormScreen() {
   const { moduloId, seccionId, subseccionId, subseccionPath, itemId } = useLocalSearchParams<{
@@ -53,6 +67,9 @@ export default function ItemFormScreen() {
     url: string;
     storageRef: string;
   } | null>(null);
+
+  const [mostrarDatePicker, setMostrarDatePicker] = useState(false);
+
   const [permiteCargaProfesor, setPermiteCargaProfesor] = useState(false);
   const [cargandoPermiso, setCargandoPermiso] = useState(true);
   const [cargandoDatos, setCargandoDatos] = useState(!!itemId);
@@ -137,6 +154,13 @@ export default function ItemFormScreen() {
           }
           if (data.tipo === "entrega") {
             setUrlEnlace(data.fechaLimite ?? "");
+            if (data.archivoConsignaUrl) {
+              setArchivoExistente({
+                nombre: data.archivoConsignaNombre ?? "",
+                url: data.archivoConsignaUrl ?? "",
+                storageRef: data.archivoConsignaStorageRef ?? "",
+              });
+            }
           }
         }
       } catch (error) {
@@ -346,12 +370,24 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
   } else if (tipo === "enlace") {
     await actualizarItem(itemId, { titulo: titulo.trim() || "Enlace", url: urlEnlace.trim() });
   } else if (tipo === "entrega") {
-    await actualizarItem(itemId, {
-      titulo: titulo.trim() || "Entrega",
-      contenido: contenido.trim(),
-      descripcionEntrega: contenido.trim(),
-      fechaLimite: urlEnlace.trim() || null,
-    });
+  let extra: Record<string, any> = {};
+  if (archivo) {
+    const tipoArchivo = detectarTipoArchivo(archivo.nombre);
+    const cloudRes = await uploadToCloudinary(archivo.uri, tipoArchivo, archivo.nombre);
+    extra = {
+      archivoConsignaUrl: cloudRes.url,
+      archivoConsignaStorageRef: cloudRes.publicId,
+      archivoConsignaNombre: archivo.nombre,
+      archivoConsignaTipo: tipoArchivo,
+    };
+  }
+  await actualizarItem(itemId, {
+    titulo: titulo.trim() || "Entrega",
+    contenido: contenido.trim(),
+    descripcionEntrega: contenido.trim(),
+    fechaLimite: urlEnlace.trim() || null,
+    ...extra,
+  });
   } else if (archivo) {
     const cloudRes = await uploadToCloudinary(archivo.uri, tipo, archivo.nombre);
     await actualizarItem(itemId, {
@@ -371,16 +407,28 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
   } else if (tipo === "enlace") {
     await crearItem({ tipo: "enlace", titulo: titulo.trim() || "Enlace", contenido: "", url: urlEnlace.trim(), storageRef: "", nombreArchivo: "" });
   } else if (tipo === "entrega") {
-    await crearItem({
-      tipo: "entrega",
-      titulo: titulo.trim() || "Entrega",
-      contenido: contenido.trim(),
-      url: "",
-      storageRef: "",
-      nombreArchivo: "",
-      descripcionEntrega: contenido.trim(),
-      fechaLimite: urlEnlace.trim() || null,
-    });
+  let extra: Record<string, any> = {};
+  if (archivo) {
+    const tipoArchivo = detectarTipoArchivo(archivo.nombre);
+    const cloudRes = await uploadToCloudinary(archivo.uri, tipoArchivo, archivo.nombre);
+    extra = {
+      archivoConsignaUrl: cloudRes.url,
+      archivoConsignaStorageRef: cloudRes.publicId,
+      archivoConsignaNombre: archivo.nombre,
+      archivoConsignaTipo: tipoArchivo,
+    };
+  }
+  await crearItem({
+    tipo: "entrega",
+    titulo: titulo.trim() || "Entrega",
+    contenido: contenido.trim(),
+    url: "",
+    storageRef: "",
+    nombreArchivo: "",
+    descripcionEntrega: contenido.trim(),
+    fechaLimite: urlEnlace.trim() || null,
+    ...extra,
+  });
   } else {
     const cloudRes = await uploadToCloudinary(archivo!.uri, tipo, archivo!.nombre);
     await crearItem({
@@ -463,7 +511,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
   }
 
   return (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}>
         <ScreenHeader
           titulo={modoEdicion ? "Editar elemento" : "Agregar elemento"}
           onBack={handleAtras}
@@ -583,22 +631,52 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
               autoCorrect={true}
               autoCapitalize="sentences"
             />
+
             <Text style={styles.label}>Fecha límite (opcional)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: 30/06/2026"
-              placeholderTextColor="#9CA3AF"
-              value={urlEnlace}  // reutilizamos urlEnlace como campo de fecha límite
-              onChangeText={(v) => { setUrlEnlace(v); setHayCambios(true); }}
-            />
+            <TouchableOpacity style={styles.input} onPress={() => setMostrarDatePicker(true)}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 15, color: urlEnlace ? "#11181C" : "#9CA3AF" }}>
+                  {urlEnlace ? formatearFecha(urlEnlace) : "Sin fecha límite"}
+                </Text>
+                <Ionicons name="calendar-outline" size={20} color="#6B7280" />
+              </View>
+            </TouchableOpacity>
+            {urlEnlace ? (
+              <TouchableOpacity
+                onPress={() => { setUrlEnlace(""); setHayCambios(true); }}
+                style={{ alignSelf: "flex-start", marginTop: 8 }}
+              >
+                <Text style={{ color: "#DC2626", fontSize: 13, fontWeight: "600" }}>Quitar fecha límite</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {mostrarDatePicker && (
+              <DateTimePicker
+                value={urlEnlace ? new Date(`${urlEnlace}T00:00:00`) : new Date()}
+                mode="date"
+                minimumDate={new Date()}
+                onChange={(_event, selectedDate) => {
+                  setMostrarDatePicker(false);
+                  if (selectedDate) {
+                    const iso = selectedDate.toISOString().split("T")[0];
+                    setUrlEnlace(iso);
+                    setHayCambios(true);
+                  }
+                }}
+              />
+            )}
           </>
         )}
 
         {/* Selector de archivo para tipos que NO son texto y NO son enlace */}
-        {(tipo !== "texto" && tipo !== "enlace" && tipo !== "entrega") && (
+        {(tipo !== "texto" && tipo !== "enlace") && (
           <>
             <Text style={styles.label}>
-              Archivo{!modoEdicion && <Text style={styles.required}> *</Text>}
+              {tipo === "entrega" ? (
+                "Archivo adjunto a la consigna (opcional)"
+              ) : (
+                <>Archivo{!modoEdicion && <Text style={styles.required}> *</Text>}</>
+              )}
             </Text>
 
             {modoEdicion && archivoExistente && !archivo && (
@@ -731,7 +809,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
-  content: { padding: 20, paddingBottom: 48 },
+  content: { padding: 20, paddingBottom: 120 },
   centered: {
     flex: 1,
     justifyContent: "center",

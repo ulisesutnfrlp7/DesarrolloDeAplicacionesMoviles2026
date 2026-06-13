@@ -13,33 +13,14 @@ service cloud.firestore {
         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'profesor';
     }
 
-    function profesorCreaItemAutorizado() {
-      return isProfesor()
-        && request.resource.data.creadoPor == request.auth.uid;
-    }
-
-    function seccionPermiteCargaProfesor(moduloId, seccionId) {
-      return get(/databases/$(database)/documents/modulos/$(moduloId)/secciones/$(seccionId))
-        .data.permiteCargaProfesor == true;
-    }
-
-    function subseccionPermiteCargaProfesor(moduloId, seccionId, parentPath) {
-      return get(/databases/$(database)/documents/modulos/$(moduloId)/secciones/$(seccionId)/$(parentPath))
-        .data.permiteCargaProfesor == true;
-    }
-
-    // Colección 'usuarios': profesores pueden leer perfiles para resolver nombres.
+    // 1. Usuarios
     match /usuarios/{userId} {
-      allow read: if request.auth != null &&
-        (request.auth.uid == userId || isAdmin() || isProfesor());
+      allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == userId;
       allow read, update, delete: if isAdmin();
     }
 
-    match /{path=**}/secciones/{seccionId} {
-      allow read: if isAdmin();
-    }
-
+    // 2. Módulos y Secciones
     match /modulos/{moduloId} {
       allow read: if request.auth != null;
       allow create, update, delete: if isAdmin();
@@ -47,74 +28,59 @@ service cloud.firestore {
       match /secciones/{seccionId} {
         allow read: if request.auth != null;
         allow create, update, delete: if isAdmin();
-
-        match /items/{itemId} {
-          allow read: if request.auth != null;
-          allow create: if isAdmin() ||
-            (profesorCreaItemAutorizado() && seccionPermiteCargaProfesor(moduloId, seccionId));
-          allow update, delete: if isAdmin();
-
-          match /entregas_alumnos/{entregaId} {
-            allow read: if request.auth != null &&
-              (resource.data.alumnoId == request.auth.uid || isAdmin() || isProfesor());
-            allow create: if request.auth != null &&
-              request.auth.uid == request.resource.data.alumnoId;
-            allow update: if false;
-            allow delete: if isAdmin();
-          }
-        }
-
-        match /{parentPath=**}/items/{itemId} {
-          allow read: if request.auth != null;
-          allow create: if isAdmin() ||
-            (profesorCreaItemAutorizado() && subseccionPermiteCargaProfesor(moduloId, seccionId, parentPath));
-          allow update, delete: if isAdmin();
-
-          match /entregas_alumnos/{entregaId} {
-            allow read: if request.auth != null &&
-              (resource.data.alumnoId == request.auth.uid || isAdmin() || isProfesor());
-            allow create: if request.auth != null &&
-              request.auth.uid == request.resource.data.alumnoId;
-            allow update: if false;
-            allow delete: if isAdmin();
-          }
-        }
-
-        match /{path=**}/subsecciones/{subseccionId} {
-          allow read: if request.auth != null;
-          allow create, update, delete: if isAdmin();
-        }
       }
     }
 
-    match /inscripciones/{inscripcionId} {
-      // El propio alumno, el admin o el profesor pueden leer
+    // 3. Subsecciones (Aplanado: funciona en cualquier nivel)
+    match /{path=**}/subsecciones/{subseccionId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 4. Items (Aplanado: funciona en cualquier nivel)
+    match /{path=**}/items/{itemId} {
+      allow read: if request.auth != null;
+      // Confiamos en el frontend para la lógica de carpetas; validamos seguridad de autor acá
+      allow create: if isAdmin() || (isProfesor() && request.resource.data.creadoPor == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    // 5. Entregas Alumnos (Aplanado: funciona en cualquier nivel)
+    match /{path=**}/entregas_alumnos/{entregaId} {
       allow read: if request.auth != null &&
-        (resource.data.alumnoId == request.auth.uid || isAdmin() || isProfesor());
+        (isAdmin() || isProfesor() || (resource != null && resource.data.alumnoId == request.auth.uid));
+
+      allow create: if request.auth != null &&
+        request.auth.uid == request.resource.data.alumnoId;
+
+      allow update: if request.auth != null &&
+        (
+          isAdmin() || isProfesor() ||
+          (resource != null && resource.data.alumnoId == request.auth.uid && request.resource.data.alumnoId == request.auth.uid)
+        );
+
+      allow delete: if isAdmin() || isProfesor();
+    }
+
+    // 6. Inscripciones y Notas
+    match /inscripciones/{inscripcionId} {
+      allow read: if request.auth != null &&
+        (isAdmin() || isProfesor() || (resource != null && resource.data.alumnoId == request.auth.uid));
 
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.alumnoId
         && request.resource.data.tipo == 'codigo'
-        && get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId))
-            .data.codigoAcceso == request.resource.data.codigoUsado;
+        && get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId)).data.codigoAcceso == request.resource.data.codigoUsado;
 
       allow create: if isAdmin() && request.resource.data.tipo == 'manual';
       allow delete: if isAdmin();
       allow update: if false;
     }
-    
-    // Colección 'notas': notas de exámenes por alumno y sección
+
     match /notas/{notaId} {
-      // Admin y profesor pueden leer todas las notas
-      // El propio alumno solo puede leer sus propias notas
       allow read: if request.auth != null &&
-        (isAdmin() || isProfesor() ||
-          resource.data.alumnoId == request.auth.uid);
-
-      // Solo admin y profesor pueden crear/actualizar notas
+        (isAdmin() || isProfesor() || (resource != null && resource.data.alumnoId == request.auth.uid));
       allow create, update: if isAdmin() || isProfesor();
-
-      // Solo admin puede eliminar
       allow delete: if isAdmin();
     }
   }

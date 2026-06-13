@@ -2,10 +2,12 @@
 import {
   addDoc,
   collection,
+  doc,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -22,33 +24,56 @@ export interface EntregaAlumno {
   storageRef: string;
   nombreArchivo: string;
   fechaEntrega: any;
+  fechaActualizacion?: any;
+  nota?: number | null;
+  retroalimentacion?: string;
+  requiereReentrega?: boolean;
+  revisada?: boolean;
 }
 
-export type EntregaAlumnoInput = Omit<EntregaAlumno, "id" | "alumnoId" | "alumnoNombre" | "fechaEntrega">;
+export type EntregaAlumnoInput = Omit<
+  EntregaAlumno,
+  | "id"
+  | "alumnoId"
+  | "alumnoNombre"
+  | "fechaEntrega"
+  | "fechaActualizacion"
+  | "nota"
+  | "retroalimentacion"
+  | "requiereReentrega"
+  | "revisada"
+>;
 
-const getEntregasCollection = (
+export const getEntregasAlumnosCollection = (
   moduloId: string,
   seccionId: string,
   itemId: string,
-  subseccionPath?: string,
+  subseccionPath?: string | string[],
 ) => {
-  const subseccionSegments = (subseccionPath ?? "")
-    .split("/")
+  const rawPath = Array.isArray(subseccionPath) ? subseccionPath.join("/") : (subseccionPath ?? "");
+  
+  const pathStr = decodeURIComponent(rawPath);
+
+  const subseccionSegments = pathStr
+    .split(/[\/,]/)
     .map((s) => s.trim())
     .filter(Boolean)
     .flatMap((id) => ["subsecciones", id]);
 
   return collection(
-    db,
-    "modulos",
-    moduloId,
-    "secciones",
-    seccionId,
-    ...subseccionSegments,
-    "items",
-    itemId,
-    "entregas_alumnos",
+    db, "modulos", moduloId, "secciones", seccionId, 
+    ...subseccionSegments, "items", itemId, "entregas_alumnos"
   );
+};
+
+const getEntregaDoc = (
+  moduloId: string,
+  seccionId: string,
+  itemId: string,
+  entregaId: string,
+  subseccionPath?: string | string[],
+) => {
+  return doc(getEntregasAlumnosCollection(moduloId, seccionId, itemId, subseccionPath), entregaId);
 };
 
 // Para admin/profe: escucha TODAS las entregas del item
@@ -56,7 +81,7 @@ export function useEntregasAlumnos(
   moduloId: string,
   seccionId: string,
   itemId: string,
-  subseccionPath?: string,
+  subseccionPath?: string | string[],
 ) {
   const [entregas, setEntregas] = useState<EntregaAlumno[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +89,7 @@ export function useEntregasAlumnos(
   useEffect(() => {
     if (!moduloId || !seccionId || !itemId) { setLoading(false); return; }
     const q = query(
-      getEntregasCollection(moduloId, seccionId, itemId, subseccionPath),
+      getEntregasAlumnosCollection(moduloId, seccionId, itemId, subseccionPath),
       orderBy("fechaEntrega", "asc"),
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -74,7 +99,18 @@ export function useEntregasAlumnos(
     return () => unsub();
   }, [moduloId, seccionId, itemId, subseccionPath]);
 
-  return { entregas, loading };
+  const actualizarCalificacion = async (
+    entregaId: string,
+    data: { nota: number | null; retroalimentacion: string; requiereReentrega: boolean },
+  ) => {
+    await updateDoc(getEntregaDoc(moduloId, seccionId, itemId, entregaId, subseccionPath), {
+      ...data,
+      revisada: true,
+      fechaActualizacion: serverTimestamp(),
+    });
+  };
+
+  return { entregas, loading, actualizarCalificacion };
 }
 
 // Para el alumno: solo su propia entrega
@@ -82,7 +118,7 @@ export function useMiEntrega(
   moduloId: string,
   seccionId: string,
   itemId: string,
-  subseccionPath?: string,
+  subseccionPath?: string | string[],
 ) {
   const [miEntrega, setMiEntrega] = useState<EntregaAlumno | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,7 +127,7 @@ export function useMiEntrega(
   useEffect(() => {
     if (!moduloId || !seccionId || !itemId || !uid) { setLoading(false); return; }
     const q = query(
-      getEntregasCollection(moduloId, seccionId, itemId, subseccionPath),
+      getEntregasAlumnosCollection(moduloId, seccionId, itemId, subseccionPath),
       where("alumnoId", "==", uid),
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -104,13 +140,30 @@ export function useMiEntrega(
   const enviarEntrega = async (data: EntregaAlumnoInput) => {
     const user = auth.currentUser;
     if (!user) throw new Error("No autenticado");
-    await addDoc(getEntregasCollection(moduloId, seccionId, itemId, subseccionPath), {
+    await addDoc(getEntregasAlumnosCollection(moduloId, seccionId, itemId, subseccionPath), {
       ...data,
       alumnoId: user.uid,
       alumnoNombre: user.displayName ?? user.email ?? "Alumno",
+      nota: null,
+      retroalimentacion: "",
+      requiereReentrega: false,
+      revisada: false,
       fechaEntrega: serverTimestamp(),
     });
   };
 
-  return { miEntrega, loading, enviarEntrega };
+  // Reentrega: el alumno modifica su propia entrega. Resetea nota y requiereReentrega
+  // (vuelve a quedar pendiente de revisión), pero conserva la retroalimentación anterior.
+  const actualizarEntrega = async (entregaId: string, data: EntregaAlumnoInput) => {
+    await updateDoc(getEntregaDoc(moduloId, seccionId, itemId, entregaId, subseccionPath), {
+      ...data,
+      nota: null,
+      requiereReentrega: false,
+      revisada: false,
+      fechaEntrega: serverTimestamp(),
+      fechaActualizacion: serverTimestamp(),
+    });
+  };
+
+  return { miEntrega, loading, enviarEntrega, actualizarEntrega };
 }
