@@ -45,6 +45,7 @@ export default function RootLayout() {
         <Stack.Screen name="items/form" options={{ headerShown: false }} />
         <Stack.Screen name="pantallasAdmin/userManagementScreen" options={{ headerShown: false }} />
         <Stack.Screen name="items/form" options={{ headerShown: true }} />
+        <Stack.Screen name="entregas/[id]" options={{ headerShown: false }} />
       </Stack>
     </>
   );

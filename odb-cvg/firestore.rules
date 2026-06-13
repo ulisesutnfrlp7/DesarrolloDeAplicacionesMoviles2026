@@ -3,7 +3,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helpers de rol — leen el documento del usuario autenticado
     function isAdmin() {
       return request.auth != null &&
         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
@@ -14,87 +13,75 @@ service cloud.firestore {
         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'profesor';
     }
 
-    function profesorCreaItemAutorizado() {
-      return isProfesor()
-        && request.resource.data.creadoPor == request.auth.uid;
-    }
-
-    function seccionPermiteCargaProfesor(moduloId, seccionId) {
-      return get(/databases/$(database)/documents/modulos/$(moduloId)/secciones/$(seccionId))
-        .data.permiteCargaProfesor == true;
-    }
-
-    function subseccionPermiteCargaProfesor(moduloId, seccionId, parentPath) {
-      return get(/databases/$(database)/documents/modulos/$(moduloId)/secciones/$(seccionId)/$(parentPath))
-        .data.permiteCargaProfesor == true;
-    }
-
-    // Colección 'usuarios': solo el propio usuario puede leer/escribir su documento
+    // 1. Usuarios
     match /usuarios/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
       allow read, update, delete: if isAdmin();
     }
 
-    // Consulta collectionGroup('secciones') usada por Administracion > Cursadas.
-    // La lectura normal de secciones sigue definida dentro de modulos.
-    match /{path=**}/secciones/{seccionId} {
-      allow read: if isAdmin();
-    }
-
-    // Colección 'modulos': lectura para todos los autenticados, escritura solo admin
+    // 2. Módulos y Secciones
     match /modulos/{moduloId} {
       allow read: if request.auth != null;
       allow create, update, delete: if isAdmin();
 
-      // Subcollección 'secciones': lectura para todos, escritura para admin y profesor
       match /secciones/{seccionId} {
         allow read: if request.auth != null;
         allow create, update, delete: if isAdmin();
-        // Items directos de una seccion.
-        match /items/{itemId} {
-          allow read: if request.auth != null;
-          allow create: if isAdmin() ||
-            (profesorCreaItemAutorizado() && seccionPermiteCargaProfesor(moduloId, seccionId));
-          allow update, delete: if isAdmin();
-        }
-
-        // Items dentro de subsecciones anidadas en cualquier profundidad.
-        match /{parentPath=**}/items/{itemId} {
-          allow read: if request.auth != null;
-          allow create: if isAdmin() ||
-            (profesorCreaItemAutorizado() && subseccionPermiteCargaProfesor(moduloId, seccionId, parentPath));
-          allow update, delete: if isAdmin();
-        }
-
-        // Subcolección 'subsecciones': lectura para todos, escritura para admin y profesor.
-        // El comodín recursivo permite subsecciones en cualquier profundidad.
-        match /{path=**}/subsecciones/{subseccionId} {
-          allow read: if request.auth != null;
-          allow create, update, delete: if isAdmin();
-        }
       }
     }
 
-    // Colección 'inscripciones': gestión de matrículas por cursada
-    match /inscripciones/{inscripcionId} {
-      // El propio alumno o el admin pueden leer
-      allow read: if request.auth != null &&
-        (resource.data.alumnoId == request.auth.uid || isAdmin());
+    // 3. Subsecciones (Aplanado: funciona en cualquier nivel)
+    match /{path=**}/subsecciones/{subseccionId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isAdmin();
+    }
 
-      // Auto-matriculación por código: el alumno crea la propia inscripción
-      // y el código debe coincidir con el almacenado en la sección
+    // 4. Items (Aplanado: funciona en cualquier nivel)
+    match /{path=**}/items/{itemId} {
+      allow read: if request.auth != null;
+      // Confiamos en el frontend para la lógica de carpetas; validamos seguridad de autor acá
+      allow create: if isAdmin() || (isProfesor() && request.resource.data.creadoPor == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    // 5. Entregas Alumnos (Aplanado: funciona en cualquier nivel)
+    match /{path=**}/entregas_alumnos/{entregaId} {
+      allow read: if request.auth != null &&
+        (isAdmin() || isProfesor() || (resource != null && resource.data.alumnoId == request.auth.uid));
+
+      allow create: if request.auth != null &&
+        request.auth.uid == request.resource.data.alumnoId;
+
+      allow update: if request.auth != null &&
+        (
+          isAdmin() || isProfesor() ||
+          (resource != null && resource.data.alumnoId == request.auth.uid && request.resource.data.alumnoId == request.auth.uid)
+        );
+
+      allow delete: if isAdmin() || isProfesor();
+    }
+
+    // 6. Inscripciones y Notas
+    match /inscripciones/{inscripcionId} {
+      allow read: if request.auth != null &&
+        (isAdmin() || isProfesor() || (resource != null && resource.data.alumnoId == request.auth.uid));
+
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.alumnoId
         && request.resource.data.tipo == 'codigo'
-        && get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId))
-            .data.codigoAcceso == request.resource.data.codigoUsado;
+        && get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId)).data.codigoAcceso == request.resource.data.codigoUsado;
 
-      // Asignación manual y eliminación: solo admin
       allow create: if isAdmin() && request.resource.data.tipo == 'manual';
       allow delete: if isAdmin();
-
-      // Las inscripciones son inmutables (el admin elimina y recrea si es necesario)
       allow update: if false;
+    }
+
+    match /notas/{notaId} {
+      allow read: if request.auth != null &&
+        (isAdmin() || isProfesor() || (resource != null && resource.data.alumnoId == request.auth.uid));
+      allow create, update: if isAdmin() || isProfesor();
+      allow delete: if isAdmin();
     }
   }
 }

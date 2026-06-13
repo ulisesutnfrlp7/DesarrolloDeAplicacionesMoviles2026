@@ -1,16 +1,16 @@
 //app/secciones/form.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { router, Stack, useFocusEffect, useLocalSearchParams,} from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, Share, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View,} from "react-native";
+import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, Share, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View, } from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
+import ScreenHeader from "../../components/ui/ScreenHeader";
 import { db } from "../../config/firebaseConfig";
 import { generarCodigoAleatorio } from "../../hooks/useInscripciones";
 import { useSecciones } from "../../hooks/useSecciones";
 import { useUserRole } from "../../hooks/useUserRole";
-import ScreenHeader from "../../components/ui/ScreenHeader";
 
 export default function SeccionFormScreen() {
   const { moduloId, seccionId } = useLocalSearchParams<{
@@ -26,6 +26,7 @@ export default function SeccionFormScreen() {
   const [esRestringida, setEsRestringida] = useState(false);
   const [codigoAcceso, setCodigoAcceso] = useState("");
   const [permiteCargaProfesor, setPermiteCargaProfesor] = useState(false);
+  const [permiteNotas, setPermiteNotas] = useState(false);
   const [cargandoDatos, setCargandoDatos] = useState(modoEdicion);
   const [guardando, setGuardando] = useState(false);
   const [hayCambios, setHayCambios] = useState(false);
@@ -57,6 +58,7 @@ export default function SeccionFormScreen() {
           setEsRestringida(data.esRestringida ?? false);
           setCodigoAcceso(data.codigoAcceso ?? "");
           setPermiteCargaProfesor(data.permiteCargaProfesor ?? false);
+          setPermiteNotas(data.permiteNotas ?? false);
         }
       } catch (error) {
         console.error("Error al cargar sección:", error);
@@ -84,6 +86,7 @@ export default function SeccionFormScreen() {
         titulo: titulo.trim(),
         esRestringida,
         permiteCargaProfesor,
+        permiteNotas,
         codigoAcceso: esRestringida
           ? (codigoAcceso || generarCodigoAleatorio())
           : null,
@@ -178,7 +181,7 @@ export default function SeccionFormScreen() {
   }
 
   return (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}>
         <ScreenHeader
           titulo={modoEdicion ? "Editar Sección" : "Nueva Sección"}
           onBack={handleAtras}
@@ -273,6 +276,28 @@ export default function SeccionFormScreen() {
           </View>
         </View>
 
+        <View style={styles.cursadaSection}>
+          <Text style={styles.cursadaSectionTitulo}>Notas de exámenes</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Habilitar carga de notas</Text>
+              <Text style={styles.switchHint}>
+                Permite que admins y profesores carguen notas de exámenes
+                para los alumnos inscriptos en esta sección.
+              </Text>
+            </View>
+            <Switch
+              value={permiteNotas}
+              onValueChange={(v) => {
+                setPermiteNotas(v);
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
         {/* Botones de acción */}
         <View style={styles.actionButtons}>
           <TouchableOpacity
@@ -327,7 +352,7 @@ export default function SeccionFormScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
-  content: { padding: 20, paddingBottom: 40 },
+  content: { padding: 20, paddingBottom: 120 },
   centered: {
     flex: 1,
     justifyContent: "center",

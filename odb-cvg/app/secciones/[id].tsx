@@ -1,22 +1,22 @@
 //app/secciones/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, } from "react-native";
 import Markdown from "react-native-markdown-display";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
+import ScreenHeader from "../../components/ui/ScreenHeader";
 import { auth, db } from "../../config/firebaseConfig";
+import { useMisInscripciones } from "../../hooks/useInscripciones";
 import type { Item } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
-import { useMisInscripciones } from "../../hooks/useInscripciones";
 import type { Seccion } from "../../hooks/useSecciones";
 import type { Subseccion } from "../../hooks/useSubsecciones";
 import { useSubsecciones } from "../../hooks/useSubsecciones";
 import { useUserRole } from "../../hooks/useUserRole";
-import ScreenHeader from "../../components/ui/ScreenHeader";
 
 export default function SeccionDetalleScreen() {
   const { id, moduloId } = useLocalSearchParams<{
@@ -186,6 +186,41 @@ export default function SeccionDetalleScreen() {
           style={styles.container}
           contentContainerStyle={styles.content}
         >
+          {seccion.permiteNotas && (
+            <View style={styles.notasBanner}>
+              {puedeAccederComoDocente && (
+                <TouchableOpacity
+                  style={styles.notasBtnPrimario}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/secciones/notas",
+                      params: { moduloId, seccionId: id },
+                    } as any)
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="create-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.notasBtnPrimarioText}>Cargar Notas</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.notasBtnSecundario,
+                  !puedeAccederComoDocente && { flex: 1 },
+                ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/secciones/mis-notas",
+                    params: { moduloId, seccionId: id },
+                  } as any)
+                }
+                activeOpacity={0.85}
+              >
+                <Ionicons name="school-outline" size={18} color="#0F4A32" />
+                <Text style={styles.notasBtnSecundarioText}>Ver Notas</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Contenido</Text>
           </View>
@@ -213,6 +248,11 @@ export default function SeccionDetalleScreen() {
                 }
                 onEliminar={() => setItemAEliminar(item)}
                 onAbrirArchivo={handleAbrirArchivo}
+                onVerEntrega={() =>
+                  router.push(
+                    `/entregas/${item.id}?moduloId=${moduloId}&seccionId=${id}` as any
+                  )
+                }
               />
             ))
           )}
@@ -278,7 +318,11 @@ export default function SeccionDetalleScreen() {
       <ModalConfirmacion
         visible={itemAEliminar !== null}
         titulo="Eliminar Elemento"
-        mensaje="¿Estás seguro de que deseas eliminar este elemento? Esta acción es permanente."
+        mensaje={
+          itemAEliminar?.tipo === "entrega"
+            ? "Este apartado es una Entrega. Si la eliminás, también se borrarán TODAS las entregas que los alumnos hayan subido, junto con sus archivos, notas y retroalimentaciones. Esta acción es permanente."
+            : "¿Estás seguro de que deseas eliminar este elemento? Esta acción es permanente."
+        }
         textoConfirmar="Sí, eliminar"
         textoCancelar="Cancelar"
         onConfirm={handleEliminarItem}
@@ -312,6 +356,7 @@ interface ItemCardProps {
   onEditar: () => void;
   onEliminar: () => void;
   onAbrirArchivo: (url: string) => void;
+  onVerEntrega?: () => void;
 }
 
 interface SubseccionCardProps {
@@ -372,6 +417,7 @@ function ItemCard({
   onEditar,
   onEliminar,
   onAbrirArchivo,
+  onVerEntrega,
 }: ItemCardProps) {
   const iconoPorTipo: Record<string, string> = {
     pdf: "document-outline",
@@ -445,6 +491,37 @@ function ItemCard({
       </View>
     );
   }
+
+  if (item.tipo === "entrega") {
+  return (
+    <TouchableOpacity
+      style={[styles.itemCard, { borderLeftWidth: 3, borderLeftColor: "#F59E0B" }]}
+      onPress={onVerEntrega}  // o una prop onVerEntrega que reciba el id
+      activeOpacity={0.8}
+    >
+      <View style={styles.itemHeader}>
+        <View style={[styles.itemIconBg, { backgroundColor: "#FEF3C7" }]}>
+          <Ionicons name="cloud-upload-outline" size={18} color="#B45309" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.itemTitulo}>{item.titulo}</Text>
+          {item.descripcionEntrega ? (
+            <Text style={styles.itemNombreArchivo} numberOfLines={2}>
+              {item.descripcionEntrega}
+            </Text>
+          ) : null}
+          {item.fechaLimite ? (
+            <Text style={[styles.itemNombreArchivo, { color: "#B45309" }]}>
+              Límite: {item.fechaLimite}
+            </Text>
+          ) : null}
+        </View>
+        {acciones}
+        <Ionicons name="chevron-forward-outline" size={16} color="#CBD5E0" />
+      </View>
+    </TouchableOpacity>
+  );
+}
 
   // ── PDF / Documento ────────────────────────────────────────────────────────
   return (
@@ -633,6 +710,43 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 10,
     backgroundColor: "#F3F4F6",
+  },
+  notasBanner: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  notasBtnPrimario: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#25B471",
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  notasBtnPrimarioText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  notasBtnSecundario: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: "#0F4A32",
+  },
+  notasBtnSecundarioText: {
+    color: "#0F4A32",
+    fontWeight: "700",
+    fontSize: 14,
   },
 });
 
