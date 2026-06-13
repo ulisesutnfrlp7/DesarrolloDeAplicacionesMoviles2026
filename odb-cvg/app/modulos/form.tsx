@@ -204,7 +204,7 @@ export default function ModuloFormScreen() {
   }
 
   return (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}>
         <ScreenHeader
           titulo={modoEdicion ? "Editar Módulo" : "Nuevo Módulo"}
           onBack={handleAtras}
@@ -322,7 +322,7 @@ export default function ModuloFormScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
-  content: { padding: 20, paddingBottom: 40 },
+  content: { padding: 20, paddingBottom: 120 },
   centered: {
     flex: 1,
     justifyContent: "center",
