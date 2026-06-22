@@ -47,12 +47,10 @@ export default function UserManagementScreen() {
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroRol, setFiltroRol] = useState<Rol | "todos">("todos");
   const usuariosFiltrados = usuarios.filter((u) => {
-    const coincideTexto =
-      u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
-      u.email.toLowerCase().includes(filtroTexto.toLowerCase());
-
-    const coincideRol = filtroRol === "todos" ? true : u.rol === filtroRol;
-
+  const coincideTexto =
+    u.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+    u.email.toLowerCase().includes(filtroTexto.toLowerCase());
+  const coincideRol = filtroRol === "todos" ? true : u.rol === filtroRol;
     return coincideTexto && coincideRol;
   });
   
@@ -68,8 +66,9 @@ export default function UserManagementScreen() {
   const { inscripciones: inscripcionesExpandida, loading: loadingInscripciones } =
     useInscripcionesPorSeccion(cursadaExpandida?.id ?? null);
   const { modulos, loading: loadingModulos } = useModulos();
-
+  const [usuarioAEliminarNombre, setUsuarioAEliminarNombre] = useState<string | null>(null);
   const rootNavigationState = useRootNavigationState();
+  const [inscripcionAEliminar, setInscripcionAEliminar] = useState<Inscripcion | null>(null);
 
   useEffect(() => {
     if (!rootNavigationState?.key) return;
@@ -107,6 +106,7 @@ export default function UserManagementScreen() {
       where('esRestringida', '==', true),
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.log("Cursadas cargadas:", snapshot.docs.map(d => d.data())); 
       setCursadas(snapshot.docs.map(d => ({
         id: d.id,
         moduloId: d.ref.parent.parent?.id ?? '',
@@ -151,17 +151,6 @@ export default function UserManagementScreen() {
     }
   };
 
-  const confirmarEliminar = async () => {
-    if (!usuarioAEliminarId) return;
-    try {
-      await deleteDoc(doc(db, 'usuarios', usuarioAEliminarId));
-      setUsuarios(prev => prev.filter(u => u.id !== usuarioAEliminarId));
-      setUsuarioAEliminarId(null);
-      setAlerta({ visible: true, titulo: 'Eliminado', mensaje: 'El usuario fue eliminado.', tipo: 'exito' });
-    } catch {
-      setAlerta({ visible: true, titulo: 'Error', mensaje: 'No se pudo eliminar el usuario.', tipo: 'error' });
-    }
-  };
 
   const handleRegenerarCodigo = async () => {
     if (!cursadaARegenerear) return;
@@ -198,6 +187,23 @@ export default function UserManagementScreen() {
       setAsignando(false);
     }
   };
+
+  const handleAbrirModalEliminar = (alumnoId: string, nombre: string) => {
+    setUsuarioAEliminarId(alumnoId);
+    setUsuarioAEliminarNombre(nombre);
+  };
+
+  const confirmarEliminar = async () => {
+  if (!cursadaExpandida || !usuarioAEliminarId) return;
+  try {
+    await deleteDoc(doc(db, 'usuarios', usuarioAEliminarId));
+      setUsuarios(prev => prev.filter(u => u.id !== usuarioAEliminarId));
+      setUsuarioAEliminarId(null);
+      setUsuarioAEliminarNombre(null);
+      setAlerta({ visible: true, titulo: 'Alumno eliminado', mensaje: `Se eliminó a ${usuarioAEliminarNombre} de la cursada.`, tipo: 'exito'});
+  } catch { setAlerta({ visible: true, titulo: 'Error', mensaje:'No se pudo eliminar al alumno.', tipo: 'error'});
+  }
+};
 
   const renderBadge = (r: Rol) => {
     if (r === 'admin') return (
@@ -413,7 +419,12 @@ export default function UserManagementScreen() {
                             </View>
                             <TouchableOpacity
                               style={styles.revocarBtn}
-                              onPress={() => handleRevocarInscripcion(insc)}
+                              onPress={() => {
+                                setInscripcionAEliminar(insc);
+                                setUsuarioAEliminarNombre(
+                                  usuariosMap[insc.alumnoId] || "Alumno"
+                                );
+                              }}
                             >
                               <Ionicons name="close-circle-outline" size={18} color="#DC2626" />
                             </TouchableOpacity>
@@ -545,13 +556,29 @@ export default function UserManagementScreen() {
       </Modal>
 
       <ModalConfirmacion
-        visible={usuarioAEliminarId !== null}
-        titulo="Eliminar usuario"
-        mensaje="¿Estás seguro de eliminar este usuario? Esta acción es permanente."
+        visible={inscripcionAEliminar !== null}
+        titulo="Eliminar inscripción"
+        mensaje={`¿Estás seguro de eliminar la inscripción de ${usuarioAEliminarNombre} de ${cursadaExpandida?.titulo}? Esta acción es permanente.`}
         textoConfirmar="Eliminar"
         textoCancelar="Cancelar"
-        onConfirm={confirmarEliminar}
-        onCancel={() => setUsuarioAEliminarId(null)}
+        onConfirm={async () => {
+          if (!inscripcionAEliminar) return;
+          try {
+            await handleRevocarInscripcion(inscripcionAEliminar);
+            setAlerta({
+              visible: true,
+              titulo: "Alumno eliminado",
+              mensaje: `${usuarioAEliminarNombre} fue eliminado de la cursada.`,
+              tipo: "exito",
+            });
+            setInscripcionAEliminar(null);
+            setUsuarioAEliminarNombre(null);
+          } catch {}
+        }}
+        onCancel={() => {
+          setInscripcionAEliminar(null);
+          setUsuarioAEliminarNombre(null);
+        }}
       />
       <ModalConfirmacion
         visible={cursadaARegenerear !== null}
