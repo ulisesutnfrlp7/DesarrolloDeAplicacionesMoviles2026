@@ -182,6 +182,41 @@ export default function SubseccionDetalleScreen() {
               </TouchableOpacity>
             </View>
           )}
+          {subseccion.permitePlanillas && (
+            <View style={styles.notasBanner}>
+              {(esAdmin || esProfesor) && (
+                <TouchableOpacity
+                  style={styles.notasBtnPrimario}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/secciones/planillas",
+                      params: { moduloId, seccionId, subseccionPath: currentSubseccionPath },
+                    } as any)
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="clipboard-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.notasBtnPrimarioText}>Cargar Planillas</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.notasBtnSecundario,
+                  !(esAdmin || esProfesor) && { flex: 1 },
+                ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/secciones/mis-planillas",
+                    params: { moduloId, seccionId, subseccionPath: currentSubseccionPath },
+                  } as any)
+                }
+                activeOpacity={0.85}
+              >
+                <Ionicons name="list-outline" size={18} color="#0F4A32" />
+                <Text style={styles.notasBtnSecundarioText}>Ver Planillas</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Contenido</Text>
           </View>

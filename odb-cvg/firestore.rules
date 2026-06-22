@@ -31,6 +31,11 @@ service cloud.firestore {
       }
     }
 
+    // Permite al panel admin consultar secciones con collectionGroup("secciones").
+    match /{path=**}/secciones/{seccionId} {
+      allow read: if isAdmin();
+    }
+
     // 3. Subsecciones (Aplanado: funciona en cualquier nivel)
     match /{path=**}/subsecciones/{subseccionId} {
       allow read: if request.auth != null;

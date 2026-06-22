@@ -22,6 +22,7 @@ export interface Seccion {
   codigoAcceso?: string | null;
   permiteCargaProfesor?: boolean;
   permiteNotas?: boolean;
+  permitePlanillas?: boolean;
 }
 
 export type SeccionInput = Pick<Seccion, "titulo"> & {
@@ -29,6 +30,7 @@ export type SeccionInput = Pick<Seccion, "titulo"> & {
   codigoAcceso?: string | null;
   permiteCargaProfesor?: boolean;
   permiteNotas?: boolean;
+  permitePlanillas?: boolean;
 };
 
 export function useSecciones(moduloId: string) {
@@ -67,6 +69,7 @@ export function useSecciones(moduloId: string) {
       ...data,
       permiteCargaProfesor: data.permiteCargaProfesor ?? false,
       permiteNotas: data.permiteNotas ?? false,
+      permitePlanillas: data.permitePlanillas ?? false,
       creadoPor: user.uid,
       fechaCreacion: serverTimestamp(),
       fechaActualizacion: serverTimestamp(),

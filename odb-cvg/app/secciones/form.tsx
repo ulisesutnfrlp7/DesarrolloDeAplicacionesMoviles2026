@@ -27,6 +27,7 @@ export default function SeccionFormScreen() {
   const [codigoAcceso, setCodigoAcceso] = useState("");
   const [permiteCargaProfesor, setPermiteCargaProfesor] = useState(false);
   const [permiteNotas, setPermiteNotas] = useState(false);
+  const [permitePlanillas, setPermitePlanillas] = useState(false);
   const [cargandoDatos, setCargandoDatos] = useState(modoEdicion);
   const [guardando, setGuardando] = useState(false);
   const [hayCambios, setHayCambios] = useState(false);
@@ -59,6 +60,7 @@ export default function SeccionFormScreen() {
           setCodigoAcceso(data.codigoAcceso ?? "");
           setPermiteCargaProfesor(data.permiteCargaProfesor ?? false);
           setPermiteNotas(data.permiteNotas ?? false);
+          setPermitePlanillas(data.permitePlanillas ?? false);
         }
       } catch (error) {
         console.error("Error al cargar sección:", error);
@@ -87,6 +89,7 @@ export default function SeccionFormScreen() {
         esRestringida,
         permiteCargaProfesor,
         permiteNotas,
+        permitePlanillas,
         codigoAcceso: esRestringida
           ? (codigoAcceso || generarCodigoAleatorio())
           : null,
@@ -290,6 +293,28 @@ export default function SeccionFormScreen() {
               value={permiteNotas}
               onValueChange={(v) => {
                 setPermiteNotas(v);
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
+        <View style={styles.cursadaSection}>
+          <Text style={styles.cursadaSectionTitulo}>Planillas de trabajos practicos</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Habilitar carga de planillas</Text>
+              <Text style={styles.switchHint}>
+                Permite que admins y profesores gestionen planillas de trabajos practicos,
+                trabajos clinicos o parcialitos para alumnos inscriptos en esta seccion.
+              </Text>
+            </View>
+            <Switch
+              value={permitePlanillas}
+              onValueChange={(v) => {
+                setPermitePlanillas(v);
                 setHayCambios(true);
               }}
               trackColor={{ false: "#E5E7EB", true: "#25B471" }}
