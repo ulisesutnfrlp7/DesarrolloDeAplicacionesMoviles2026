@@ -104,5 +104,16 @@ service cloud.firestore {
         allow create, update, delete: if isAdmin() || isProfesor();
       }
     }
+
+    match /{path=**}/vistas_alumno/{alumnoId} {
+      allow read: if isAdmin() || isProfesor() ||
+        (request.auth != null && request.auth.uid == alumnoId);
+    }
+
+    match /vistas_planillas_alumnos/{alumnoId}/planillas/{planillaId} {
+      allow read: if isAdmin() || isProfesor() ||
+        (request.auth != null && request.auth.uid == alumnoId);
+      allow create, update, delete: if isAdmin() || isProfesor();
+    }
   }
 }

@@ -66,8 +66,10 @@ export interface FilaPlanilla {
 export interface VistaAlumnoPlanilla {
   planillaId: string;
   alumnoId: string;
+  alumnoNombre?: string;
   titulo: string;
   tipo: TipoPlanilla;
+  moduloId?: string | null;
   seccionId: string;
   subseccionPath?: string | null;
   columnasVisibles: ColumnaPlanilla[];
@@ -88,28 +90,29 @@ export type PlantillaPlanillaId =
 export const plantillasPlanillas: Record<PlantillaPlanillaId, ColumnaPlanilla[]> = {
   op1op2Diaria: [
     { id: "fecha", titulo: "Fecha", tipo: "fecha", orden: 0, visibleAlumno: true },
-    { id: "tema", titulo: "Tema", tipo: "texto", orden: 1, visibleAlumno: true },
+    { id: "tema", titulo: "Tema", tipo: "textarea", orden: 1, visibleAlumno: true },
     { id: "nota_teoria", titulo: "Nota teoria", tipo: "nota", orden: 2, visibleAlumno: true },
     { id: "nota_tp", titulo: "Nota TP", tipo: "nota", orden: 3, visibleAlumno: true },
     { id: "observaciones", titulo: "Observaciones", tipo: "textarea", orden: 4, visibleAlumno: false },
   ],
   op1op2Resumen: [
-    { id: "instancia", titulo: "Instancia / Trabajo / Parcialito", tipo: "texto", orden: 0, visibleAlumno: true },
+    { id: "trabajo_parcialito", titulo: "Trabajo / Parcialito", tipo: "textarea", orden: 0, visibleAlumno: true },
     { id: "fechas", titulo: "Fecha/s", tipo: "texto", orden: 1, visibleAlumno: true },
-    { id: "nota_final", titulo: "Nota final", tipo: "nota", orden: 2, visibleAlumno: true },
-    { id: "docente", titulo: "Docente", tipo: "texto", orden: 3, visibleAlumno: true },
-    { id: "observaciones", titulo: "Observaciones", tipo: "textarea", orden: 4, visibleAlumno: false },
+    { id: "nota_final_tp", titulo: "Nota Final TP", tipo: "nota", orden: 2, visibleAlumno: true },
+    { id: "nota_final_parcialito", titulo: "Nota Final Parcialito", tipo: "nota", orden: 3, visibleAlumno: true },
+    { id: "docente", titulo: "Docente", tipo: "texto", orden: 4, visibleAlumno: true },
+    { id: "observaciones", titulo: "Observaciones", tipo: "textarea", orden: 5, visibleAlumno: false },
   ],
   op3op6Diaria: [
     { id: "fecha", titulo: "Fecha", tipo: "fecha", orden: 0, visibleAlumno: true },
-    { id: "trabajo_realizado", titulo: "Trabajo realizado", tipo: "texto", orden: 1, visibleAlumno: true },
+    { id: "trabajo_realizado", titulo: "Trabajo realizado", tipo: "textarea", orden: 1, visibleAlumno: true },
     { id: "pieza", titulo: "Pieza", tipo: "texto", orden: 2, visibleAlumno: true },
     { id: "nota", titulo: "Nota", tipo: "nota", orden: 3, visibleAlumno: true },
     { id: "docente", titulo: "Docente", tipo: "texto", orden: 4, visibleAlumno: true },
     { id: "observaciones", titulo: "Observaciones", tipo: "textarea", orden: 5, visibleAlumno: false },
   ],
   op3op6Resumen: [
-    { id: "practica", titulo: "Practica", tipo: "texto", orden: 0, visibleAlumno: true },
+    { id: "trabajo", titulo: "Trabajo", tipo: "textarea", orden: 0, visibleAlumno: true },
     { id: "fechas", titulo: "Fecha/s", tipo: "texto", orden: 1, visibleAlumno: true },
     { id: "pieza", titulo: "Pieza", tipo: "texto", orden: 2, visibleAlumno: true },
     { id: "nota_final", titulo: "Nota final", tipo: "nota", orden: 3, visibleAlumno: true },
@@ -142,9 +145,15 @@ interface AlumnoPlanillasParams extends ContextoPlanillasParams {
   alumnoId: string;
 }
 
+interface VistaAlumnoContextoParams extends AlumnoPlanillasParams {}
+
 type FilaPlanillaInput = {
   orden: number;
   celdas: Record<string, any>;
+};
+
+type DatosPlanillaInput = {
+  titulo?: string;
 };
 
 const ordenarColumnas = (columnas: ColumnaPlanilla[]) =>
@@ -210,6 +219,29 @@ export async function obtenerPlanillasPorAlumno(params: AlumnoPlanillasParams): 
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PlanillaTP);
 }
 
+export async function obtenerVistaAlumnoPlanilla(
+  planillaId: string,
+  alumnoId: string,
+): Promise<VistaAlumnoPlanilla | null> {
+  const snap = await getDoc(doc(db, "vistas_planillas_alumnos", alumnoId, "planillas", planillaId));
+  return snap.exists() ? (snap.data() as VistaAlumnoPlanilla) : null;
+}
+
+export async function obtenerVistasAlumnoPorContexto(
+  params: VistaAlumnoContextoParams,
+): Promise<VistaAlumnoPlanilla[]> {
+  const constraints = [where("seccionId", "==", params.seccionId)];
+  if (params.moduloId !== undefined) constraints.push(where("moduloId", "==", params.moduloId));
+  if (params.subseccionPath !== undefined) {
+    constraints.push(where("subseccionPath", "==", params.subseccionPath ?? null));
+  }
+
+  const snap = await getDocs(
+    query(collection(db, "vistas_planillas_alumnos", params.alumnoId, "planillas"), ...constraints),
+  );
+  return snap.docs.map((d) => d.data() as VistaAlumnoPlanilla);
+}
+
 export async function obtenerPlanillaPorId(planillaId: string): Promise<PlanillaTP | null> {
   const snap = await getDoc(doc(db, "planillas_tp", planillaId));
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as PlanillaTP) : null;
@@ -267,13 +299,31 @@ export async function actualizarColumnasPlanilla(
   await generarVistaAlumno(planillaId);
 }
 
+export async function actualizarDatosPlanilla(
+  planillaId: string,
+  data: DatosPlanillaInput,
+): Promise<void> {
+  const uid = getCurrentUserId();
+  await updateDoc(doc(db, "planillas_tp", planillaId), {
+    ...data,
+    actualizadoPor: uid,
+    fechaActualizacion: serverTimestamp(),
+  });
+
+  await generarVistaAlumno(planillaId);
+}
+
 export async function eliminarPlanilla(planillaId: string): Promise<void> {
+  const planilla = await obtenerPlanillaPorId(planillaId);
   const filasSnap = await getDocs(collection(db, "planillas_tp", planillaId, "filas"));
   const vistasSnap = await getDocs(collection(db, "planillas_tp", planillaId, "vistas_alumno"));
   const batch = writeBatch(db);
 
   filasSnap.docs.forEach((fila) => batch.delete(fila.ref));
   vistasSnap.docs.forEach((vista) => batch.delete(vista.ref));
+  if (planilla?.alumnoId) {
+    batch.delete(doc(db, "vistas_planillas_alumnos", planilla.alumnoId, "planillas", planillaId));
+  }
   batch.delete(doc(db, "planillas_tp", planillaId));
 
   await batch.commit();
@@ -304,17 +354,24 @@ export async function generarVistaAlumno(planillaId: string): Promise<void> {
     };
   });
 
-  await setDoc(doc(db, "planillas_tp", planillaId, "vistas_alumno", planilla.alumnoId), {
+  const vistaData = {
     planillaId,
     alumnoId: planilla.alumnoId,
+    alumnoNombre: planilla.alumnoNombre ?? null,
     titulo: planilla.titulo,
     tipo: planilla.tipo,
+    moduloId: planilla.moduloId ?? null,
     seccionId: planilla.seccionId,
     subseccionPath: planilla.subseccionPath ?? null,
     columnasVisibles,
     filasVisibles,
     fechaActualizacion: serverTimestamp(),
-  });
+  };
+
+  await Promise.all([
+    setDoc(doc(db, "planillas_tp", planillaId, "vistas_alumno", planilla.alumnoId), vistaData),
+    setDoc(doc(db, "vistas_planillas_alumnos", planilla.alumnoId, "planillas", planillaId), vistaData),
+  ]);
 }
 
 async function touchPlanilla(planillaId: string): Promise<void> {

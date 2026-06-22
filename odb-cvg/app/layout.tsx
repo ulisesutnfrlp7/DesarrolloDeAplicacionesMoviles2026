@@ -42,6 +42,7 @@ export default function RootLayout() {
         <Stack.Screen name="secciones/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="secciones/planillas" options={{ headerShown: false }} />
         <Stack.Screen name="secciones/mis-planillas" options={{ headerShown: false }} />
+        <Stack.Screen name="secciones/planilla-detalle" options={{ headerShown: false }} />
         <Stack.Screen name="subsecciones/form" options={{ headerShown: false }} />
         <Stack.Screen name="subsecciones/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="items/form" options={{ headerShown: false }} />

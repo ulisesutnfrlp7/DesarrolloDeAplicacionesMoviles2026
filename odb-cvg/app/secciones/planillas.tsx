@@ -20,6 +20,7 @@ import { db } from "../../config/firebaseConfig";
 import { useInscripcionesPorSeccion } from "../../hooks/useInscripciones";
 import {
   crearPlanillaDesdePlantilla,
+  generarVistaAlumno,
   obtenerPlanillasPorContexto,
   type PlantillaPlanillaId,
   type PlanillaTP,
@@ -35,30 +36,10 @@ type PlantillaOption = {
 };
 
 const PLANTILLAS: PlantillaOption[] = [
-  {
-    id: "op1op2Diaria",
-    label: "OP1/OP2 diaria",
-    tipo: "diaria",
-    tituloBase: "Planilla diaria OP1/OP2",
-  },
-  {
-    id: "op1op2Resumen",
-    label: "OP1/OP2 resumen/final",
-    tipo: "resumen",
-    tituloBase: "Planilla resumen OP1/OP2",
-  },
-  {
-    id: "op3op6Diaria",
-    label: "OP3-OP6 diaria",
-    tipo: "diaria",
-    tituloBase: "Planilla diaria OP3-OP6",
-  },
-  {
-    id: "op3op6Resumen",
-    label: "OP3-OP6 resumen/final",
-    tipo: "resumen",
-    tituloBase: "Planilla resumen OP3-OP6",
-  },
+  { id: "op1op2Diaria", label: "OP1/OP2 diaria", tipo: "diaria", tituloBase: "Planilla" },
+  { id: "op1op2Resumen", label: "OP1/OP2 final", tipo: "resumen", tituloBase: "Planilla" },
+  { id: "op3op6Diaria", label: "OP3-OP6 diaria", tipo: "diaria", tituloBase: "Planilla" },
+  { id: "op3op6Resumen", label: "OP3-OP6 final", tipo: "resumen", tituloBase: "Planilla" },
 ];
 
 export default function PlanillasScreen() {
@@ -104,15 +85,9 @@ export default function PlanillasScreen() {
         seccionId,
         subseccionPath: contextoSubseccion,
       });
-      setPlanillas(
-        data.sort((a, b) => {
-          const aTime = a.fechaActualizacion?.toMillis?.() ?? 0;
-          const bTime = b.fechaActualizacion?.toMillis?.() ?? 0;
-          return bTime - aTime;
-        }),
-      );
-    } catch (error) {
-      console.error("obtener planillas error:", error);
+      await Promise.all(data.map((planilla) => generarVistaAlumno(planilla.id)));
+      setPlanillas(ordenarPorFecha(data));
+    } catch {
       setAlerta({
         visible: true,
         titulo: "Error",
@@ -156,6 +131,15 @@ export default function PlanillasScreen() {
     fetchNombres();
   }, [inscripciones]);
 
+  useEffect(() => {
+    if (!alumnoSeleccionado) {
+      setTitulo("Planilla");
+      return;
+    }
+    const nombre = nombresAlumnos[alumnoSeleccionado] ?? alumnoSeleccionado;
+    setTitulo(`Planilla ${nombre}`);
+  }, [alumnoSeleccionado, nombresAlumnos]);
+
   const alumnosFiltrados = useMemo(() => {
     const texto = filtroAlumno.toLowerCase().trim();
     if (!texto) return inscripciones;
@@ -167,7 +151,6 @@ export default function PlanillasScreen() {
   const seleccionarPlantilla = (option: PlantillaOption) => {
     setPlantillaId(option.id);
     setTipo(option.tipo);
-    setTitulo(option.tituloBase);
   };
 
   const seleccionarTipo = (nuevoTipo: TipoPlanilla) => {
@@ -175,34 +158,15 @@ export default function PlanillasScreen() {
     setTipo(nuevoTipo);
     if (plantillaCompatible) {
       setPlantillaId(plantillaCompatible.id);
-      setTitulo(plantillaCompatible.tituloBase);
     }
   };
 
   const crearPlanilla = async () => {
-    if (!seccionId) {
+    if (!seccionId || !alumnoSeleccionado || !titulo.trim()) {
       setAlerta({
         visible: true,
-        titulo: "Falta contexto",
-        mensaje: "No se pudo identificar la sección.",
-        tipo: "error",
-      });
-      return;
-    }
-    if (!alumnoSeleccionado) {
-      setAlerta({
-        visible: true,
-        titulo: "Alumno requerido",
-        mensaje: "Seleccioná un alumno inscripto para crear la planilla.",
-        tipo: "error",
-      });
-      return;
-    }
-    if (!titulo.trim()) {
-      setAlerta({
-        visible: true,
-        titulo: "Título requerido",
-        mensaje: "Ingresá un título para la planilla.",
+        titulo: "Datos incompletos",
+        mensaje: "Seleccioná un alumno e ingresá un título.",
         tipo: "error",
       });
       return;
@@ -227,8 +191,7 @@ export default function PlanillasScreen() {
         tipo: "exito",
       });
       await cargarPlanillas();
-    } catch (error) {
-      console.error("crear planilla error:", error);
+    } catch {
       setAlerta({
         visible: true,
         titulo: "Error",
@@ -271,23 +234,8 @@ export default function PlanillasScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScreenHeader
-        titulo="Planillas de trabajos prácticos"
-        onBack={() => router.back()}
-        mostrarHome
-      />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.contextCard}>
-          <Text style={styles.contextLabel}>Contexto</Text>
-          <Text style={styles.contextText}>Módulo: {moduloId ?? "-"}</Text>
-          <Text style={styles.contextText}>Sección: {seccionId ?? "-"}</Text>
-          <Text style={styles.contextText}>Subsección: {subseccionPath ?? "-"}</Text>
-        </View>
-
+      <ScreenHeader titulo="Planillas de trabajos prácticos" onBack={() => router.back()} mostrarHome />
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.formCard}>
           <View style={styles.cardHeader}>
             <Ionicons name="add-circle-outline" size={20} color="#0F4A32" />
@@ -295,11 +243,7 @@ export default function PlanillasScreen() {
           </View>
 
           <Text style={styles.sectionLabel}>Alumno</Text>
-          <BuscadorAlumnos
-            valor={filtroAlumno}
-            onChangeText={setFiltroAlumno}
-            placeholder="Buscar alumno por nombre..."
-          />
+          <BuscadorAlumnos valor={filtroAlumno} onChangeText={setFiltroAlumno} placeholder="Buscar alumno por nombre..." />
           {loadingInscripciones ? (
             <ActivityIndicator color="#25B471" style={{ marginTop: 10 }} />
           ) : inscripciones.length === 0 ? (
@@ -343,7 +287,7 @@ export default function PlanillasScreen() {
                   activeOpacity={0.85}
                 >
                   <Text style={[styles.chipText, activo && styles.chipTextActivo]}>
-                    {tipoOption === "diaria" ? "Diaria" : "Resumen/final"}
+                    {tipoOption === "diaria" ? "Diaria" : "Final"}
                   </Text>
                 </TouchableOpacity>
               );
@@ -361,9 +305,7 @@ export default function PlanillasScreen() {
                   onPress={() => seleccionarPlantilla(option)}
                   activeOpacity={0.85}
                 >
-                  <Text style={[styles.templateText, activo && styles.templateTextActive]}>
-                    {option.label}
-                  </Text>
+                  <Text style={[styles.templateText, activo && styles.templateTextActive]}>{option.label}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -380,10 +322,7 @@ export default function PlanillasScreen() {
           />
 
           <TouchableOpacity
-            style={[
-              styles.saveBtn,
-              (creando || loadingInscripciones || !alumnoSeleccionado) && styles.saveBtnDisabled,
-            ]}
+            style={[styles.saveBtn, (creando || loadingInscripciones || !alumnoSeleccionado) && styles.saveBtnDisabled]}
             onPress={crearPlanilla}
             disabled={creando || loadingInscripciones || !alumnoSeleccionado}
             activeOpacity={0.85}
@@ -412,11 +351,21 @@ export default function PlanillasScreen() {
         ) : planillas.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="clipboard-outline" size={44} color="#CBD5E0" />
-            <Text style={styles.emptyText}>Todavía no hay planillas en este contexto.</Text>
+            <Text style={styles.emptyText}>Todavía no hay planillas en esta sección.</Text>
           </View>
         ) : (
           planillas.map((planilla) => (
-            <View key={planilla.id} style={styles.planillaCard}>
+            <TouchableOpacity
+              key={planilla.id}
+              style={styles.planillaCard}
+              onPress={() =>
+                router.push({
+                  pathname: "/secciones/planilla-detalle",
+                  params: { planillaId: planilla.id, moduloId, seccionId, subseccionPath },
+                } as any)
+              }
+              activeOpacity={0.85}
+            >
               <View style={styles.planillaHeader}>
                 <View style={styles.planillaIconBg}>
                   <Ionicons name="clipboard-outline" size={18} color="#0F4A32" />
@@ -428,20 +377,14 @@ export default function PlanillasScreen() {
                   </Text>
                 </View>
                 <View style={styles.tipoBadge}>
-                  <Text style={styles.tipoBadgeText}>
-                    {planilla.tipo === "diaria" ? "Diaria" : "Resumen"}
-                  </Text>
+                  <Text style={styles.tipoBadgeText}>{planilla.tipo === "diaria" ? "Diaria" : "Final"}</Text>
                 </View>
               </View>
               <View style={styles.planillaFooter}>
-                <Text style={styles.planillaInfo}>
-                  Columnas: {planilla.columnas?.length ?? 0}
-                </Text>
-                <Text style={styles.planillaInfo}>
-                  Actualizada: {formatFecha(planilla.fechaActualizacion)}
-                </Text>
+                <Text style={styles.planillaInfo}>Columnas: {planilla.columnas?.length ?? 0}</Text>
+                <Text style={styles.planillaInfo}>Actualizada: {formatFecha(planilla.fechaActualizacion)}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -457,6 +400,14 @@ export default function PlanillasScreen() {
   );
 }
 
+function ordenarPorFecha(items: PlanillaTP[]) {
+  return [...items].sort((a, b) => {
+    const aTime = a.fechaActualizacion?.toMillis?.() ?? 0;
+    const bTime = b.fechaActualizacion?.toMillis?.() ?? 0;
+    return bTime - aTime;
+  });
+}
+
 function formatFecha(fecha: PlanillaTP["fechaActualizacion"]) {
   const date = fecha?.toDate?.();
   if (!date) return "-";
@@ -466,28 +417,7 @@ function formatFecha(fecha: PlanillaTP["fechaActualizacion"]) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
   content: { padding: 16, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  contextCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 14,
-    marginBottom: 14,
-  },
-  contextLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#0F4A32",
-    textTransform: "uppercase",
-    marginBottom: 6,
-  },
-  contextText: { fontSize: 13, color: "#374151", marginTop: 3 },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   formCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
@@ -496,20 +426,9 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 18,
   },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
-  },
+  cardHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
   cardTitle: { fontSize: 16, fontWeight: "700", color: "#11181C" },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#374151",
-    marginTop: 16,
-    marginBottom: 8,
-  },
+  sectionLabel: { fontSize: 13, fontWeight: "700", color: "#374151", marginTop: 16, marginBottom: 8 },
   selectorList: { gap: 8 },
   optionRow: {
     flexDirection: "row",
@@ -521,10 +440,7 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: "#F9FAFB",
   },
-  optionRowActive: {
-    borderColor: "#25B471",
-    backgroundColor: "#E8F5E9",
-  },
+  optionRowActive: { borderColor: "#25B471", backgroundColor: "#E8F5E9" },
   optionText: { flex: 1, fontSize: 14, color: "#374151", fontWeight: "600" },
   optionTextActive: { color: "#0F4A32" },
   chipsRow: { flexDirection: "row", gap: 8 },
@@ -537,17 +453,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F9FAFB",
   },
-  chipActivo: {
-    backgroundColor: "#0F4A32",
-    borderColor: "#0F4A32",
-  },
+  chipActivo: { backgroundColor: "#0F4A32", borderColor: "#0F4A32" },
   chipText: { fontSize: 13, color: "#374151", fontWeight: "700" },
   chipTextActivo: { color: "#FFFFFF" },
-  templateGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
+  templateGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   templateBtn: {
     width: "48%",
     minHeight: 46,
@@ -559,16 +468,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#F9FAFB",
   },
-  templateBtnActive: {
-    backgroundColor: "#E8F5E9",
-    borderColor: "#25B471",
-  },
-  templateText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#374151",
-    textAlign: "center",
-  },
+  templateBtnActive: { backgroundColor: "#E8F5E9", borderColor: "#25B471" },
+  templateText: { fontSize: 12, fontWeight: "700", color: "#374151", textAlign: "center" },
   templateTextActive: { color: "#0F4A32" },
   input: {
     backgroundColor: "#F9FAFB",
@@ -590,12 +491,7 @@ const styles = StyleSheet.create({
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  listHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
+  listHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   listTitle: { fontSize: 17, fontWeight: "700", color: "#11181C" },
   refreshBtn: {
     flexDirection: "row",
@@ -620,11 +516,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
   },
-  planillaHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+  planillaHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   planillaIconBg: {
     width: 34,
     height: 34,
@@ -654,29 +546,9 @@ const styles = StyleSheet.create({
     borderTopColor: "#F3F4F6",
   },
   planillaInfo: { fontSize: 12, color: "#6B7280", fontWeight: "600" },
-  emptyContainer: {
-    alignItems: "center",
-    paddingTop: 28,
-    gap: 10,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#9CA3AF",
-    textAlign: "center",
-    fontStyle: "italic",
-  },
-  sinPermisoText: {
-    fontSize: 16,
-    color: "#6B7280",
-    textAlign: "center",
-    marginTop: 12,
-    marginBottom: 24,
-  },
-  volverBtn: {
-    backgroundColor: "#0F4A32",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
+  emptyContainer: { alignItems: "center", paddingTop: 28, gap: 10 },
+  emptyText: { fontSize: 14, color: "#9CA3AF", textAlign: "center", fontStyle: "italic" },
+  sinPermisoText: { fontSize: 16, color: "#6B7280", textAlign: "center", marginTop: 12, marginBottom: 24 },
+  volverBtn: { backgroundColor: "#0F4A32", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
   volverBtnText: { color: "#FFFFFF", fontWeight: "700" },
 });
