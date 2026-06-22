@@ -63,6 +63,26 @@ export interface FilaPlanilla {
   fechaActualizacion: Timestamp;
 }
 
+export interface FilaBasePlanilla {
+  id: string;
+  orden: number;
+  celdas: Record<string, any>;
+}
+
+export interface PlanillaBaseTP {
+  id: string;
+  nombre: string;
+  descripcion?: string | null;
+  tipo: TipoPlanilla;
+  columnas: ColumnaPlanilla[];
+  filasBase?: FilaBasePlanilla[];
+  activa: boolean;
+  creadaPor?: string;
+  actualizadaPor?: string;
+  fechaCreacion?: Timestamp;
+  fechaActualizacion?: Timestamp;
+}
+
 export interface VistaAlumnoPlanilla {
   planillaId: string;
   alumnoId: string;
@@ -121,6 +141,31 @@ export const plantillasPlanillas: Record<PlantillaPlanillaId, ColumnaPlanilla[]>
   ],
 };
 
+const datosPlanillasBaseIniciales: Record<PlantillaPlanillaId, { nombre: string; tipo: TipoPlanilla }> = {
+  op1op2Diaria: { nombre: "OP1/OP2 diaria", tipo: "diaria" },
+  op1op2Resumen: { nombre: "OP1/OP2 final", tipo: "resumen" },
+  op3op6Diaria: { nombre: "OP3-OP6 diaria", tipo: "diaria" },
+  op3op6Resumen: { nombre: "OP3-OP6 final", tipo: "resumen" },
+};
+
+const idsPlanillasBaseIniciales: Record<PlantillaPlanillaId, string> = {
+  op1op2Diaria: "base-op1-op2-diaria",
+  op1op2Resumen: "base-op1-op2-final",
+  op3op6Diaria: "base-op3-op6-diaria",
+  op3op6Resumen: "base-op3-op6-final",
+};
+
+export const planillasBaseIniciales: PlanillaBaseTP[] = (
+  Object.keys(plantillasPlanillas) as PlantillaPlanillaId[]
+).map((id) => ({
+  id: idsPlanillasBaseIniciales[id],
+  nombre: datosPlanillasBaseIniciales[id].nombre,
+  tipo: datosPlanillasBaseIniciales[id].tipo,
+  columnas: [...plantillasPlanillas[id]].sort((a, b) => a.orden - b.orden).map((col) => ({ ...col })),
+  filasBase: [],
+  activa: true,
+}));
+
 interface CrearPlanillaParams {
   alumnoId: string;
   alumnoNombre?: string;
@@ -134,6 +179,16 @@ interface CrearPlanillaParams {
   titulo: string;
   plantillaId: PlantillaPlanillaId;
 }
+
+interface CrearPlanillaDesdeBaseParams extends Omit<CrearPlanillaParams, "plantillaId"> {
+  base: PlanillaBaseTP;
+}
+
+type CrearPlanillaBaseInput = {
+  nombre: string;
+  descripcion?: string | null;
+  tipo: TipoPlanilla;
+};
 
 interface ContextoPlanillasParams {
   moduloId?: string;
@@ -156,6 +211,15 @@ type DatosPlanillaInput = {
   titulo?: string;
 };
 
+type DatosPlanillaBaseInput = Partial<{
+  nombre: string;
+  descripcion: string | null;
+  tipo: TipoPlanilla;
+  columnas: ColumnaPlanilla[];
+  filasBase: FilaBasePlanilla[];
+  activa: boolean;
+}>;
+
 const ordenarColumnas = (columnas: ColumnaPlanilla[]) =>
   [...columnas].sort((a, b) => a.orden - b.orden);
 
@@ -169,8 +233,15 @@ const getCurrentUserId = () => {
 };
 
 export async function crearPlanillaDesdePlantilla(params: CrearPlanillaParams): Promise<string> {
+  const base = planillasBaseIniciales.find((item) => item.id === idsPlanillasBaseIniciales[params.plantillaId]);
+  if (!base) throw new Error("Plantilla no encontrada");
+  return crearPlanillaDesdeBase({ ...params, base });
+}
+
+export async function crearPlanillaDesdeBase(params: CrearPlanillaDesdeBaseParams): Promise<string> {
   const uid = getCurrentUserId();
-  const columnas = ordenarColumnas(plantillasPlanillas[params.plantillaId]).map((col) => ({ ...col }));
+  const columnas = ordenarColumnas(params.base.columnas ?? []).map((col) => ({ ...col }));
+  const filasBase = [...(params.base.filasBase ?? [])].sort((a, b) => a.orden - b.orden);
 
   const ref = await addDoc(collection(db, "planillas_tp"), {
     alumnoId: params.alumnoId,
@@ -190,8 +261,110 @@ export async function crearPlanillaDesdePlantilla(params: CrearPlanillaParams): 
     fechaActualizacion: serverTimestamp(),
   });
 
+  await Promise.all(
+    filasBase.map((fila) =>
+      addDoc(collection(db, "planillas_tp", ref.id, "filas"), {
+        orden: fila.orden,
+        celdas: fila.celdas ?? {},
+        fechaCreacion: serverTimestamp(),
+        fechaActualizacion: serverTimestamp(),
+      }),
+    ),
+  );
+
   await generarVistaAlumno(ref.id);
   return ref.id;
+}
+
+export async function obtenerPlanillasBase(): Promise<PlanillaBaseTP[]> {
+  await inicializarPlanillasBase();
+  const snap = await getDocs(query(collection(db, "planillas_base_tp"), where("activa", "==", true)));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }) as PlanillaBaseTP)
+    .filter((base) => base.activa !== false);
+}
+
+export async function obtenerPlanillaBasePorId(planillaBaseId: string): Promise<PlanillaBaseTP | null> {
+  await inicializarPlanillasBase();
+  const snap = await getDoc(doc(db, "planillas_base_tp", planillaBaseId));
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as PlanillaBaseTP) : null;
+}
+
+export async function crearPlanillaBase(data: CrearPlanillaBaseInput): Promise<string> {
+  const uid = getCurrentUserId();
+  const ref = await addDoc(collection(db, "planillas_base_tp"), {
+    nombre: data.nombre.trim(),
+    descripcion: data.descripcion ?? null,
+    tipo: data.tipo,
+    columnas: [],
+    filasBase: [],
+    activa: true,
+    creadaPor: uid,
+    actualizadaPor: uid,
+    fechaCreacion: serverTimestamp(),
+    fechaActualizacion: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function actualizarPlanillaBase(
+  planillaBaseId: string,
+  data: DatosPlanillaBaseInput,
+): Promise<void> {
+  const uid = getCurrentUserId();
+  const payload: Record<string, any> = {
+    ...data,
+    actualizadaPor: uid,
+    fechaActualizacion: serverTimestamp(),
+  };
+  if (payload.columnas) payload.columnas = ordenarColumnas(payload.columnas);
+  if (payload.filasBase) payload.filasBase = [...payload.filasBase].sort((a, b) => a.orden - b.orden);
+  await updateDoc(doc(db, "planillas_base_tp", planillaBaseId), payload);
+}
+
+export async function eliminarPlanillaBase(planillaBaseId: string): Promise<void> {
+  await deleteDoc(doc(db, "planillas_base_tp", planillaBaseId));
+}
+
+export async function inicializarPlanillasBase(): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+
+  const usuarioSnap = await getDoc(doc(db, "usuarios", uid));
+  if (usuarioSnap.data()?.rol !== "admin") return;
+
+  const marcaRef = doc(db, "planillas_base_tp", "_inicializacion_bases");
+  const marcaSnap = await getDoc(marcaRef);
+  if (marcaSnap.exists()) return;
+
+  await Promise.all(
+    planillasBaseIniciales.map(async (base) => {
+      const ref = doc(db, "planillas_base_tp", base.id);
+      const snap = await getDoc(ref);
+      if (snap.exists()) return;
+
+      await setDoc(ref, {
+        nombre: base.nombre,
+        descripcion: null,
+        tipo: base.tipo,
+        columnas: base.columnas,
+        filasBase: base.filasBase ?? [],
+        activa: true,
+        creadaPor: uid,
+        actualizadaPor: uid,
+        fechaCreacion: serverTimestamp(),
+        fechaActualizacion: serverTimestamp(),
+      });
+    }),
+  );
+
+  await setDoc(marcaRef, {
+    activa: false,
+    tipo: "config",
+    descripcion: "Marca interna para no duplicar bases iniciales.",
+    fechaCreacion: serverTimestamp(),
+    actualizadaPor: uid,
+  });
 }
 
 export async function obtenerPlanillasPorContexto(params: ContextoPlanillasParams): Promise<PlanillaTP[]> {

@@ -115,5 +115,10 @@ service cloud.firestore {
         (request.auth != null && request.auth.uid == alumnoId);
       allow create, update, delete: if isAdmin() || isProfesor();
     }
+
+    match /planillas_base_tp/{baseId} {
+      allow read: if isAdmin() || isProfesor();
+      allow create, update, delete: if isAdmin();
+    }
   }
 }

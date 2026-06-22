@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -19,28 +19,15 @@ import ScreenHeader from "../../components/ui/ScreenHeader";
 import { db } from "../../config/firebaseConfig";
 import { useInscripcionesPorSeccion } from "../../hooks/useInscripciones";
 import {
-  crearPlanillaDesdePlantilla,
+  crearPlanillaDesdeBase,
   generarVistaAlumno,
+  obtenerPlanillasBase,
   obtenerPlanillasPorContexto,
-  type PlantillaPlanillaId,
+  type PlanillaBaseTP,
   type PlanillaTP,
   type TipoPlanilla,
 } from "../../hooks/usePlanillas";
 import { useUserRole } from "../../hooks/useUserRole";
-
-type PlantillaOption = {
-  id: PlantillaPlanillaId;
-  label: string;
-  tipo: TipoPlanilla;
-  tituloBase: string;
-};
-
-const PLANTILLAS: PlantillaOption[] = [
-  { id: "op1op2Diaria", label: "OP1/OP2 diaria", tipo: "diaria", tituloBase: "Planilla" },
-  { id: "op1op2Resumen", label: "OP1/OP2 final", tipo: "resumen", tituloBase: "Planilla" },
-  { id: "op3op6Diaria", label: "OP3-OP6 diaria", tipo: "diaria", tituloBase: "Planilla" },
-  { id: "op3op6Resumen", label: "OP3-OP6 final", tipo: "resumen", tituloBase: "Planilla" },
-];
 
 export default function PlanillasScreen() {
   const { moduloId, seccionId, subseccionPath } = useLocalSearchParams<{
@@ -53,13 +40,15 @@ export default function PlanillasScreen() {
     useInscripcionesPorSeccion(seccionId ?? null);
 
   const [planillas, setPlanillas] = useState<PlanillaTP[]>([]);
+  const [planillasBase, setPlanillasBase] = useState<PlanillaBaseTP[]>([]);
+  const [loadingBases, setLoadingBases] = useState(true);
   const [loadingPlanillas, setLoadingPlanillas] = useState(true);
   const [nombresAlumnos, setNombresAlumnos] = useState<Record<string, string>>({});
   const [filtroAlumno, setFiltroAlumno] = useState("");
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<string | null>(null);
   const [tipo, setTipo] = useState<TipoPlanilla>("diaria");
-  const [plantillaId, setPlantillaId] = useState<PlantillaPlanillaId>("op1op2Diaria");
-  const [titulo, setTitulo] = useState(PLANTILLAS[0].tituloBase);
+  const [planillaBaseId, setPlanillaBaseId] = useState<string | null>(null);
+  const [titulo, setTitulo] = useState("Planilla");
   const [creando, setCreando] = useState(false);
   const [alerta, setAlerta] = useState<{
     visible: boolean;
@@ -99,9 +88,40 @@ export default function PlanillasScreen() {
     }
   }, [contextoSubseccion, moduloId, puedeGestionar, seccionId]);
 
+  const cargarBases = useCallback(async () => {
+    if (!puedeGestionar) {
+      setPlanillasBase([]);
+      setLoadingBases(false);
+      return;
+    }
+
+    setLoadingBases(true);
+    try {
+      const bases = await obtenerPlanillasBase();
+      setPlanillasBase(bases);
+      setPlanillaBaseId((actual) => actual ?? bases[0]?.id ?? null);
+      if (bases[0]) setTipo((actual) => actual ?? bases[0].tipo);
+    } catch {
+      setAlerta({
+        visible: true,
+        titulo: "Error",
+        mensaje: "No se pudieron cargar las planillas base.",
+        tipo: "error",
+      });
+    } finally {
+      setLoadingBases(false);
+    }
+  }, [puedeGestionar]);
+
   useEffect(() => {
     cargarPlanillas();
   }, [cargarPlanillas]);
+
+  useFocusEffect(
+    useCallback(() => {
+      cargarBases();
+    }, [cargarBases]),
+  );
 
   useEffect(() => {
     if (inscripciones.length === 0) {
@@ -148,16 +168,16 @@ export default function PlanillasScreen() {
     );
   }, [filtroAlumno, inscripciones, nombresAlumnos]);
 
-  const seleccionarPlantilla = (option: PlantillaOption) => {
-    setPlantillaId(option.id);
+  const seleccionarPlantilla = (option: PlanillaBaseTP) => {
+    setPlanillaBaseId(option.id);
     setTipo(option.tipo);
   };
 
   const seleccionarTipo = (nuevoTipo: TipoPlanilla) => {
-    const plantillaCompatible = PLANTILLAS.find((option) => option.tipo === nuevoTipo);
+    const plantillaCompatible = planillasBase.find((option) => option.tipo === nuevoTipo);
     setTipo(nuevoTipo);
     if (plantillaCompatible) {
-      setPlantillaId(plantillaCompatible.id);
+      setPlanillaBaseId(plantillaCompatible.id);
     }
   };
 
@@ -174,15 +194,18 @@ export default function PlanillasScreen() {
 
     setCreando(true);
     try {
-      await crearPlanillaDesdePlantilla({
+      const baseSeleccionada = planillasBase.find((base) => base.id === planillaBaseId);
+      if (!baseSeleccionada) throw new Error("Planilla base no encontrada");
+
+      await crearPlanillaDesdeBase({
         alumnoId: alumnoSeleccionado,
         alumnoNombre: nombresAlumnos[alumnoSeleccionado] ?? alumnoSeleccionado,
         moduloId,
         seccionId,
         subseccionPath: contextoSubseccion,
-        tipo,
+        tipo: baseSeleccionada.tipo,
         titulo: titulo.trim(),
-        plantillaId,
+        base: baseSeleccionada,
       });
       setAlerta({
         visible: true,
@@ -242,6 +265,17 @@ export default function PlanillasScreen() {
             <Text style={styles.cardTitle}>Nueva planilla</Text>
           </View>
 
+          {rol === "admin" && (
+            <TouchableOpacity
+              style={styles.manageBasesBtn}
+              onPress={() => router.push("/secciones/planillas-base" as any)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="settings-outline" size={18} color="#0F4A32" />
+              <Text style={styles.manageBasesText}>Gestionar planillas base</Text>
+            </TouchableOpacity>
+          )}
+
           <Text style={styles.sectionLabel}>Alumno</Text>
           <BuscadorAlumnos valor={filtroAlumno} onChangeText={setFiltroAlumno} placeholder="Buscar alumno por nombre..." />
           {loadingInscripciones ? (
@@ -295,9 +329,16 @@ export default function PlanillasScreen() {
           </View>
 
           <Text style={styles.sectionLabel}>Plantilla base</Text>
-          <View style={styles.templateGrid}>
-            {PLANTILLAS.map((option) => {
-              const activo = plantillaId === option.id;
+          {loadingBases ? (
+            <ActivityIndicator color="#25B471" style={{ marginTop: 10 }} />
+          ) : planillasBase.length === 0 ? (
+            <Text style={styles.emptyText}>No hay planillas base disponibles.</Text>
+          ) : (
+            <View style={styles.templateGrid}>
+            {planillasBase
+              .filter((option) => option.tipo === tipo)
+              .map((option) => {
+              const activo = planillaBaseId === option.id;
               return (
                 <TouchableOpacity
                   key={option.id}
@@ -305,11 +346,15 @@ export default function PlanillasScreen() {
                   onPress={() => seleccionarPlantilla(option)}
                   activeOpacity={0.85}
                 >
-                  <Text style={[styles.templateText, activo && styles.templateTextActive]}>{option.label}</Text>
+                  <Text style={[styles.templateText, activo && styles.templateTextActive]}>{option.nombre}</Text>
+                  <Text style={[styles.templateMeta, activo && styles.templateTextActive]}>
+                    {option.tipo === "diaria" ? "Diaria" : "Final"}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
-          </View>
+            </View>
+          )}
 
           <Text style={styles.sectionLabel}>Título</Text>
           <TextInput
@@ -322,9 +367,13 @@ export default function PlanillasScreen() {
           />
 
           <TouchableOpacity
-            style={[styles.saveBtn, (creando || loadingInscripciones || !alumnoSeleccionado) && styles.saveBtnDisabled]}
+            style={[
+              styles.saveBtn,
+              (creando || loadingInscripciones || loadingBases || !alumnoSeleccionado || !planillaBaseId) &&
+                styles.saveBtnDisabled,
+            ]}
             onPress={crearPlanilla}
-            disabled={creando || loadingInscripciones || !alumnoSeleccionado}
+            disabled={creando || loadingInscripciones || loadingBases || !alumnoSeleccionado || !planillaBaseId}
             activeOpacity={0.85}
           >
             {creando ? (
@@ -471,6 +520,18 @@ const styles = StyleSheet.create({
   templateBtnActive: { backgroundColor: "#E8F5E9", borderColor: "#25B471" },
   templateText: { fontSize: 12, fontWeight: "700", color: "#374151", textAlign: "center" },
   templateTextActive: { color: "#0F4A32" },
+  templateMeta: { fontSize: 10, fontWeight: "600", color: "#6B7280", textAlign: "center", marginTop: 3 },
+  manageBasesBtn: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 10,
+    paddingVertical: 10,
+  },
+  manageBasesText: { color: "#0F4A32", fontWeight: "700", fontSize: 13 },
   input: {
     backgroundColor: "#F9FAFB",
     borderWidth: 1,
