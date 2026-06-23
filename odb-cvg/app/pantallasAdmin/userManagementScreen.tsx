@@ -21,8 +21,13 @@ interface Usuario {
 }
 
 interface CursadaRestringida {
-  id: string;      // seccionId
+  id: string;
   moduloId: string;
+  seccionId: string;
+  seccionTitulo: string;
+  subseccionPath?: string;
+  subseccionTitulo?: string;
+  tipoAcceso: "seccion" | "subseccion";
   titulo: string;
   codigoAcceso: string;
 }
@@ -58,17 +63,20 @@ export default function UserManagementScreen() {
   // ─── Estado Cursadas ─────────────────────────────────────────────────────
   const [cursadas, setCursadas] = useState<CursadaRestringida[]>([]);
   const [loadingCursadas, setLoadingCursadas] = useState(true);
+  const [errorCursadas, setErrorCursadas] = useState<string | null>(null);
   const [cursadaExpandida, setCursadaExpandida] = useState<CursadaRestringida | null>(null);
   const [cursadaARegenerear, setCursadaARegenerar] = useState<CursadaRestringida | null>(null);
   const [regenerando, setRegenerando] = useState(false);
   const [modalAsignar, setModalAsignar] = useState(false);
   const [asignando, setAsignando] = useState(false);
   const { inscripciones: inscripcionesExpandida, loading: loadingInscripciones } =
-    useInscripcionesPorSeccion(cursadaExpandida?.id ?? null);
+    useInscripcionesPorSeccion(cursadaExpandida?.seccionId ?? null, cursadaExpandida?.subseccionPath ?? "");
   const { modulos, loading: loadingModulos } = useModulos();
   const [usuarioAEliminarNombre, setUsuarioAEliminarNombre] = useState<string | null>(null);
   const rootNavigationState = useRootNavigationState();
   const [inscripcionAEliminar, setInscripcionAEliminar] = useState<Inscripcion | null>(null);
+  const [filtroAccesos, setFiltroAccesos] = useState("");
+  const [filtroTipoAcceso, setFiltroTipoAcceso] = useState<"todos" | "seccion" | "subseccion">("todos");
 
   useEffect(() => {
     if (!rootNavigationState?.key) return;
@@ -96,30 +104,74 @@ export default function UserManagementScreen() {
     return unsubscribe;
   }, [rootNavigationState]);
 
-  // Cargar cursadas restringidas via collectionGroup
+  // Cargar accesos restringidos de secciones y subsecciones.
   useEffect(() => {
     if (!esAdmin) return;
 
     setLoadingCursadas(true);
-    const q = query(
-      collectionGroup(db, 'secciones'),
-      where('esRestringida', '==', true),
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log("Cursadas cargadas:", snapshot.docs.map(d => d.data())); 
-      setCursadas(snapshot.docs.map(d => ({
-        id: d.id,
-        moduloId: d.ref.parent.parent?.id ?? '',
-        titulo: d.data().titulo ?? '',
-        codigoAcceso: d.data().codigoAcceso ?? '',
-      })));
-      setLoadingCursadas(false);
-    }, (error) => {
-      console.error('cursadas restringidas error:', error);
-      setCursadas([]);
-      setLoadingCursadas(false);
-    });
-    return () => unsubscribe();
+    setErrorCursadas(null);
+    const cargarAccesos = async () => {
+      try {
+        const [seccionesSnap, subseccionesSnap] = await Promise.all([
+          getDocs(query(collectionGroup(db, 'secciones'), where('esRestringida', '==', true))),
+          getDocs(query(collectionGroup(db, 'subsecciones'), where('esRestringida', '==', true))),
+        ]);
+
+        const seccionesAccesos: CursadaRestringida[] = seccionesSnap.docs.map(d => {
+          const moduloId = d.ref.parent.parent?.id ?? '';
+          const data = d.data();
+          return {
+            id: d.id,
+            moduloId,
+            seccionId: d.id,
+            seccionTitulo: data.titulo ?? '',
+            tipoAcceso: 'seccion',
+            titulo: data.titulo ?? '',
+            codigoAcceso: data.codigoAcceso ?? '',
+          };
+        });
+
+        const subseccionesAccesos: CursadaRestringida[] = await Promise.all(
+          subseccionesSnap.docs.map(async d => {
+            const path = d.ref.path.split('/');
+            const moduloIndex = path.indexOf('modulos');
+            const seccionIndex = path.indexOf('secciones');
+            const moduloId = moduloIndex >= 0 ? path[moduloIndex + 1] : '';
+            const seccionId = seccionIndex >= 0 ? path[seccionIndex + 1] : '';
+            const subseccionPath = path
+              .map((segment, index) => (segment === 'subsecciones' ? path[index + 1] : null))
+              .filter((segment): segment is string => !!segment)
+              .join('/');
+            let seccionTitulo = '';
+            try {
+              const seccionSnap = await getDoc(doc(db, 'modulos', moduloId, 'secciones', seccionId));
+              seccionTitulo = seccionSnap.exists() ? (seccionSnap.data().titulo ?? '') : '';
+            } catch {}
+            const data = d.data();
+            return {
+              id: `${seccionId}::${subseccionPath}`,
+              moduloId,
+              seccionId,
+              seccionTitulo,
+              subseccionPath,
+              subseccionTitulo: data.titulo ?? '',
+              tipoAcceso: 'subseccion',
+              titulo: data.titulo ?? '',
+              codigoAcceso: data.codigoAcceso ?? '',
+            };
+          }),
+        );
+
+        setCursadas([...seccionesAccesos, ...subseccionesAccesos].sort((a, b) => a.titulo.localeCompare(b.titulo)));
+      } catch (error) {
+        console.log('accesos restringidos error:', error);
+        setErrorCursadas('No se pudieron cargar los accesos restringidos. Si acabás de agregar índices, esperá a que Firestore termine de crearlos.');
+        setCursadas([]);
+      } finally {
+        setLoadingCursadas(false);
+      }
+    };
+    cargarAccesos();
   }, [esAdmin]);
 
   // Mapa uid→nombre para mostrar en inscripciones
@@ -128,6 +180,14 @@ export default function UserManagementScreen() {
 
   const modulosMap: Record<string, string> = {};
   modulos.forEach(m => { modulosMap[m.id] = m.titulo; });
+
+  const cursadasFiltradas = cursadas.filter((acceso) => {
+    const moduloTitulo = modulosMap[acceso.moduloId] ?? "";
+    const texto = `${acceso.titulo} ${moduloTitulo} ${acceso.seccionTitulo} ${acceso.subseccionTitulo ?? ""}`.toLowerCase();
+    const coincideTexto = !filtroAccesos.trim() || texto.includes(filtroAccesos.toLowerCase().trim());
+    const coincideTipo = filtroTipoAcceso === "todos" || acceso.tipoAcceso === filtroTipoAcceso;
+    return coincideTexto && coincideTipo;
+  });
 
   const abrirEditar = (user: Usuario) => {
     setUsuarioActual(user);
@@ -156,9 +216,13 @@ export default function UserManagementScreen() {
     if (!cursadaARegenerear) return;
     setRegenerando(true);
     try {
-      await regenerarCodigo(cursadaARegenerear.moduloId, cursadaARegenerear.id);
+      await regenerarCodigo(
+        cursadaARegenerear.moduloId,
+        cursadaARegenerear.seccionId,
+        cursadaARegenerear.subseccionPath,
+      );
       setCursadaARegenerar(null);
-      setAlerta({ visible: true, titulo: 'Código regenerado', mensaje: 'El nuevo código está activo. Todos los alumnos anteriores perdieron acceso.', tipo: 'exito' });
+      setAlerta({ visible: true, titulo: 'Código regenerado', mensaje: 'El nuevo código está activo. Los alumnos anteriores perdieron acceso.', tipo: 'exito' });
     } catch {
       setAlerta({ visible: true, titulo: 'Error', mensaje: 'No se pudo regenerar el código.', tipo: 'error' });
     } finally {
@@ -178,9 +242,14 @@ export default function UserManagementScreen() {
     if (!cursadaExpandida) return;
     setAsignando(true);
     try {
-      await inscribirManualmente(cursadaExpandida.moduloId, cursadaExpandida.id, alumnoId);
+      await inscribirManualmente(
+        cursadaExpandida.moduloId,
+        cursadaExpandida.seccionId,
+        alumnoId,
+        cursadaExpandida.subseccionPath,
+      );
       setModalAsignar(false);
-      setAlerta({ visible: true, titulo: 'Alumno asignado', mensaje: 'El alumno fue inscripto manualmente en la cursada.', tipo: 'exito' });
+      setAlerta({ visible: true, titulo: 'Alumno asignado', mensaje: 'El alumno fue inscripto manualmente en el acceso.', tipo: 'exito' });
     } catch (e: any) {
       setAlerta({ visible: true, titulo: 'Error', mensaje: e.message || 'No se pudo asignar al alumno.', tipo: 'error' });
     } finally {
@@ -200,7 +269,7 @@ export default function UserManagementScreen() {
       setUsuarios(prev => prev.filter(u => u.id !== usuarioAEliminarId));
       setUsuarioAEliminarId(null);
       setUsuarioAEliminarNombre(null);
-      setAlerta({ visible: true, titulo: 'Alumno eliminado', mensaje: `Se eliminó a ${usuarioAEliminarNombre} de la cursada.`, tipo: 'exito'});
+      setAlerta({ visible: true, titulo: 'Alumno eliminado', mensaje: `Se eliminó a ${usuarioAEliminarNombre} del acceso.`, tipo: 'exito'});
   } catch { setAlerta({ visible: true, titulo: 'Error', mensaje:'No se pudo eliminar al alumno.', tipo: 'error'});
   }
 };
@@ -254,7 +323,7 @@ export default function UserManagementScreen() {
           onPress={() => setTabActiva('cursadas')}
         >
           <Ionicons name="school-outline" size={16} color={tabActiva === 'cursadas' ? '#0F4A32' : '#9CA3AF'} />
-          <Text style={[styles.tabBtnText, tabActiva === 'cursadas' && styles.tabBtnTextActive]}>Cursadas</Text>
+          <Text style={[styles.tabBtnText, tabActiva === 'cursadas' && styles.tabBtnTextActive]}>Accesos</Text>
         </TouchableOpacity>
       </View>
 
@@ -320,18 +389,52 @@ export default function UserManagementScreen() {
       {/* ─── Pestaña Cursadas ─────────────────────────────────────────────── */}
       {tabActiva === 'cursadas' && (
         <ScrollView style={styles.container} contentContainerStyle={styles.listContent}>
+          <TextInput
+            style={styles.buscadorInput}
+            placeholder="Buscar por modulo, seccion o subseccion..."
+            value={filtroAccesos}
+            onChangeText={setFiltroAccesos}
+            autoCorrect={true}
+            autoCapitalize="sentences"
+          />
+          <View style={styles.rolesContainer}>
+            {[
+              { id: "todos", label: "TODOS" },
+              { id: "seccion", label: "SECCIONES" },
+              { id: "subseccion", label: "SUBSECCIONES" },
+            ].map((filtro) => {
+              const activo = filtroTipoAcceso === filtro.id;
+              return (
+                <TouchableOpacity
+                  key={filtro.id}
+                  style={[styles.rolButton, activo && styles.rolButtonActivo]}
+                  onPress={() => setFiltroTipoAcceso(filtro.id as typeof filtroTipoAcceso)}
+                >
+                  <Text style={activo ? styles.rolButtonTextActivo : styles.rolButtonText}>{filtro.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
           {loadingCursadas ? (
             <ActivityIndicator color="#25B471" style={{ marginTop: 32 }} />
-          ) : cursadas.length === 0 ? (
+          ) : errorCursadas ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="alert-circle-outline" size={48} color="#F59E0B" />
+              <Text style={styles.emptyText}>No se pudieron cargar los accesos.</Text>
+              <Text style={[styles.emptyText, { fontSize: 12, marginTop: 4 }]}>
+                {errorCursadas}
+              </Text>
+            </View>
+          ) : cursadasFiltradas.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="school-outline" size={48} color="#CBD5E0" />
-              <Text style={styles.emptyText}>No hay cursadas con acceso restringido.</Text>
+              <Text style={styles.emptyText}>No hay accesos restringidos.</Text>
               <Text style={[styles.emptyText, { fontSize: 12, marginTop: 4 }]}>
-                Activá el control de acceso al crear o editar una sección para verla en este listado.
+                Activá el control de acceso al crear o editar una sección o subsección para verla en este listado.
               </Text>
             </View>
           ) : (
-            cursadas.map((cursada) => {
+            cursadasFiltradas.map((cursada) => {
               const expandida = cursadaExpandida?.id === cursada.id;
               const inscritos = expandida ? inscripcionesExpandida : [];
               const moduloTitulo = loadingModulos
@@ -357,6 +460,12 @@ export default function UserManagementScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cursadaTitulo}>{cursada.titulo}</Text>
+                      {cursada.tipoAcceso === "subseccion" && (
+                        <Text style={styles.cursadaSubtitulo}>Sección: {cursada.seccionTitulo || cursada.seccionId}</Text>
+                      )}
+                      <Text style={styles.cursadaSubtitulo}>
+                        Tipo: {cursada.tipoAcceso === "subseccion" ? "Subsección" : "Sección"}
+                      </Text>
                       <Text style={styles.cursadaSubtitulo}>Módulo: {moduloTitulo}</Text>
                     </View>
                     <Ionicons
@@ -568,7 +677,7 @@ export default function UserManagementScreen() {
             setAlerta({
               visible: true,
               titulo: "Alumno eliminado",
-              mensaje: `${usuarioAEliminarNombre} fue eliminado de la cursada.`,
+              mensaje: `${usuarioAEliminarNombre} fue eliminado del acceso.`,
               tipo: "exito",
             });
             setInscripcionAEliminar(null);

@@ -6,6 +6,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, } from "react-native";
 import Markdown from "react-native-markdown-display";
+import MatriculacionModal from "../../components/ui/MatriculacionModal";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
@@ -35,6 +36,7 @@ export default function SeccionDetalleScreen() {
   const [loadingSeccion, setLoadingSeccion] = useState(true);
   const [itemAEliminar, setItemAEliminar] = useState<Item | null>(null);
   const [subseccionAEliminar, setSubseccionAEliminar] = useState<string | null>(null);
+  const [subseccionMatricular, setSubseccionMatricular] = useState<Subseccion | null>(null);
   const [alerta, setAlerta] = useState<{
     visible: boolean;
     titulo: string;
@@ -114,7 +116,7 @@ export default function SeccionDetalleScreen() {
     esAdmin || (esProfesor && seccion?.permiteCargaProfesor === true);
 
   const uid = auth.currentUser?.uid ?? null;
-  const { seccionesInscritas, loading: loadingInscripciones } = useMisInscripciones(
+  const { seccionesInscritas, accesosInscritos, loading: loadingInscripciones } = useMisInscripciones(
     !loadingRol && !puedeAccederComoDocente ? uid : null,
   );
 
@@ -316,22 +318,39 @@ export default function SeccionDetalleScreen() {
                 : "No hay subsecciones disponibles."}
             </Text>
           ) : (
-            subsecciones.map((subseccion) => (
-              <SubseccionCard
-                key={subseccion.id}
-                subseccion={subseccion}
-                puedeGestionar={puedeGestionarEstructura}
-                onPress={() =>
-                  router.push(`/subsecciones/${subseccion.id}?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any)
-                }
-                onEditar={() =>
-                  router.push(
-                    `/subsecciones/form?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any,
-                  )
-                }
-                onEliminar={() => setSubseccionAEliminar(subseccion.id)}
-              />
-            ))
+            subsecciones.map((subseccion) => {
+              const accessKey = `${id}::${subseccion.id}`;
+              const bloqueada =
+                !!subseccion.esRestringida &&
+                !puedeAccederComoDocente &&
+                !accesosInscritos.has(accessKey);
+              return (
+                <SubseccionCard
+                  key={subseccion.id}
+                  subseccion={subseccion}
+                  puedeGestionar={puedeGestionarEstructura}
+                  bloqueada={bloqueada}
+                  inscripta={
+                    !!subseccion.esRestringida &&
+                    !puedeAccederComoDocente &&
+                    accesosInscritos.has(accessKey)
+                  }
+                  onPress={() => {
+                    if (bloqueada) {
+                      setSubseccionMatricular(subseccion);
+                      return;
+                    }
+                    router.push(`/subsecciones/${subseccion.id}?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any);
+                  }}
+                  onEditar={() =>
+                    router.push(
+                      `/subsecciones/form?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any,
+                    )
+                  }
+                  onEliminar={() => setSubseccionAEliminar(subseccion.id)}
+                />
+              );
+            })
           )}
         </ScrollView>
 
@@ -379,6 +398,22 @@ export default function SeccionDetalleScreen() {
         tipo={alerta.tipo}
         onClose={() => setAlerta((prev) => ({ ...prev, visible: false }))}
       />
+      <MatriculacionModal
+        visible={subseccionMatricular !== null}
+        onClose={() => setSubseccionMatricular(null)}
+        onSuccess={() => {
+          const target = subseccionMatricular;
+          setSubseccionMatricular(null);
+          if (target) {
+            router.push(`/subsecciones/${target.id}?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(target.id)}` as any);
+          }
+        }}
+        moduloId={moduloId}
+        seccionId={id}
+        subseccionPath={subseccionMatricular?.id}
+        seccionTitulo={subseccionMatricular?.titulo ?? ""}
+        codigoActual={subseccionMatricular?.codigoAcceso ?? ""}
+      />
     </View>
   );
 }
@@ -397,6 +432,8 @@ interface ItemCardProps {
 interface SubseccionCardProps {
   subseccion: Subseccion;
   puedeGestionar: boolean;
+  bloqueada?: boolean;
+  inscripta?: boolean;
   onPress: () => void;
   onEditar: () => void;
   onEliminar: () => void;
@@ -405,22 +442,30 @@ interface SubseccionCardProps {
 function SubseccionCard({
   subseccion,
   puedeGestionar,
+  bloqueada = false,
+  inscripta = false,
   onPress,
   onEditar,
   onEliminar,
 }: SubseccionCardProps) {
   return (
     <TouchableOpacity
-      style={styles.subseccionCard}
+      style={[styles.subseccionCard, bloqueada && styles.subseccionCardBloqueada]}
       onPress={onPress}
       activeOpacity={0.8}
     >
       <View style={styles.subseccionRow}>
         <View style={styles.subseccionLeft}>
-          <View style={styles.subseccionIconBg}>
-            <Ionicons name="folder-outline" size={18} color="#0F4A32" />
+          <View style={[styles.subseccionIconBg, bloqueada && styles.subseccionIconBgBloqueada]}>
+            <Ionicons
+              name={bloqueada ? "lock-closed-outline" : "folder-outline"}
+              size={18}
+              color={bloqueada ? "#9CA3AF" : "#0F4A32"}
+            />
           </View>
-          <Text style={styles.subseccionTitulo}>{subseccion.titulo}</Text>
+          <Text style={[styles.subseccionTitulo, bloqueada && styles.subseccionTituloBloqueada]}>
+            {subseccion.titulo}
+          </Text>
         </View>
         <View style={styles.subseccionRight}>
           {puedeGestionar && (
@@ -438,6 +483,18 @@ function SubseccionCard({
                 <Ionicons name="trash-outline" size={16} color="#DC2626" />
               </TouchableOpacity>
             </>
+          )}
+          {subseccion.esRestringida && (bloqueada || inscripta) && (
+            <View style={[styles.badgeAcceso, bloqueada ? styles.badgeBloqueado : styles.badgeAccedido]}>
+              <Ionicons
+                name={bloqueada ? "lock-closed-outline" : "checkmark-circle-outline"}
+                size={11}
+                color={bloqueada ? "#9CA3AF" : "#0F4A32"}
+              />
+              <Text style={[styles.badgeAccesoText, bloqueada ? styles.badgeBloqueadoText : styles.badgeAccedidoText]}>
+                {inscripta ? "Inscripto" : "Bloqueado"}
+              </Text>
+            </View>
           )}
           <Ionicons name="chevron-forward-outline" size={16} color="#CBD5E0" />
         </View>
@@ -628,6 +685,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: "#25B471",
   },
+  subseccionCardBloqueada: {
+    opacity: 0.78,
+    borderLeftColor: "#CBD5E0",
+    backgroundColor: "#F9FAFB",
+  },
   subseccionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -647,13 +709,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  subseccionIconBgBloqueada: { backgroundColor: "#F3F4F6" },
   subseccionTitulo: { fontSize: 15, fontWeight: "600", color: "#11181C", flex: 1 },
+  subseccionTituloBloqueada: { color: "#6B7280" },
   subseccionRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     marginLeft: 8,
   },
+  badgeAcceso: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  badgeBloqueado: { backgroundColor: "#F3F4F6" },
+  badgeAccedido: { backgroundColor: "#E8F5E9" },
+  badgeAccesoText: { fontSize: 11, fontWeight: "700" },
+  badgeBloqueadoText: { color: "#9CA3AF" },
+  badgeAccedidoText: { color: "#0F4A32" },
   accesoDenegadoTitulo: {
     fontSize: 18, fontWeight: "700", color: "#374151", marginTop: 14, marginBottom: 8,
   },

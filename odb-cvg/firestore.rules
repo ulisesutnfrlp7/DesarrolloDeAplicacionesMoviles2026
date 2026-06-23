@@ -13,6 +13,27 @@ service cloud.firestore {
         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'profesor';
     }
 
+    function validSubseccionAccessCode() {
+      let ids = request.resource.data.subseccionIds;
+      return ids is list
+        && ids.size() > 0
+        && ids.size() <= 6
+        && (
+          (ids.size() == 1 &&
+            get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId)/subsecciones/$(ids[0])).data.codigoAcceso == request.resource.data.codigoUsado) ||
+          (ids.size() == 2 &&
+            get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId)/subsecciones/$(ids[0])/subsecciones/$(ids[1])).data.codigoAcceso == request.resource.data.codigoUsado) ||
+          (ids.size() == 3 &&
+            get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId)/subsecciones/$(ids[0])/subsecciones/$(ids[1])/subsecciones/$(ids[2])).data.codigoAcceso == request.resource.data.codigoUsado) ||
+          (ids.size() == 4 &&
+            get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId)/subsecciones/$(ids[0])/subsecciones/$(ids[1])/subsecciones/$(ids[2])/subsecciones/$(ids[3])).data.codigoAcceso == request.resource.data.codigoUsado) ||
+          (ids.size() == 5 &&
+            get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId)/subsecciones/$(ids[0])/subsecciones/$(ids[1])/subsecciones/$(ids[2])/subsecciones/$(ids[3])/subsecciones/$(ids[4])).data.codigoAcceso == request.resource.data.codigoUsado) ||
+          (ids.size() == 6 &&
+            get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId)/subsecciones/$(ids[0])/subsecciones/$(ids[1])/subsecciones/$(ids[2])/subsecciones/$(ids[3])/subsecciones/$(ids[4])/subsecciones/$(ids[5])).data.codigoAcceso == request.resource.data.codigoUsado)
+        );
+    }
+
     // 1. Usuarios
     match /usuarios/{userId} {
       allow read: if request.auth != null;
@@ -75,7 +96,18 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.alumnoId
         && request.resource.data.tipo == 'codigo'
+        && (!('subseccionPath' in request.resource.data) || request.resource.data.subseccionPath == '')
         && get(/databases/$(database)/documents/modulos/$(request.resource.data.moduloId)/secciones/$(request.resource.data.seccionId)).data.codigoAcceso == request.resource.data.codigoUsado;
+
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.alumnoId
+        && request.resource.data.tipo == 'codigo'
+        && ('subseccionPath' in request.resource.data)
+        && request.resource.data.subseccionPath is string
+        && request.resource.data.subseccionPath != ''
+        && request.resource.data.codigoUsado is string
+        && ('subseccionIds' in request.resource.data)
+        && validSubseccionAccessCode();
 
       allow create: if isAdmin() && request.resource.data.tipo == 'manual';
       allow delete: if isAdmin();

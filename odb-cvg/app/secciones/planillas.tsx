@@ -17,7 +17,10 @@ import BuscadorAlumnos from "../../components/ui/BuscadorAlumnos";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import { db } from "../../config/firebaseConfig";
-import { useInscripcionesPorSeccion } from "../../hooks/useInscripciones";
+import {
+  useContextoInscripcionEfectivo,
+  useInscripcionesPorSeccion,
+} from "../../hooks/useInscripciones";
 import {
   crearPlanillaDesdeBase,
   generarVistaAlumno,
@@ -36,8 +39,16 @@ export default function PlanillasScreen() {
     subseccionPath?: string;
   }>();
   const { rol, loading: loadingRol } = useUserRole();
+  const contextoSubseccion = subseccionPath ?? null;
+  const {
+    contexto: contextoInscripcion,
+    loading: loadingContextoInscripcion,
+  } = useContextoInscripcionEfectivo(moduloId, seccionId, contextoSubseccion);
   const { inscripciones, loading: loadingInscripciones } =
-    useInscripcionesPorSeccion(seccionId ?? null);
+    useInscripcionesPorSeccion(
+      seccionId ?? null,
+      contextoInscripcion?.subseccionPath ?? contextoSubseccion ?? "",
+    );
 
   const [planillas, setPlanillas] = useState<PlanillaTP[]>([]);
   const [planillasBase, setPlanillasBase] = useState<PlanillaBaseTP[]>([]);
@@ -58,8 +69,6 @@ export default function PlanillasScreen() {
   }>({ visible: false, titulo: "", mensaje: "", tipo: "exito" });
 
   const puedeGestionar = rol === "admin" || rol === "profesor";
-  const contextoSubseccion = subseccionPath ?? null;
-
   const cargarPlanillas = useCallback(async () => {
     if (!seccionId || !puedeGestionar) {
       setPlanillas([]);
@@ -226,7 +235,7 @@ export default function PlanillasScreen() {
     }
   };
 
-  if (loadingRol) {
+  if (loadingRol || loadingContextoInscripcion) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="Planillas" mostrarHome />
