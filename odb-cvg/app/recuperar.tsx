@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 16, color: '#4A5568', textAlign: 'center', marginBottom: 40, fontWeight: '500', paddingHorizontal: 10 },
   formContainer: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
   label: { fontSize: 14, fontWeight: '700', color: '#000000', marginBottom: 8 },
-  input: { backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, minHeight: 48, marginBottom: 20, fontSize: 16, color: '#000' },
+  input: { backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, minHeight: 48, marginBottom: 20, fontSize: 16, color: '#000', letterSpacing: 0 },
   inputError: { borderColor: "#DC2626", backgroundColor: "#FEF2F2" },
   errorText: { color: "#DC2626", fontSize: 13, marginBottom: 12, marginTop: -8, textAlign: "center" },
   primaryButton: { backgroundColor: '#25B471', borderRadius: 8, alignItems: 'center', justifyContent: 'center', minHeight: 48, marginTop: 4 },

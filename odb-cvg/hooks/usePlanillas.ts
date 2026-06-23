@@ -486,6 +486,68 @@ export async function actualizarDatosPlanilla(
   await generarVistaAlumno(planillaId);
 }
 
+export async function transferirPlanillasAlumnoAContexto(params: {
+  alumnoId: string;
+  moduloId?: string;
+  seccionId: string;
+  origenSubseccionPath?: string | null;
+  destinoSubseccionPath?: string | null;
+}): Promise<number> {
+  const origen = normalizarPath(params.origenSubseccionPath);
+  const destino = normalizarPath(params.destinoSubseccionPath);
+  const constraints = [
+    where("alumnoId", "==", params.alumnoId),
+    where("seccionId", "==", params.seccionId),
+  ];
+  if (params.moduloId !== undefined) constraints.push(where("moduloId", "==", params.moduloId));
+
+  const snap = await getDocs(query(collection(db, "planillas_tp"), ...constraints));
+  const planillas = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }) as PlanillaTP)
+    .filter((planilla) => {
+      const actual = normalizarPath(planilla.subseccionPath);
+      if (!origen) return !actual;
+      return actual === origen || actual.startsWith(`${origen}/`);
+    });
+
+  let transferidas = 0;
+  for (const planilla of planillas) {
+    const actual = normalizarPath(planilla.subseccionPath);
+    const relativo = origen && actual.startsWith(`${origen}/`)
+      ? actual.slice(origen.length + 1)
+      : "";
+    const destinoPorTitulos = relativo
+      ? await resolverPathRelativoPorTitulos({
+          moduloId: params.moduloId,
+          seccionId: params.seccionId,
+          origenBasePath: origen,
+          destinoBasePath: destino,
+          relativoPath: relativo,
+        })
+      : null;
+    const destinoConRelativo = destinoPorTitulos ?? (relativo ? `${destino}/${relativo}` : destino);
+    const nuevoSubseccionPath = destinoPorTitulos || await existeSubseccionPath(
+      params.moduloId,
+      params.seccionId,
+      destinoConRelativo,
+    )
+      ? destinoConRelativo
+      : destino;
+
+    await updateDoc(doc(db, "planillas_tp", planilla.id), {
+      moduloId: params.moduloId ?? null,
+      seccionId: params.seccionId,
+      subseccionPath: nuevoSubseccionPath || null,
+      actualizadoPor: auth.currentUser?.uid ?? null,
+      fechaActualizacion: serverTimestamp(),
+    });
+    await generarVistaAlumno(planilla.id);
+    transferidas += 1;
+  }
+
+  return transferidas;
+}
+
 export async function eliminarPlanilla(planillaId: string): Promise<void> {
   const planilla = await obtenerPlanillaPorId(planillaId);
   const filasSnap = await getDocs(collection(db, "planillas_tp", planillaId, "filas"));
@@ -553,4 +615,78 @@ async function touchPlanilla(planillaId: string): Promise<void> {
     actualizadoPor: uid,
     fechaActualizacion: serverTimestamp(),
   });
+}
+
+function normalizarPath(path?: string | null): string {
+  return (path ?? "")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join("/");
+}
+
+async function existeSubseccionPath(
+  moduloId: string | undefined,
+  seccionId: string,
+  subseccionPath: string,
+): Promise<boolean> {
+  const path = normalizarPath(subseccionPath);
+  if (!moduloId || !path) return false;
+  const segments = path
+    .split("/")
+    .filter(Boolean)
+    .flatMap((subId) => ["subsecciones", subId]);
+  const snap = await getDoc(doc(db, "modulos", moduloId, "secciones", seccionId, ...segments));
+  return snap.exists();
+}
+
+async function resolverPathRelativoPorTitulos(params: {
+  moduloId?: string;
+  seccionId: string;
+  origenBasePath: string;
+  destinoBasePath: string;
+  relativoPath: string;
+}): Promise<string | null> {
+  if (!params.moduloId || !params.destinoBasePath || !params.relativoPath) return null;
+
+  const relativoIds = params.relativoPath.split("/").filter(Boolean);
+  let origenCursor = params.origenBasePath;
+  let destinoCursor = params.destinoBasePath;
+
+  for (const relativoId of relativoIds) {
+    origenCursor = `${origenCursor}/${relativoId}`;
+    const origenSnap = await getDoc(
+      doc(
+        db,
+        "modulos",
+        params.moduloId,
+        "secciones",
+        params.seccionId,
+        ...normalizarPath(origenCursor)
+          .split("/")
+          .flatMap((subId) => ["subsecciones", subId]),
+      ),
+    );
+    if (!origenSnap.exists()) return null;
+    const titulo = origenSnap.data().titulo;
+    if (!titulo) return null;
+
+    const destinoCollection = collection(
+      db,
+      "modulos",
+      params.moduloId,
+      "secciones",
+      params.seccionId,
+      ...normalizarPath(destinoCursor)
+        .split("/")
+        .flatMap((subId) => ["subsecciones", subId]),
+      "subsecciones",
+    );
+    const candidatos = await getDocs(query(destinoCollection, where("titulo", "==", titulo)));
+    const match = candidatos.docs[0];
+    if (!match) return null;
+    destinoCursor = `${destinoCursor}/${match.id}`;
+  }
+
+  return destinoCursor;
 }

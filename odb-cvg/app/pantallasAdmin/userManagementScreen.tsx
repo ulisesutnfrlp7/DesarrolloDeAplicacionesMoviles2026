@@ -10,6 +10,7 @@ import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, onSnapsho
 import ScreenHeader from '../../components/ui/ScreenHeader';
 import { inscribirManualmente, revocarInscripcion, regenerarCodigo, useInscripcionesPorSeccion, type Inscripcion } from '../../hooks/useInscripciones';
 import { useModulos } from '../../hooks/useModulos';
+import { transferirPlanillasAlumnoAContexto } from '../../hooks/usePlanillas';
 
 type Rol = 'alumno' | 'profesor' | 'admin';
 
@@ -77,6 +78,11 @@ export default function UserManagementScreen() {
   const [inscripcionAEliminar, setInscripcionAEliminar] = useState<Inscripcion | null>(null);
   const [filtroAccesos, setFiltroAccesos] = useState("");
   const [filtroTipoAcceso, setFiltroTipoAcceso] = useState<"todos" | "seccion" | "subseccion">("todos");
+  const [inscripcionAMover, setInscripcionAMover] = useState<Inscripcion | null>(null);
+  const [alumnoAMoverNombre, setAlumnoAMoverNombre] = useState("");
+  const [destinoMovimiento, setDestinoMovimiento] = useState<CursadaRestringida | null>(null);
+  const [transferirPlanillas, setTransferirPlanillas] = useState(true);
+  const [moviendoAlumno, setMoviendoAlumno] = useState(false);
 
   useEffect(() => {
     if (!rootNavigationState?.key) return;
@@ -260,6 +266,64 @@ export default function UserManagementScreen() {
   const handleAbrirModalEliminar = (alumnoId: string, nombre: string) => {
     setUsuarioAEliminarId(alumnoId);
     setUsuarioAEliminarNombre(nombre);
+  };
+
+  const abrirMoverAlumno = (insc: Inscripcion) => {
+    setInscripcionAMover(insc);
+    setAlumnoAMoverNombre(usuariosMap[insc.alumnoId] || "Alumno");
+    setDestinoMovimiento(null);
+    setTransferirPlanillas(true);
+  };
+
+  const destinosMovimiento = cursadas.filter((acceso) =>
+    cursadaExpandida?.tipoAcceso === "subseccion" &&
+    acceso.tipoAcceso === "subseccion" &&
+    acceso.moduloId === cursadaExpandida.moduloId &&
+    acceso.seccionId === cursadaExpandida.seccionId &&
+    acceso.id !== cursadaExpandida.id
+  );
+
+  const confirmarMoverAlumno = async () => {
+    if (!inscripcionAMover || !cursadaExpandida || !destinoMovimiento) return;
+    setMoviendoAlumno(true);
+    try {
+      await inscribirManualmente(
+        destinoMovimiento.moduloId,
+        destinoMovimiento.seccionId,
+        inscripcionAMover.alumnoId,
+        destinoMovimiento.subseccionPath,
+      );
+
+      let planillasTransferidas = 0;
+      if (transferirPlanillas) {
+        planillasTransferidas = await transferirPlanillasAlumnoAContexto({
+          alumnoId: inscripcionAMover.alumnoId,
+          moduloId: cursadaExpandida.moduloId,
+          seccionId: cursadaExpandida.seccionId,
+          origenSubseccionPath: cursadaExpandida.subseccionPath,
+          destinoSubseccionPath: destinoMovimiento.subseccionPath,
+        });
+      }
+
+      await revocarInscripcion(inscripcionAMover.id);
+      setInscripcionAMover(null);
+      setDestinoMovimiento(null);
+      setAlerta({
+        visible: true,
+        titulo: "Alumno movido",
+        mensaje: `${alumnoAMoverNombre} fue movido a ${destinoMovimiento.titulo}.${transferirPlanillas ? ` Planillas transferidas: ${planillasTransferidas}.` : ""}`,
+        tipo: "exito",
+      });
+    } catch (e: any) {
+      setAlerta({
+        visible: true,
+        titulo: "Error",
+        mensaje: e?.message || "No se pudo mover al alumno.",
+        tipo: "error",
+      });
+    } finally {
+      setMoviendoAlumno(false);
+    }
   };
 
   const confirmarEliminar = async () => {
@@ -526,6 +590,15 @@ export default function UserManagementScreen() {
                                 </View>
                               </View>
                             </View>
+                            {cursada.tipoAcceso === "subseccion" && (
+                              <TouchableOpacity
+                                style={styles.moverBtn}
+                                onPress={() => abrirMoverAlumno(insc)}
+                              >
+                                <Ionicons name="swap-horizontal-outline" size={17} color="#0F4A32" />
+                                <Text style={styles.moverBtnText}>Mover</Text>
+                              </TouchableOpacity>
+                            )}
                             <TouchableOpacity
                               style={styles.revocarBtn}
                               onPress={() => {
@@ -602,6 +675,116 @@ export default function UserManagementScreen() {
           )}
         </ScrollView>
       )}
+
+      <Modal visible={inscripcionAMover !== null} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Mover alumno</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  if (!moviendoAlumno) {
+                    setInscripcionAMover(null);
+                    setDestinoMovimiento(null);
+                  }
+                }}
+              >
+                <Ionicons name="close" size={22} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.inputLabel}>Origen</Text>
+            <Text style={styles.moverResumen}>
+              {alumnoAMoverNombre} desde {cursadaExpandida?.titulo ?? "este acceso"}
+            </Text>
+
+            <Text style={styles.inputLabel}>Destino</Text>
+            {destinosMovimiento.length === 0 ? (
+              <Text style={[styles.emptyText, { marginTop: 8 }]}>
+                No hay otros accesos restringidos compatibles en esta sección.
+              </Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 260 }}>
+                {destinosMovimiento.map((destino) => {
+                  const selected = destinoMovimiento?.id === destino.id;
+                  return (
+                    <TouchableOpacity
+                      key={destino.id}
+                      style={[styles.destinoRow, selected && styles.destinoRowSelected]}
+                      onPress={() => setDestinoMovimiento(destino)}
+                      disabled={moviendoAlumno}
+                      activeOpacity={0.85}
+                    >
+                      <View style={styles.alumnoPickerIcon}>
+                        <Ionicons name="folder-outline" size={16} color="#0F4A32" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.alumnoPickerNombre}>{destino.titulo}</Text>
+                        <Text style={styles.alumnoPickerEmail}>
+                          {destino.seccionTitulo || "Misma sección"}
+                        </Text>
+                      </View>
+                      {selected && <Ionicons name="checkmark-circle" size={20} color="#25B471" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            <TouchableOpacity
+              style={styles.transferToggle}
+              onPress={() => setTransferirPlanillas((prev) => !prev)}
+              activeOpacity={0.85}
+              disabled={moviendoAlumno}
+            >
+              <Ionicons
+                name={transferirPlanillas ? "checkbox-outline" : "square-outline"}
+                size={21}
+                color={transferirPlanillas ? "#0F4A32" : "#9CA3AF"}
+              />
+              <Text style={styles.transferToggleText}>
+                Transferir planillas de trabajos prácticos al nuevo acceso
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={styles.codigoHint}>
+              Las notas de exámenes quedan registradas donde fueron cargadas para docentes/admin, pero el alumno seguirá viéndolas en su historial personal.
+            </Text>
+            {destinoMovimiento && (
+              <Text style={styles.confirmacionMovimiento}>
+                ¿Querés mover a {alumnoAMoverNombre} de {cursadaExpandida?.titulo} a {destinoMovimiento.titulo}?
+              </Text>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => {
+                  setInscripcionAMover(null);
+                  setDestinoMovimiento(null);
+                }}
+                disabled={moviendoAlumno}
+              >
+                <Text style={styles.cancelBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.saveBtn,
+                  (!destinoMovimiento || moviendoAlumno) && { opacity: 0.6 },
+                ]}
+                onPress={confirmarMoverAlumno}
+                disabled={!destinoMovimiento || moviendoAlumno}
+              >
+                {moviendoAlumno ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Mover</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal Editar */}
       <Modal visible={modalEditar} animationType="slide" transparent>
@@ -775,7 +958,7 @@ const styles = StyleSheet.create({
   badgeTextProfe: { color: '#0F4A32', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' },
   badgeAlumno: { backgroundColor: '#E2E8F0' },
   badgeTextAlumno: { color: '#4A5568', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' },
-  buscadorInput: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, minHeight: 44, fontSize: 14, color: '#11181C', marginBottom: 20 },
+  buscadorInput: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, minHeight: 44, fontSize: 14, color: '#11181C', letterSpacing: 0, marginBottom: 20 },
   rolesContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 , marginTop: 12  },
   rolButton: { flex: 1, marginHorizontal: 4, paddingVertical: 8, borderWidth: 1, borderColor: '#25B471', borderRadius: 8, alignItems: 'center', backgroundColor: '#FFFFFF'},
   rolButtonActivo: { backgroundColor: '#25B471'},
@@ -833,6 +1016,11 @@ const styles = StyleSheet.create({
   tipoBadgeCodigo: { backgroundColor: '#EFF6FF' },
   tipoBadgeManual: { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' },
   tipoBadgeText: { fontSize: 10, fontWeight: '700', color: '#374151' },
+  moverBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#E8F5E9', paddingHorizontal: 9, paddingVertical: 6, borderRadius: 8,
+  },
+  moverBtnText: { fontSize: 12, fontWeight: '700', color: '#0F4A32' },
   revocarBtn: { padding: 4 },
   alumnoPickerRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -844,6 +1032,39 @@ const styles = StyleSheet.create({
   },
   alumnoPickerNombre: { fontSize: 14, fontWeight: '600', color: '#11181C' },
   alumnoPickerEmail: { fontSize: 12, color: '#9CA3AF' },
+  moverResumen: {
+    fontSize: 14,
+    color: '#374151',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 12,
+  },
+  destinoRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12, paddingHorizontal: 8,
+    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+    borderRadius: 10,
+  },
+  destinoRowSelected: { backgroundColor: '#E8F5E9' },
+  transferToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+  },
+  transferToggleText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#374151' },
+  confirmacionMovimiento: {
+    marginTop: 12,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F4A32',
+    lineHeight: 19,
+  },
 
   // ─── Modal ────────────────────────────────────────────────────────────────
   modalOverlay: {
@@ -864,7 +1085,7 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#E5E7EB',
     borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 15, color: '#11181C',
+    fontSize: 15, color: '#11181C', letterSpacing: 0,
   },
   rolBtn: {
     flex: 1, paddingVertical: 10, borderRadius: 10,

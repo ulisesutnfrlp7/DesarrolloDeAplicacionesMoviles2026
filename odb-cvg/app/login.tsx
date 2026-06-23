@@ -155,6 +155,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontSize: 16,
     color: "#000",
+    letterSpacing: 0,
   },
   inputError: {
     borderColor: "#DC2626",

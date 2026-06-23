@@ -68,6 +68,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     color: "#11181C",
+    letterSpacing: 0,
     paddingVertical: 8,
   },
   botonLimpiar: {

@@ -71,8 +71,9 @@ export default function MisNotasScreen() {
     const constraints = [where("seccionId", "==", seccionId)];
     if (esAlumno) {
       constraints.push(where("alumnoId", "==", uid));
+    } else {
+      constraints.push(where("subseccionPath", "==", contextoSubseccion));
     }
-    constraints.push(where("subseccionPath", "==", contextoSubseccion));
 
     const q = query(collection(db, "notas"), ...constraints);
     const unsubscribe = onSnapshot(

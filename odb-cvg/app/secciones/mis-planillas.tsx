@@ -81,7 +81,7 @@ export default function MisPlanillasScreen() {
           id: p.id,
           titulo: p.titulo,
           tipo: p.tipo,
-          alumno: p.alumnoNombre ?? p.alumnoId,
+          alumno: p.alumnoNombre ?? "Alumno",
           fechaActualizacion: p.fechaActualizacion,
         }))
       : vistasAlumno.map((v) => ({

@@ -495,6 +495,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     color: "#11181C",
+    letterSpacing: 0,
   },
   alumnoRow: {
     flexDirection: "row",
@@ -532,6 +533,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#0F4A32",
+    letterSpacing: 0,
   },
   notaInputDisabled: {
     color: "#9CA3AF",
