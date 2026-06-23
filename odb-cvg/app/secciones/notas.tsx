@@ -19,7 +19,10 @@ import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import { db } from "../../config/firebaseConfig";
-import { useInscripcionesPorSeccion } from "../../hooks/useInscripciones";
+import {
+  useContextoInscripcionEfectivo,
+  useInscripcionesPorSeccion,
+} from "../../hooks/useInscripciones";
 import {
   esNotaAusente,
   formatearValorNota,
@@ -40,8 +43,16 @@ export default function NotasScreen() {
   }>();
 
   const { rol, loading: loadingRol } = useUserRole();
+  const contextoSubseccion = subseccionPath ?? "";
+  const {
+    contexto: contextoInscripcion,
+    loading: loadingContextoInscripcion,
+  } = useContextoInscripcionEfectivo(moduloId, seccionId, contextoSubseccion);
   const { inscripciones, loading: loadingInscripciones } =
-    useInscripcionesPorSeccion(seccionId ?? null);
+    useInscripcionesPorSeccion(
+      seccionId ?? null,
+      contextoInscripcion?.subseccionPath ?? contextoSubseccion,
+    );
 
   const [nombreExamen, setNombreExamen] = useState("");
   const [notasInput, setNotasInput] = useState<Record<string, string>>({});
@@ -60,7 +71,7 @@ export default function NotasScreen() {
   }>({ visible: false, titulo: "", mensaje: "", tipo: "exito" });
 
   const esEdicion = modo === "editar";
-  const notasExistentes = useNotasPorSeccion(seccionId ?? null, nombreExamen, subseccionPath);
+  const notasExistentes = useNotasPorSeccion(seccionId ?? null, nombreExamen, contextoSubseccion);
 
   useEffect(() => {
     if (esEdicion && nombreExamenParam) {
@@ -166,7 +177,7 @@ export default function NotasScreen() {
           alumnoId,
           moduloId,
           seccionId,
-          subseccionPath,
+          subseccionPath: contextoSubseccion,
           nombreExamen: nombreExamen.trim(),
           nota: "Ausente",
         });
@@ -187,7 +198,7 @@ export default function NotasScreen() {
         alumnoId,
         moduloId,
         seccionId,
-        subseccionPath,
+        subseccionPath: contextoSubseccion,
         nombreExamen: nombreExamen.trim(),
         nota: valor,
       });
@@ -207,7 +218,7 @@ export default function NotasScreen() {
     setGuardadoExitoso(true);
     try {
       if (esEdicion) {
-        await reemplazarNotasPorExamen(seccionId, nombreExamen.trim(), notasAGuardar, subseccionPath);
+        await reemplazarNotasPorExamen(seccionId, nombreExamen.trim(), notasAGuardar, contextoSubseccion);
       } else {
         await guardarNotas(notasAGuardar);
       }
@@ -234,7 +245,7 @@ export default function NotasScreen() {
     }
   };
 
-  if (loadingRol) {
+  if (loadingRol || loadingContextoInscripcion) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo={esEdicion ? "Editar Notas" : "Cargar Notas"} mostrarHome />
@@ -484,6 +495,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     color: "#11181C",
+    letterSpacing: 0,
   },
   alumnoRow: {
     flexDirection: "row",
@@ -521,6 +533,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#0F4A32",
+    letterSpacing: 0,
   },
   notaInputDisabled: {
     color: "#9CA3AF",

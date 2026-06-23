@@ -21,12 +21,16 @@ export interface Subseccion {
   permiteCargaProfesor?: boolean;
   permiteNotas?: boolean;
   permitePlanillas?: boolean;
+  esRestringida?: boolean;
+  codigoAcceso?: string | null;
 }
 
 export type SubseccionInput = Pick<Subseccion, "titulo"> & {
   permiteCargaProfesor?: boolean;
   permiteNotas?: boolean;
   permitePlanillas?: boolean;
+  esRestringida?: boolean;
+  codigoAcceso?: string | null;
 };
 
 const getSubseccionPathSegments = (subseccionPath?: string) =>
@@ -102,6 +106,8 @@ export function useSubsecciones(moduloId: string, seccionId: string, parentPath?
       permiteCargaProfesor: data.permiteCargaProfesor ?? false,
       permiteNotas: data.permiteNotas ?? false,
       permitePlanillas: data.permitePlanillas ?? false,
+      esRestringida: data.esRestringida ?? false,
+      codigoAcceso: data.esRestringida ? (data.codigoAcceso ?? null) : null,
       creadoPor: user.uid,
       fechaCreacion: serverTimestamp(),
       fechaActualizacion: serverTimestamp(),

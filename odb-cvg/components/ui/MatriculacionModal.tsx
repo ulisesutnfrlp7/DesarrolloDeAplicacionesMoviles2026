@@ -20,6 +20,7 @@ interface Props {
   seccionId: string;
   seccionTitulo: string;
   codigoActual: string;
+  subseccionPath?: string;
 }
 
 export default function MatriculacionModal({
@@ -30,6 +31,7 @@ export default function MatriculacionModal({
   seccionId,
   seccionTitulo,
   codigoActual,
+  subseccionPath,
 }: Props) {
   const [codigo, setCodigo] = useState("");
   const [error, setError] = useState("");
@@ -48,7 +50,7 @@ export default function MatriculacionModal({
     setLoading(true);
     setError("");
     try {
-      await inscribirConCodigo(moduloId, seccionId, codigo, codigoActual, uid);
+      await inscribirConCodigo(moduloId, seccionId, codigo, codigoActual, uid, subseccionPath);
       setCodigo("");
       onSuccess();
     } catch (e: any) {

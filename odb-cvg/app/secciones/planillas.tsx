@@ -17,7 +17,10 @@ import BuscadorAlumnos from "../../components/ui/BuscadorAlumnos";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import { db } from "../../config/firebaseConfig";
-import { useInscripcionesPorSeccion } from "../../hooks/useInscripciones";
+import {
+  useContextoInscripcionEfectivo,
+  useInscripcionesPorSeccion,
+} from "../../hooks/useInscripciones";
 import {
   crearPlanillaDesdeBase,
   generarVistaAlumno,
@@ -36,13 +39,22 @@ export default function PlanillasScreen() {
     subseccionPath?: string;
   }>();
   const { rol, loading: loadingRol } = useUserRole();
+  const contextoSubseccion = subseccionPath ?? null;
+  const {
+    contexto: contextoInscripcion,
+    loading: loadingContextoInscripcion,
+  } = useContextoInscripcionEfectivo(moduloId, seccionId, contextoSubseccion);
   const { inscripciones, loading: loadingInscripciones } =
-    useInscripcionesPorSeccion(seccionId ?? null);
+    useInscripcionesPorSeccion(
+      seccionId ?? null,
+      contextoInscripcion?.subseccionPath ?? contextoSubseccion ?? "",
+    );
 
   const [planillas, setPlanillas] = useState<PlanillaTP[]>([]);
   const [planillasBase, setPlanillasBase] = useState<PlanillaBaseTP[]>([]);
   const [loadingBases, setLoadingBases] = useState(true);
   const [loadingPlanillas, setLoadingPlanillas] = useState(true);
+  const [loadingNombresAlumnos, setLoadingNombresAlumnos] = useState(false);
   const [nombresAlumnos, setNombresAlumnos] = useState<Record<string, string>>({});
   const [filtroAlumno, setFiltroAlumno] = useState("");
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<string | null>(null);
@@ -58,8 +70,6 @@ export default function PlanillasScreen() {
   }>({ visible: false, titulo: "", mensaje: "", tipo: "exito" });
 
   const puedeGestionar = rol === "admin" || rol === "profesor";
-  const contextoSubseccion = subseccionPath ?? null;
-
   const cargarPlanillas = useCallback(async () => {
     if (!seccionId || !puedeGestionar) {
       setPlanillas([]);
@@ -125,27 +135,30 @@ export default function PlanillasScreen() {
 
   useEffect(() => {
     if (inscripciones.length === 0) {
+      setLoadingNombresAlumnos(false);
       setNombresAlumnos({});
       setAlumnoSeleccionado(null);
       return;
     }
 
     const fetchNombres = async () => {
+      setLoadingNombresAlumnos(true);
       const temp: Record<string, string> = {};
       await Promise.all(
         inscripciones.map(async (insc) => {
           try {
             const snap = await getDoc(doc(db, "usuarios", insc.alumnoId));
             temp[insc.alumnoId] = snap.exists()
-              ? ((snap.data().nombre as string) ?? insc.alumnoId)
-              : insc.alumnoId;
+              ? ((snap.data().nombre as string) ?? "Alumno sin nombre")
+              : "Alumno sin nombre";
           } catch {
-            temp[insc.alumnoId] = insc.alumnoId;
+            temp[insc.alumnoId] = "Alumno sin nombre";
           }
         }),
       );
       setNombresAlumnos(temp);
       setAlumnoSeleccionado((actual) => actual ?? inscripciones[0]?.alumnoId ?? null);
+      setLoadingNombresAlumnos(false);
     };
 
     fetchNombres();
@@ -156,7 +169,8 @@ export default function PlanillasScreen() {
       setTitulo("Planilla");
       return;
     }
-    const nombre = nombresAlumnos[alumnoSeleccionado] ?? alumnoSeleccionado;
+    const nombre = nombresAlumnos[alumnoSeleccionado];
+    if (!nombre) return;
     setTitulo(`Planilla ${nombre}`);
   }, [alumnoSeleccionado, nombresAlumnos]);
 
@@ -226,7 +240,7 @@ export default function PlanillasScreen() {
     }
   };
 
-  if (loadingRol) {
+  if (loadingRol || loadingContextoInscripcion) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="Planillas" mostrarHome />
@@ -278,7 +292,7 @@ export default function PlanillasScreen() {
 
           <Text style={styles.sectionLabel}>Alumno</Text>
           <BuscadorAlumnos valor={filtroAlumno} onChangeText={setFiltroAlumno} placeholder="Buscar alumno por nombre..." />
-          {loadingInscripciones ? (
+          {loadingInscripciones || loadingNombresAlumnos ? (
             <ActivityIndicator color="#25B471" style={{ marginTop: 10 }} />
           ) : inscripciones.length === 0 ? (
             <Text style={styles.emptyText}>No hay alumnos inscriptos en esta sección.</Text>
@@ -301,7 +315,7 @@ export default function PlanillasScreen() {
                       color={activo ? "#0F4A32" : "#9CA3AF"}
                     />
                     <Text style={[styles.optionText, activo && styles.optionTextActive]} numberOfLines={1}>
-                      {nombresAlumnos[insc.alumnoId] ?? insc.alumnoId}
+                      {nombresAlumnos[insc.alumnoId] ?? "Cargando alumno..."}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -369,11 +383,11 @@ export default function PlanillasScreen() {
           <TouchableOpacity
             style={[
               styles.saveBtn,
-              (creando || loadingInscripciones || loadingBases || !alumnoSeleccionado || !planillaBaseId) &&
+              (creando || loadingInscripciones || loadingNombresAlumnos || loadingBases || !alumnoSeleccionado || !planillaBaseId) &&
                 styles.saveBtnDisabled,
             ]}
             onPress={crearPlanilla}
-            disabled={creando || loadingInscripciones || loadingBases || !alumnoSeleccionado || !planillaBaseId}
+            disabled={creando || loadingInscripciones || loadingNombresAlumnos || loadingBases || !alumnoSeleccionado || !planillaBaseId}
             activeOpacity={0.85}
           >
             {creando ? (
@@ -422,7 +436,7 @@ export default function PlanillasScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.planillaTitulo}>{planilla.titulo}</Text>
                   <Text style={styles.planillaMeta}>
-                    {planilla.alumnoNombre || nombresAlumnos[planilla.alumnoId] || planilla.alumnoId}
+                    {planilla.alumnoNombre || nombresAlumnos[planilla.alumnoId] || "Alumno"}
                   </Text>
                 </View>
                 <View style={styles.tipoBadge}>
@@ -540,6 +554,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     color: "#11181C",
+    letterSpacing: 0,
   },
   saveBtn: {
     backgroundColor: "#25B471",

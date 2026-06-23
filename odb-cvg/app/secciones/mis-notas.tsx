@@ -46,6 +46,7 @@ export default function MisNotasScreen() {
     seccionId: string;
     subseccionPath?: string;
   }>();
+  const contextoSubseccion = subseccionPath ?? "";
 
   const { rol, loading: loadingRol } = useUserRole();
   const uid = auth.currentUser?.uid ?? null;
@@ -70,9 +71,8 @@ export default function MisNotasScreen() {
     const constraints = [where("seccionId", "==", seccionId)];
     if (esAlumno) {
       constraints.push(where("alumnoId", "==", uid));
-    }
-    if (subseccionPath !== undefined) {
-      constraints.push(where("subseccionPath", "==", subseccionPath));
+    } else {
+      constraints.push(where("subseccionPath", "==", contextoSubseccion));
     }
 
     const q = query(collection(db, "notas"), ...constraints);
@@ -120,7 +120,7 @@ export default function MisNotasScreen() {
     );
 
     return () => unsubscribe();
-  }, [seccionId, uid, rol, loadingRol, subseccionPath]);
+  }, [seccionId, uid, rol, loadingRol, contextoSubseccion]);
 
   const esAdmin = rol === "admin";
   const puedeEditar = rol === "admin";
@@ -130,7 +130,7 @@ export default function MisNotasScreen() {
     if (!examenAEliminar || !seccionId) return;
     setEliminando(true);
     try {
-      await eliminarNotasPorExamen(seccionId, examenAEliminar, subseccionPath);
+      await eliminarNotasPorExamen(seccionId, examenAEliminar, contextoSubseccion);
       setExamenAEliminar(null);
       setAlerta({
         visible: true,
