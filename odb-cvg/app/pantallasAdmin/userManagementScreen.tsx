@@ -34,6 +34,7 @@ interface CursadaRestringida {
   codigoAcceso: string;
 }
 
+
 export default function UserManagementScreen() {
   // ─── Pestaña activa ──────────────────────────────────────────────────────
   const [tabActiva, setTabActiva] = useState<'usuarios' | 'cursadas'>('usuarios');
@@ -42,7 +43,7 @@ export default function UserManagementScreen() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalEditar, setModalEditar] = useState(false);
-  const [usuarioAEliminarId, setUsuarioAEliminarId] = useState<string | null>(null);
+  const [usuarioAEliminar, setUsuarioAEliminar] = useState<Usuario | null>(null);
   const [usuarioActual, setUsuarioActual] = useState<Usuario | null>(null);
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
@@ -77,7 +78,6 @@ export default function UserManagementScreen() {
   const { modulos, loading: loadingModulos } = useModulos();
   const [usuarioAEliminarNombre, setUsuarioAEliminarNombre] = useState<string | null>(null);
   const rootNavigationState = useRootNavigationState();
-  const [inscripcionAEliminar, setInscripcionAEliminar] = useState<Inscripcion | null>(null);
   const [filtroAccesos, setFiltroAccesos] = useState("");
   const [filtroTipoAcceso, setFiltroTipoAcceso] = useState<"todos" | "seccion" | "subseccion">("todos");
   const [inscripcionAMover, setInscripcionAMover] = useState<Inscripcion | null>(null);
@@ -88,6 +88,7 @@ export default function UserManagementScreen() {
   const [alumnosSeleccionados, setAlumnosSeleccionados] = useState<string[]>([]);
   const [inscripcionesSeleccionadas, setInscripcionesSeleccionadas] = useState<string[]>([]);
   const [modalEliminarMultiples, setModalEliminarMultiples] = useState(false);
+  const [cursadasUsuarioEliminar, setCursadasUsuarioEliminar] = useState<CursadaRestringida[]>([]);
 
   useEffect(() => {
     if (!rootNavigationState?.key) return;
@@ -185,6 +186,63 @@ export default function UserManagementScreen() {
     cargarAccesos();
   }, [esAdmin]);
 
+  const confirmarEliminar = async () => {
+  if (!usuarioAEliminar) return;
+
+  try {
+    // 1. Eliminar al usuario
+    await eliminarUsuario(usuarioAEliminar);
+
+    // 2. Eliminar todas las inscripciones del usuario
+    if (cursadasUsuarioEliminar.length > 0) {
+      for (const cursada of cursadasUsuarioEliminar) {
+        await eliminarInscripcion(cursada.moduloId, cursada.seccionId, usuarioAEliminar.id);
+      }
+    }
+
+    // 3. Mostrar alerta de éxito
+    setAlerta({
+      visible: true,
+      titulo: "Usuario eliminado",
+      mensaje: `Se eliminó a ${usuarioAEliminar?.nombre} y sus ${cursadasUsuarioEliminar.length} inscripciones.`,
+      tipo: "exito",
+    });
+  } catch (e: any) {
+    setAlerta({
+      visible: true,
+      titulo: "Error",
+      mensaje: e.message || "No se pudo eliminar al usuario y sus inscripciones.",
+      tipo: "error",
+    });
+  } finally {
+    setUsuarioAEliminar(null);
+    setUsuarioAEliminarNombre(null);
+  }
+  };
+
+  const eliminarUsuario = async (usuario: Usuario) => {
+    try {
+      const usuarioRef = doc(db, "usuarios", usuario.id);
+      await deleteDoc(usuarioRef);
+      console.log(`Usuario ${usuario.id} eliminado correctamente`);
+    } catch (error) {
+      console.error("Error eliminando usuario:", error);
+      throw error;
+    }
+  };
+
+  const eliminarInscripcion = async (moduloId: string, cursadaId: string, alumnoId: string) => {
+    try {
+      // Suponiendo que las inscripciones están en:
+      // cursadas/{cursadaId}/inscripciones/{alumnoId}
+      const inscripcionRef = doc(db, "cursadas", cursadaId, "inscripciones", alumnoId);
+      await deleteDoc(inscripcionRef);
+      console.log(`Inscripción de ${alumnoId} en cursada ${cursadaId} eliminada`);
+    } catch (error) {
+      console.error("Error eliminando inscripción:", error);
+      throw error;
+    }
+  };
   // Mapa uid→nombre para mostrar en inscripciones
   const usuariosMap: Record<string, string> = {};
   usuarios.forEach(u => { usuariosMap[u.id] = u.nombre || u.email; });
@@ -304,7 +362,6 @@ const handleEliminarMultiples = async () => {
     setEliminando(false);
   }
 };
-
 
 const abrirMoverAlumno = (insc: Inscripcion) => {
   setInscripcionAMover(insc);
@@ -465,7 +522,7 @@ const destinosMovimiento = cursadas.filter((acceso) =>
                     <Ionicons name="pencil-outline" size={16} color="#0F4A32" />
                     <Text style={styles.editBtnText}>Editar</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.deleteBtn} onPress={() => setUsuarioAEliminarId(item.id)}>
+                  <TouchableOpacity style={styles.deleteBtn} onPress={() => confirmarEliminar()}>
                     <Ionicons name="trash-outline" size={16} color="#DC2626" />
                     <Text style={styles.deleteBtnText}>Eliminar</Text>
                   </TouchableOpacity>
@@ -542,7 +599,15 @@ const destinosMovimiento = cursadas.filter((acceso) =>
                 <View key={cursada.id} style={styles.cursadaCard}>
                   <TouchableOpacity
                     style={styles.cursadaCardHeader}
-                    onPress={() => setCursadaExpandida(expandida ? null : cursada)}
+                    onPress={() => {
+                      setInscripcionesSeleccionadas([]);
+                      setAlumnosSeleccionados([]);
+                      setCursadaExpandida(
+                        cursadaExpandida?.id === cursada.id
+                          ? null
+                          : cursada
+                      );
+                    }}
                     activeOpacity={0.8}
                   >
                     <View style={styles.cursadaIconBg}>
@@ -591,7 +656,10 @@ const destinosMovimiento = cursadas.filter((acceso) =>
                         
                         <TouchableOpacity
                           style={styles.asignarBtn}
-                          onPress={() => setModalAsignar(true)}
+                          onPress={() => {
+                            setAlumnosSeleccionados([]);  
+                            setModalAsignar(true);
+                          }}
                         >
                           <Ionicons name="person-add-outline" size={14} color="#0F4A32" />
                           <Text style={styles.asignarBtnText}>Asignar</Text>
@@ -918,6 +986,16 @@ const destinosMovimiento = cursadas.filter((acceso) =>
         onConfirm={handleRegenerarCodigo}
         onCancel={() => setCursadaARegenerar(null)}
       />
+      <ModalConfirmacion
+        visible={usuarioAEliminar !== null}
+        titulo="Eliminar usuario"
+        mensaje={`${usuarioAEliminar?.nombre} tiene ${cursadasUsuarioEliminar.length} inscripciones a cursadas. ¿Seguro que querés eliminarlo igual?`}
+        textoConfirmar="Eliminar de todos modos"
+        textoCancelar="Cancelar"
+        onConfirm={confirmarEliminar}
+        onCancel={() => setUsuarioAEliminar(null)}
+      />
+       
       <ModalAlerta
         visible={alerta.visible}
         titulo={alerta.titulo}
