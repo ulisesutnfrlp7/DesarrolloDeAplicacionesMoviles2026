@@ -20,11 +20,13 @@ export interface Subseccion {
   fechaActualizacion: any;
   permiteCargaProfesor?: boolean;
   permiteNotas?: boolean;
+  permitePlanillas?: boolean;
 }
 
 export type SubseccionInput = Pick<Subseccion, "titulo"> & {
   permiteCargaProfesor?: boolean;
   permiteNotas?: boolean;
+  permitePlanillas?: boolean;
 };
 
 const getSubseccionPathSegments = (subseccionPath?: string) =>
@@ -99,6 +101,7 @@ export function useSubsecciones(moduloId: string, seccionId: string, parentPath?
       ...data,
       permiteCargaProfesor: data.permiteCargaProfesor ?? false,
       permiteNotas: data.permiteNotas ?? false,
+      permitePlanillas: data.permitePlanillas ?? false,
       creadoPor: user.uid,
       fechaCreacion: serverTimestamp(),
       fechaActualizacion: serverTimestamp(),

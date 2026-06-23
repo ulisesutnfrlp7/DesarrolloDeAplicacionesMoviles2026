@@ -31,6 +31,11 @@ service cloud.firestore {
       }
     }
 
+    // Permite al panel admin consultar secciones con collectionGroup("secciones").
+    match /{path=**}/secciones/{seccionId} {
+      allow read: if isAdmin();
+    }
+
     // 3. Subsecciones (Aplanado: funciona en cualquier nivel)
     match /{path=**}/subsecciones/{subseccionId} {
       allow read: if request.auth != null;
@@ -82,6 +87,38 @@ service cloud.firestore {
         (isAdmin() || isProfesor() || (resource != null && resource.data.alumnoId == request.auth.uid));
       allow create, update: if isAdmin() || isProfesor();
       allow delete: if isAdmin();
+    }
+
+    // 7. Planillas de trabajos practicos
+    match /planillas_tp/{planillaId} {
+      allow read, create, update: if isAdmin() || isProfesor();
+      allow delete: if isAdmin();
+
+      match /filas/{filaId} {
+        allow read, create, update, delete: if isAdmin() || isProfesor();
+      }
+
+      match /vistas_alumno/{alumnoId} {
+        allow read: if isAdmin() || isProfesor() ||
+          (request.auth != null && request.auth.uid == alumnoId);
+        allow create, update, delete: if isAdmin() || isProfesor();
+      }
+    }
+
+    match /{path=**}/vistas_alumno/{alumnoId} {
+      allow read: if isAdmin() || isProfesor() ||
+        (request.auth != null && request.auth.uid == alumnoId);
+    }
+
+    match /vistas_planillas_alumnos/{alumnoId}/planillas/{planillaId} {
+      allow read: if isAdmin() || isProfesor() ||
+        (request.auth != null && request.auth.uid == alumnoId);
+      allow create, update, delete: if isAdmin() || isProfesor();
+    }
+
+    match /planillas_base_tp/{baseId} {
+      allow read: if isAdmin() || isProfesor();
+      allow create, update, delete: if isAdmin();
     }
   }
 }
