@@ -11,6 +11,7 @@ import ScreenHeader from '../../components/ui/ScreenHeader';
 import { inscribirManualmente, revocarInscripcion, regenerarCodigo, useInscripcionesPorSeccion, type Inscripcion } from '../../hooks/useInscripciones';
 import { useModulos } from '../../hooks/useModulos';
 import { transferirPlanillasAlumnoAContexto } from '../../hooks/usePlanillas';
+import { Background } from '@react-navigation/elements';
 
 type Rol = 'alumno' | 'profesor' | 'admin';
 
@@ -70,6 +71,7 @@ export default function UserManagementScreen() {
   const [regenerando, setRegenerando] = useState(false);
   const [modalAsignar, setModalAsignar] = useState(false);
   const [asignando, setAsignando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
   const { inscripciones: inscripcionesExpandida, loading: loadingInscripciones } =
     useInscripcionesPorSeccion(cursadaExpandida?.seccionId ?? null, cursadaExpandida?.subseccionPath ?? "");
   const { modulos, loading: loadingModulos } = useModulos();
@@ -83,6 +85,9 @@ export default function UserManagementScreen() {
   const [destinoMovimiento, setDestinoMovimiento] = useState<CursadaRestringida | null>(null);
   const [transferirPlanillas, setTransferirPlanillas] = useState(true);
   const [moviendoAlumno, setMoviendoAlumno] = useState(false);
+  const [alumnosSeleccionados, setAlumnosSeleccionados] = useState<string[]>([]);
+  const [inscripcionesSeleccionadas, setInscripcionesSeleccionadas] = useState<string[]>([]);
+  const [modalEliminarMultiples, setModalEliminarMultiples] = useState(false);
 
   useEffect(() => {
     if (!rootNavigationState?.key) return;
@@ -217,7 +222,6 @@ export default function UserManagementScreen() {
     }
   };
 
-
   const handleRegenerarCodigo = async () => {
     if (!cursadaARegenerear) return;
     setRegenerando(true);
@@ -244,44 +248,78 @@ export default function UserManagementScreen() {
     }
   };
 
-  const handleAsignarAlumno = async (alumnoId: string) => {
+  //Funcion para marcar/desmarcar a un alumno en la lista de asignación
+  const toggleAlumno = (id: string) => {
+    setAlumnosSeleccionados(prev =>
+      prev.includes(id)
+        ? prev.filter(a => a !== id)
+        : [...prev, id]
+    );
+  };
+
+  //Funcion para marcar/desmarcar a un alumno en la lista de inscriptos
+  const toggleInscripcion = (id: string) => {
+    setInscripcionesSeleccionadas(prev =>
+      prev.includes(id)
+        ? prev.filter(i => i !== id)
+        : [...prev, id]
+    );
+  };
+
+  const handleAsignarMultiples = async () => {
+    console.log("Alumnos:", alumnosSeleccionados);
+
     if (!cursadaExpandida) return;
     setAsignando(true);
     try {
-      await inscribirManualmente(
-        cursadaExpandida.moduloId,
-        cursadaExpandida.seccionId,
-        alumnoId,
-        cursadaExpandida.subseccionPath,
+      await Promise.all(
+        alumnosSeleccionados.map(alumnoId =>
+          inscribirManualmente( cursadaExpandida.moduloId, cursadaExpandida.seccionId, alumnoId , cursadaExpandida.subseccionPath))
       );
+      setAlumnosSeleccionados([]);
       setModalAsignar(false);
-      setAlerta({ visible: true, titulo: 'Alumno asignado', mensaje: 'El alumno fue inscripto manualmente en el acceso.', tipo: 'exito' });
-    } catch (e: any) {
-      setAlerta({ visible: true, titulo: 'Error', mensaje: e.message || 'No se pudo asignar al alumno.', tipo: 'error' });
+      setAlerta({ visible: true, titulo: `Alumnos asignados (${alumnosSeleccionados.length})`, mensaje: "Los alumnos fueron asignados correctamente.", tipo: "exito" });
+    } catch {
+      setAlerta({ visible: true, titulo: "Error", mensaje: "No se pudieron asignar algunos alumnos.", tipo: "error" });
     } finally {
       setAsignando(false);
     }
   };
 
-  const handleAbrirModalEliminar = (alumnoId: string, nombre: string) => {
-    setUsuarioAEliminarId(alumnoId);
-    setUsuarioAEliminarNombre(nombre);
-  };
 
-  const abrirMoverAlumno = (insc: Inscripcion) => {
-    setInscripcionAMover(insc);
-    setAlumnoAMoverNombre(usuariosMap[insc.alumnoId] || "Alumno");
-    setDestinoMovimiento(null);
-    setTransferirPlanillas(true);
-  };
+const handleEliminarMultiples = async () => {
+  console.log("Seleccionadas:", inscripcionesSeleccionadas);
+  if (!inscripcionesSeleccionadas.length) return;
+  setEliminando(true);
+  try {
+    await Promise.all(
+      inscripcionesSeleccionadas.map(id => revocarInscripcion(id))
+    );
+    setInscripcionesSeleccionadas([]);
+    setModalEliminarMultiples(false);
+    setAlerta({ visible: true, titulo: `Alumnos eliminados (${inscripcionesSeleccionadas.length})`, mensaje: "Los alumnos fueron eliminados correctamente.", tipo: "exito" });
+  } catch {
+    setAlerta({ visible: true, titulo: "Error", mensaje: "No se pudieron eliminar algunos alumnos.", tipo: "error" });
+  } finally {
+    setEliminando(false);
+  }
+};
 
-  const destinosMovimiento = cursadas.filter((acceso) =>
-    cursadaExpandida?.tipoAcceso === "subseccion" &&
-    acceso.tipoAcceso === "subseccion" &&
-    acceso.moduloId === cursadaExpandida.moduloId &&
-    acceso.seccionId === cursadaExpandida.seccionId &&
-    acceso.id !== cursadaExpandida.id
-  );
+
+const abrirMoverAlumno = (insc: Inscripcion) => {
+  setInscripcionAMover(insc);
+  setAlumnoAMoverNombre(usuariosMap[insc.alumnoId] || "Alumno");
+  setDestinoMovimiento(null);
+  setTransferirPlanillas(true);
+};
+
+const destinosMovimiento = cursadas.filter((acceso) =>
+  cursadaExpandida?.tipoAcceso === "subseccion" &&
+  acceso.tipoAcceso === "subseccion" &&
+  acceso.moduloId === cursadaExpandida.moduloId &&
+  acceso.seccionId === cursadaExpandida.seccionId &&
+  acceso.id !== cursadaExpandida.id
+);
 
   const confirmarMoverAlumno = async () => {
     if (!inscripcionAMover || !cursadaExpandida || !destinoMovimiento) return;
@@ -325,18 +363,6 @@ export default function UserManagementScreen() {
       setMoviendoAlumno(false);
     }
   };
-
-  const confirmarEliminar = async () => {
-  if (!cursadaExpandida || !usuarioAEliminarId) return;
-  try {
-    await deleteDoc(doc(db, 'usuarios', usuarioAEliminarId));
-      setUsuarios(prev => prev.filter(u => u.id !== usuarioAEliminarId));
-      setUsuarioAEliminarId(null);
-      setUsuarioAEliminarNombre(null);
-      setAlerta({ visible: true, titulo: 'Alumno eliminado', mensaje: `Se eliminó a ${usuarioAEliminarNombre} del acceso.`, tipo: 'exito'});
-  } catch { setAlerta({ visible: true, titulo: 'Error', mensaje:'No se pudo eliminar al alumno.', tipo: 'error'});
-  }
-};
 
   const renderBadge = (r: Rol) => {
     if (r === 'admin') return (
@@ -562,6 +588,7 @@ export default function UserManagementScreen() {
                         <Text style={styles.panelLabel}>
                           Inscriptos ({expandida ? inscritos.length : '…'})
                         </Text>
+                        
                         <TouchableOpacity
                           style={styles.asignarBtn}
                           onPress={() => setModalAsignar(true)}
@@ -570,6 +597,21 @@ export default function UserManagementScreen() {
                           <Text style={styles.asignarBtnText}>Asignar</Text>
                         </TouchableOpacity>
                       </View>
+                      {inscripcionesSeleccionadas.length > 0 && (
+                          <TouchableOpacity
+                            style={styles.eliminarBtn}
+                            onPress={() => setModalEliminarMultiples(true)}
+                          >
+                            <Ionicons
+                              name="trash-outline"
+                              size={18}
+                              color="#FFFFFF"
+                            />
+                            <Text style={styles.eliminarBtnText}>
+                              Eliminar ({inscripcionesSeleccionadas.length})
+                            </Text>
+                          </TouchableOpacity>
+                        )}
 
                       {loadingInscripciones ? (
                         <ActivityIndicator color="#25B471" size="small" style={{ marginTop: 8 }} />
@@ -602,13 +644,17 @@ export default function UserManagementScreen() {
                             <TouchableOpacity
                               style={styles.revocarBtn}
                               onPress={() => {
-                                setInscripcionAEliminar(insc);
-                                setUsuarioAEliminarNombre(
-                                  usuariosMap[insc.alumnoId] || "Alumno"
-                                );
-                              }}
-                            >
-                              <Ionicons name="close-circle-outline" size={18} color="#DC2626" />
+                                toggleInscripcion(insc.id)}}
+                              >
+                                <Ionicons
+                                  name={
+                                    inscripcionesSeleccionadas.includes(insc.id)
+                                      ? "checkmark-circle"
+                                      : "close-circle-outline"
+                                  }
+                                  size={22}
+                                  color="#DC2626"
+                                />
                             </TouchableOpacity>
                           </View>
                         ))
@@ -641,13 +687,18 @@ export default function UserManagementScreen() {
                               </Text>
                             ) : (
                               <ScrollView style={{ maxHeight: 320 }}>
-                                {alumnosFiltrados.map(u => (
+                                {alumnosSeleccionados.length > 0 && (
                                   <TouchableOpacity
-                                    key={u.id}
-                                    style={styles.alumnoPickerRow}
-                                    onPress={() => handleAsignarAlumno(u.id)}
-                                    disabled={asignando}
+                                    style={styles.saveBtn}
+                                    onPress={handleAsignarMultiples}
                                   >
+                                    <Text style={styles.saveBtnText}>
+                                      Asignar ({alumnosSeleccionados.length})
+                                    </Text>
+                                  </TouchableOpacity>
+                                )}
+                                {alumnosFiltrados.map(u => (
+                                  <View key={u.id} style={styles.alumnoPickerRow}>
                                     <View style={styles.alumnoPickerIcon}>
                                       <Ionicons name="person-outline" size={16} color="#0F4A32" />
                                     </View>
@@ -655,12 +706,14 @@ export default function UserManagementScreen() {
                                       <Text style={styles.alumnoPickerNombre}>{u.nombre}</Text>
                                       <Text style={styles.alumnoPickerEmail}>{u.email}</Text>
                                     </View>
-                                    {asignando ? (
-                                      <ActivityIndicator size="small" color="#25B471" />
-                                    ) : (
-                                      <Ionicons name="add-circle-outline" size={20} color="#25B471" />
-                                    )}
-                                  </TouchableOpacity>
+                                    <TouchableOpacity
+                                      onPress={() => toggleAlumno(u.id)}
+                                    >
+                                      <Ionicons
+                                        name={ alumnosSeleccionados.includes(u.id)? "checkmark-circle": "add-circle-outline" } size={24} color="#25B471"
+                                      />
+                                    </TouchableOpacity>
+                                  </View>
                                 ))}
                               </ScrollView>
                             )}
@@ -848,29 +901,13 @@ export default function UserManagementScreen() {
       </Modal>
 
       <ModalConfirmacion
-        visible={inscripcionAEliminar !== null}
-        titulo="Eliminar inscripción"
-        mensaje={`¿Estás seguro de eliminar la inscripción de ${usuarioAEliminarNombre} de ${cursadaExpandida?.titulo}? Esta acción es permanente.`}
+        visible={modalEliminarMultiples}
+        titulo="Eliminar alumnos"
+        mensaje={`¿Deseás eliminar ${inscripcionesSeleccionadas.length} alumno(s)?`}
         textoConfirmar="Eliminar"
         textoCancelar="Cancelar"
-        onConfirm={async () => {
-          if (!inscripcionAEliminar) return;
-          try {
-            await handleRevocarInscripcion(inscripcionAEliminar);
-            setAlerta({
-              visible: true,
-              titulo: "Alumno eliminado",
-              mensaje: `${usuarioAEliminarNombre} fue eliminado del acceso.`,
-              tipo: "exito",
-            });
-            setInscripcionAEliminar(null);
-            setUsuarioAEliminarNombre(null);
-          } catch {}
-        }}
-        onCancel={() => {
-          setInscripcionAEliminar(null);
-          setUsuarioAEliminarNombre(null);
-        }}
+        onConfirm={handleEliminarMultiples}
+        onCancel={() => setModalEliminarMultiples(false)}
       />
       <ModalConfirmacion
         visible={cursadaARegenerear !== null}
@@ -950,6 +987,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
   },
   deleteBtnText: { fontSize: 13, fontWeight: '600', color: '#DC2626' },
+  
 
   badge: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, alignSelf: 'flex-start' },
   badgeAdmin: { backgroundColor: '#0F4A32' },
@@ -1010,6 +1048,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F9F9F9',
   },
+  eliminarBtn: {
+    flex: 1, backgroundColor: '#DC2626', borderRadius: 12,
+    paddingVertical: 4, alignItems: 'center',
+  },
+  eliminarBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   inscriptoNombre: { fontSize: 14, fontWeight: '600', color: '#11181C' },
   inscriptoMeta: { flexDirection: 'row', gap: 6, marginTop: 3 },
   tipoBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },

@@ -11357,6 +11357,608 @@ Cómo probar:
 
 
 ---
-## Q&A de la sesión 4
+# Q&A de la sesión 4
+---
+# Pregunta 1: 
+
+# Necesito que me generes el codigo de un modal de alerta en la parte de administracion de cursadas del administrador, asi cuando quiera eliminiar a un alumno de una cursada con acceso, le aparece antes un cartel de "Estas seguro que queres eliminar a (nombre de alumno) de (nombre cursada)?" Necesito que utilices el componente de modal que ya tengo en mi codigo // components/ui/ModalAlerta.tsx import React from 'react'; import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+
+**interface ModalAlertaProps { visible: boolean; titulo: string; mensaje: string; tipo?: 'error' | 'exito'; onClose: () \=\> void; }**
+
+**export default function ModalAlerta({ visible, titulo, mensaje, tipo \= 'error', onClose }: ModalAlertaProps) { const colorBase \= tipo \=== 'error' ? '\#DC2626' : '\#25B471';**
+
+**return ( \<Modal visible={visible} transparent animationType="fade"\> \<View style={styles.overlay}\> \<View style={styles.modalContainer}\> \<Text style={\[styles.titulo, { color: colorBase }\]}\>{titulo}\</Text\> \<Text style={styles.mensaje}\>{mensaje}\</Text\>**
+
+     **\<TouchableOpacity**   
+        **style={\[styles.boton, { backgroundColor: colorBase }\]}**   
+        **onPress={onClose}**  
+      **\>**  
+        **\<Text style={styles.textoBoton}\>Entendido\</Text\>**  
+      **\</TouchableOpacity\>**  
+    **\</View\>**  
+  **\</View\>**  
+**\</Modal\>**
+
+**); }**
+
+**const styles \= StyleSheet.create({ overlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 20, }, modalContainer: { backgroundColor: '\#FFFFFF', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, alignItems: 'center', shadowColor: '\#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5, }, titulo: { fontSize: 20, fontWeight: 'bold', marginBottom: 10, textAlign: 'center', }, mensaje: { fontSize: 16, color: '\#4A5568', textAlign: 'center', marginBottom: 20, lineHeight: 22, }, boton: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, width: '100%', alignItems: 'center', }, textoBoton: { color: '\#FFFFFF', fontWeight: 'bold', fontSize: 16, }, });**
+
+// ─── Estado para eliminación ───────────────────────────────  
+const \[usuarioAEliminarId, setUsuarioAEliminarId\] \= useState\<string | null\>(null);  
+const \[usuarioAEliminarNombre, setUsuarioAEliminarNombre\] \= useState\<string | null\>(null);
+
+// Función para abrir modal  
+const handleAbrirModalEliminar \= (alumnoId: string, nombre: string) \=\> {  
+  setUsuarioAEliminarId(alumnoId);  
+  setUsuarioAEliminarNombre(nombre);  
+};
+
+// Función para confirmar eliminación  
+const confirmarEliminar \= async () \=\> {  
+  if (\!cursadaExpandida || \!usuarioAEliminarId) return;  
+  try {  
+    await eliminarInscripcion(cursadaExpandida.moduloId, cursadaExpandida.id, usuarioAEliminarId);  
+    setAlerta({  
+      visible: true,  
+      titulo: 'Alumno eliminado',  
+      mensaje: \`Se eliminó a ${usuarioAEliminarNombre} de la cursada.\`,  
+      tipo: 'exito',  
+    });  
+  } catch (e: any) {  
+    setAlerta({  
+      visible: true,  
+      titulo: 'Error',  
+      mensaje: e.message || 'No se pudo eliminar al alumno.',  
+      tipo: 'error',  
+    });  
+  } finally {  
+    setUsuarioAEliminarId(null);  
+    setUsuarioAEliminarNombre(null);  
+  }  
+};
+
+### **Renderizado en la lista de inscriptos**
+
+tsx  
+{inscripcionesExpandida.map((inscripcion) \=\> (  
+  \<View key={inscripcion.id} style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 8 }}\>  
+    \<Text style={{ flex: 1 }}\>{inscripcion.alumnoNombre}\</Text\>  
+    \<TouchableOpacity  
+      style={{ backgroundColor: '\#DC2626', padding: 8, borderRadius: 6 }}  
+      onPress={() \=\> handleAbrirModalEliminar(inscripcion.alumnoId, inscripcion.alumnoNombre)}  
+    \>  
+      \<Ionicons name="close" size={20} color="\#fff" /\>  
+    \</TouchableOpacity\>  
+  \</View\>  
+))}
+
+### **Modal de confirmación (usando tu componente)**
+
+tsx  
+\<ModalConfirmacion  
+  visible={usuarioAEliminarId \!== null}  
+  titulo="Eliminar alumno"  
+  mensaje={\`¿Estás seguro de eliminar a ${usuarioAEliminarNombre} de ${cursadaExpandida?.nombre}? Esta acción es permanente.\`}  
+  textoConfirmar="Eliminar"  
+  textoCancelar="Cancelar"  
+  onConfirm={confirmarEliminar}  
+  onCancel={() \=\> setUsuarioAEliminarId(null)}  
+/\>
+
+Pregunta 2:   
+Y despues, como hago para que el admin pueda seleccionar a varias alumnos si desea eliminarlos/asignarlos?  
 ---
 
+## **Seleccionar varios alumnos para eliminar o asignar**
+
+Lo más cómodo es implementar una selección múltiple con checkboxes.
+
+### **1\. Crear un estado para los seleccionados**
+
+Por ejemplo:
+
+const \[alumnosSeleccionados, setAlumnosSeleccionados\] \= useState\<string\[\]\>(\[\]);  
+---
+
+### **2\. Función para marcar/desmarcar**
+
+const toggleAlumno \= (id: string) \=\> {  
+ setAlumnosSeleccionados(prev \=\>  
+   prev.includes(id)  
+     ? prev.filter(a \=\> a \!== id)  
+     : \[...prev, id\]  
+ );  
+};  
+---
+
+### **3\. Agregar un checkbox visual**
+
+En la lista de alumnos:
+
+\<TouchableOpacity  
+ onPress={() \=\> toggleAlumno(u.id)}  
+ style={styles.alumnoPickerRow}  
+\>  
+ \<Ionicons  
+   name={  
+     alumnosSeleccionados.includes(u.id)  
+       ? "checkbox"  
+       : "square-outline"  
+   }  
+   size={24}  
+   color="\#25B471"  
+ /\>
+
+ \<View style={{ flex: 1 }}\>  
+   \<Text\>{u.nombre}\</Text\>  
+   \<Text\>{u.email}\</Text\>  
+ \</View\>  
+\</TouchableOpacity\>  
+---
+
+### **4\. Botón "Asignar seleccionados"**
+
+\<TouchableOpacity  
+ style={styles.asignarBtn}  
+ onPress={handleAsignarMultiples}  
+\>  
+ \<Text\>  
+   Asignar ({alumnosSeleccionados.length})  
+ \</Text\>  
+\</TouchableOpacity\>  
+---
+
+### **5\. Asignación masiva**
+
+const handleAsignarMultiples \= async () \=\> {  
+ if (\!cursadaExpandida) return;
+
+ try {  
+   await Promise.all(  
+     alumnosSeleccionados.map(alumnoId \=\>  
+       inscribirManualmente(  
+         cursadaExpandida.moduloId,  
+         cursadaExpandida.id,  
+         alumnoId  
+       )  
+     )  
+   );
+
+   setAlumnosSeleccionados(\[\]);
+
+   setAlerta({  
+     visible: true,  
+     titulo: "Asignación exitosa",  
+     mensaje: "Los alumnos fueron asignados correctamente.",  
+     tipo: "exito",  
+   });  
+ } catch {  
+   setAlerta({  
+     visible: true,  
+     titulo: "Error",  
+     mensaje: "No se pudieron asignar algunos alumnos.",  
+     tipo: "error",  
+   });  
+ }  
+};  
+---
+
+### **6\. Eliminación masiva**
+
+Misma idea:
+
+const \[inscripcionesSeleccionadas, setInscripcionesSeleccionadas\] \= useState\<string\[\]\>(\[\]);
+
+Y al confirmar:
+
+await Promise.all(  
+ inscripcionesSeleccionadas.map(id \=\>  
+   revocarInscripcion(id)  
+ )  
+);  
+---
+
+## **Qué suele gustar más en apps de administración**
+
+Normalmente se hace así:
+
+☑ Seleccionar uno o varios alumnos  
+ ☑ Mostrar contador ("3 seleccionados")  
+ ☑ Aparecen acciones masivas arriba:
+
+\[ Asignar \]  
+\[ Eliminar \]
+
+Cuando no hay ninguno seleccionado, esos botones no aparecen.
+
+# Pregunta 3: Ahora quiero que el checkbox no este, que aparezca un tilde cuando apreta el \+ (Es decir que eso actue como un checkbox). Decime como modificar el codigo y en donde tengo que agregar cada parte
+
+Si querés eliminar los checkboxes de la izquierda y que el **\+ funcione como selector**, mostrando una tilde cuando está seleccionado, tenés que modificar solamente la parte del botón derecho.
+
+---
+
+## **1\. Eliminar el checkbox de la izquierda**
+
+Buscá dentro de:
+
+{alumnosFiltrados.map(u \=\> (
+
+algo parecido a:
+
+\<Ionicons  
+ name={  
+   alumnosSeleccionados.includes(u.id)  
+     ? "checkbox"  
+     : "square-outline"  
+ }  
+ size={22}  
+ color="\#25B471"  
+/\>
+
+y borralo completamente.
+
+---
+
+## **2\. Dejar de seleccionar toda la fila**
+
+Actualmente probablemente tengas:
+
+\<TouchableOpacity  
+ key={u.id}  
+ style={styles.alumnoPickerRow}  
+ onPress={() \=\> toggleAlumno(u.id)}  
+\>
+
+Cambialo por:
+
+\<View  
+ key={u.id}  
+ style={styles.alumnoPickerRow}  
+\>
+
+porque ahora la selección la hará el botón de la derecha.
+
+---
+
+## **3\. Modificar el botón \+**
+
+Buscá esta parte:
+
+{asignando ? (  
+ \<ActivityIndicator  
+   size="small"  
+   color="\#25B471"  
+ /\>  
+) : (  
+ \<Ionicons  
+   name="add-circle-outline"  
+   size={20}  
+   color="\#25B471"  
+ /\>  
+)}
+
+y reemplazala por:
+
+\<TouchableOpacity  
+ onPress={() \=\> toggleAlumno(u.id)}  
+\>  
+ \<Ionicons  
+   name={  
+     alumnosSeleccionados.includes(u.id)  
+       ? "checkmark-circle"  
+       : "add-circle-outline"  
+   }  
+   size={24}  
+   color="\#25B471"  
+ /\>  
+\</TouchableOpacity\>  
+---
+
+## **4\. Resultado visual**
+
+Antes:
+
+Juan Perez                          \+  
+Maria Gomez                         \+  
+Pedro Lopez                         \+
+
+Después de seleccionar dos:
+
+Juan Perez                          ✓  
+Maria Gomez                         ✓  
+Pedro Lopez                         \+  
+---
+
+## **5\. Mostrar cuántos hay seleccionados (opcional)**
+
+Arriba del botón "Asignar" podés agregar:
+
+{alumnosSeleccionados.length \> 0 && (  
+ \<Text style={{  
+   textAlign: 'center',  
+   marginVertical: 10,  
+   fontWeight: '600'  
+ }}\>  
+   {alumnosSeleccionados.length} alumno(s) seleccionado(s)  
+ \</Text\>  
+)}
+
+Justo antes de:
+
+\<TouchableOpacity  
+ style={styles.saveBtn}  
+ onPress={handleAsignarMultiples}  
+\>  
+---
+
+## **6\. Corregir el cierre del contenedor**
+
+Si cambiás:
+
+\<TouchableOpacity ...\>
+
+por:
+
+\<View ...\>
+
+acordate de cambiar el cierre también:
+
+De:
+
+\</TouchableOpacity\>
+
+a:
+
+\</View\>
+
+o React Native va a dar error.
+
+Con esos cambios el `+` se comporta como un checkbox: al tocarlo queda seleccionado (✓), al volver a tocarlo se desmarca (+), y el botón "Asignar" sigue inscribiendo a todos los seleccionados juntos.
+
+# Pregunta 4: 
+
+const handleRevocarInscripcion \= async (insc: Inscripcion) \=\> { try { await revocarInscripcion(insc.id); } catch { setAlerta({ visible: true, titulo: 'Error', mensaje: 'No se pudo revocar el acceso.', tipo: 'error' }); } }; como hago para que se puedan seleccionar varios alumnos? Que es lo que tengo que agregar?
+
+La función que mostraste:
+
+const handleRevocarInscripcion \= async (insc: Inscripcion) \=\> {  
+ try {  
+   await revocarInscripcion(insc.id);  
+ } catch {  
+   setAlerta({  
+     visible: true,  
+     titulo: 'Error',  
+     mensaje: 'No se pudo revocar el acceso.',  
+     tipo: 'error'  
+   });  
+ }  
+};
+
+sirve para **eliminar una sola inscripción**. Para permitir seleccionar varias, no tenés que modificar esa función todavía; primero tenés que agregar estados para guardar qué alumnos fueron seleccionados.
+
+---
+
+# **Paso 1: Crear estado de seleccionados**
+
+Junto a los demás `useState`, agregá:
+
+const \[inscripcionesSeleccionadas, setInscripcionesSeleccionadas\] \= useState\<string\[\]\>(\[\]);  
+---
+
+# **Paso 2: Función para marcar/desmarcar**
+
+Debajo de `handleRevocarInscripcion`, agregá:
+
+const toggleInscripcion \= (inscripcionId: string) \=\> {  
+ setInscripcionesSeleccionadas(prev \=\>  
+   prev.includes(inscripcionId)  
+     ? prev.filter(id \=\> id \!== inscripcionId)  
+     : \[...prev, inscripcionId\]  
+ );  
+};  
+---
+
+# **Paso 3: Modificar el botón X**
+
+Actualmente tenés:
+
+\<TouchableOpacity  
+ style={styles.revocarBtn}  
+ onPress={() \=\> handleRevocarInscripcion(insc)}  
+\>  
+ \<Ionicons  
+   name="close-circle-outline"  
+   size={18}  
+   color="\#DC2626"  
+ /\>  
+\</TouchableOpacity\>
+
+Reemplazalo por:
+
+\<TouchableOpacity  
+ style={styles.revocarBtn}  
+ onPress={() \=\> toggleInscripcion(insc.id)}  
+\>  
+ \<Ionicons  
+   name={  
+     inscripcionesSeleccionadas.includes(insc.id)  
+       ? "checkmark-circle"  
+       : "close-circle-outline"  
+   }  
+   size={22}  
+   color="\#DC2626"  
+ /\>  
+\</TouchableOpacity\>  
+---
+
+# **Paso 4: Crear eliminación múltiple**
+
+Debajo de `toggleInscripcion` agregá:
+
+const handleEliminarMultiples \= async () \=\> {  
+ try {  
+   await Promise.all(  
+     inscripcionesSeleccionadas.map(id \=\>  
+       revocarInscripcion(id)  
+     )  
+   );
+
+   const cantidad \= inscripcionesSeleccionadas.length;
+
+   setInscripcionesSeleccionadas(\[\]);
+
+   setAlerta({  
+     visible: true,  
+     titulo:  
+       cantidad \=== 1  
+         ? "Alumno eliminado"  
+         : "Alumnos eliminados",  
+     mensaje:  
+       cantidad \=== 1  
+         ? "El alumno fue eliminado de la cursada."  
+         : \`${cantidad} alumnos fueron eliminados de la cursada.\`,  
+     tipo: "exito",  
+   });
+
+ } catch {  
+   setAlerta({  
+     visible: true,  
+     titulo: "Error",  
+     mensaje: "No se pudieron eliminar algunos alumnos.",  
+     tipo: "error",  
+   });  
+ }  
+};  
+---
+
+# **Paso 5: Botón "Eliminar seleccionados"**
+
+Buscá esta parte:
+
+\<Text style={styles.panelLabel}\>  
+ Inscriptos ({expandida ? inscritos.length : '…'})  
+\</Text\>
+
+y debajo agregá:
+
+{inscripcionesSeleccionadas.length \> 0 && (  
+ \<TouchableOpacity  
+   style={styles.regenerarBtn}  
+   onPress={handleEliminarMultiples}  
+ \>  
+   \<Text style={styles.regenerarBtnText}\>  
+     Eliminar ({inscripcionesSeleccionadas.length})  
+   \</Text\>  
+ \</TouchableOpacity\>  
+)}  
+---
+
+# **Mejor todavía: usar modal de confirmación**
+
+En lugar de ejecutar directamente `handleEliminarMultiples`, hacé que ese botón abra un modal:
+
+const \[modalEliminarMultiples, setModalEliminarMultiples\] \= useState(false);
+
+y:
+
+onPress={() \=\> setModalEliminarMultiples(true)}
+
+Luego, en el modal:
+
+onConfirm={handleEliminarMultiples}
+
+Así evitás que un admin elimine 15 alumnos por error con un solo toque.
+
+---
+
+Y para cumplir con lo que querías antes (mostrar el nombre cuando es uno solo), cuando armemos `handleEliminarMultiples` podemos obtener el nombre del alumno seleccionado y mostrar:
+
+Juan Perez fue eliminado de la cursada.
+
+en lugar de:
+
+1 alumno fue eliminado de la cursada.
+
+que queda mucho más amigable.
+
+# Pregunta 5: 
+
+Como puedo arreglar que si dejo asignados dos alumnos en una comision y cierro el modal de asignar alumno, cuando lo abro en otra comision no se me queden marcados los alumnos que estaban marcados antes? Se entiende? 
+
+Sí, se entiende perfectamente. Lo que pasa es que el estado:
+
+const \[alumnosSeleccionados, setAlumnosSeleccionados\] \= useState\<string\[\]\>(\[\]);
+
+queda guardado aunque cierres el modal, entonces cuando abrís otra comisión React sigue usando los mismos alumnos seleccionados.
+
+### **Solución rápida**
+
+Cuando cerrás el modal, además de hacer:
+
+setModalAsignar(false);
+
+hacé también:
+
+setAlumnosSeleccionados(\[\]);
+
+Por ejemplo, si tenés un botón de cerrar:
+
+onClose={() \=\> {
+
+ setModalAsignar(false);
+
+ setAlumnosSeleccionados(\[\]);
+
+}}
+
+---
+
+### **Mejor solución**
+
+Cada vez que abras el modal, limpiá la selección anterior:
+
+const abrirModalAsignar \= () \=\> {
+
+ setAlumnosSeleccionados(\[\]);
+
+ setModalAsignar(true);
+
+};
+
+Y reemplazá:
+
+onPress={() \=\> setModalAsignar(true)}
+
+por:
+
+onPress={abrirModalAsignar}
+
+---
+
+### **También al cambiar de cursada**
+
+Cuando expandís una nueva cursada, probablemente tengas algo así:
+
+setCursadaExpandida(cursada);
+
+Podés agregar:
+
+setAlumnosSeleccionados(\[\]);
+
+setInscripcionesSeleccionadas(\[\]);
+
+quedando:
+
+setCursadaExpandida(cursada);
+
+setAlumnosSeleccionados(\[\]);
+
+setInscripcionesSeleccionadas(\[\]);
+
+Así:
+
+* Cambiás de comisión → se limpian las selecciones.  
+* Cerrás el modal → se limpian las selecciones.  
+* Abrís el modal en otra comisión → empieza vacío.
+
+Es la opción que suele usarse porque evita que queden selecciones "fantasma" entre distintas cursadas.
