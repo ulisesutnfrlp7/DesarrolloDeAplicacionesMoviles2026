@@ -12,10 +12,11 @@ import {
   View
 } from "react-native";
 import * as XLSX from "xlsx";
+import { formatearValorNota, obtenerNotaNumerica, type ValorNota } from "../../hooks/useNotas";
 
 interface NotaExportable {
   nombre: string;
-  nota: number;
+  nota: ValorNota;
 }
 
 interface ExportarNotasProps {
@@ -41,9 +42,12 @@ export default function ExportarNotas({
   const anioLectivo = new Date().getFullYear();
 
   // Formatear nota: si es entero sin decimales (7, 9, 10) mostrar "7", si tiene decimales (7.5) mostrar "7,5"
-  const formatearNota = (nota: number): string => {
-    return Number.isInteger(nota) ? String(nota) : nota.toFixed(1).replace(".", ",");
-  };
+  const notasNumericas = notas
+    .map((nota) => obtenerNotaNumerica(nota.nota))
+    .filter((nota): nota is number => nota !== null);
+  const promedio = notasNumericas.length > 0
+    ? notasNumericas.reduce((acc, nota) => acc + nota, 0) / notasNumericas.length
+    : null;
 
   // ─── GENERAR HTML PARA PDF ──────────────────────────────────────────────
   const generarHTML = (): string => {
@@ -53,7 +57,7 @@ export default function ExportarNotas({
         <tr>
           <td class="num">${i + 1}</td>
           <td>${n.nombre}</td>
-          <td class="nota">${formatearNota(n.nota)}</td>
+          <td class="nota">${formatearValorNota(n.nota)}</td>
         </tr>`,
       )
       .join("");
@@ -165,6 +169,10 @@ export default function ExportarNotas({
           </tbody>
         </table>
 
+        <div class="promedio">
+          Promedio de la clase: ${promedio !== null ? promedio.toFixed(1).replace(".", ",") : "-"}
+        </div>
+
         <div class="footer">
           FECHA DE GENERACIÓN: ${fechaActual} - Sistema CVG Operatoria Dental B
         </div>
@@ -206,7 +214,7 @@ export default function ExportarNotas({
       const data = notas.map((n, i) => ({
         "#": i + 1,
         Alumno: n.nombre,
-        Nota: n.nota,
+        Nota: formatearValorNota(n.nota),
       }));
 
       const ws = XLSX.utils.json_to_sheet(data);

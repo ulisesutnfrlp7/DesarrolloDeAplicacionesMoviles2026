@@ -25,7 +25,12 @@ import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import { auth, db } from "../../config/firebaseConfig";
 import type { Nota } from "../../hooks/useNotas";
-import { eliminarNotasPorExamen } from "../../hooks/useNotas";
+import {
+  eliminarNotasPorExamen,
+  esNotaAusente,
+  formatearValorNota,
+  obtenerNotaNumerica,
+} from "../../hooks/useNotas";
 import { useUserRole } from "../../hooks/useUserRole";
 
 type NotaConNombre = Nota & { nombreAlumno?: string };
@@ -36,7 +41,7 @@ type GrupoExamen = {
 };
 
 export default function MisNotasScreen() {
-  const { seccionId, subseccionPath } = useLocalSearchParams<{
+  const { moduloId, seccionId, subseccionPath } = useLocalSearchParams<{
     moduloId: string;
     seccionId: string;
     subseccionPath?: string;
@@ -118,6 +123,7 @@ export default function MisNotasScreen() {
   }, [seccionId, uid, rol, loadingRol, subseccionPath]);
 
   const esAdmin = rol === "admin";
+  const puedeEditar = rol === "admin";
   const esAlumno = rol !== "admin" && rol !== "profesor";
 
   const handleEliminarExamen = async () => {
@@ -186,21 +192,47 @@ export default function MisNotasScreen() {
           </View>
         ) : (
           grupos.map((grupo) => {
-            const promedio =
-              grupo.notas.reduce((acc, n) => acc + n.nota, 0) /
-              grupo.notas.length;
+            const notasNumericas = grupo.notas
+              .map((nota) => obtenerNotaNumerica(nota.nota))
+              .filter((nota): nota is number => nota !== null);
+            const promedio = notasNumericas.length > 0
+              ? notasNumericas.reduce((acc, nota) => acc + nota, 0) / notasNumericas.length
+              : null;
 
             return (
               <View key={grupo.nombreExamen} style={styles.grupoCard}>
                 <View style={styles.grupoTituloRow}>
                   <Text style={styles.grupoTitulo}>{grupo.nombreExamen}</Text>
-                  {esAdmin && (
-                    <TouchableOpacity
-                      onPress={() => setExamenAEliminar(grupo.nombreExamen)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="trash-outline" size={18} color="#DC2626" />
-                    </TouchableOpacity>
+                  {puedeEditar && (
+                    <View style={styles.headerActions}>
+                      <TouchableOpacity
+                        onPress={() =>
+                          router.push({
+                            pathname: "/secciones/notas",
+                            params: {
+                              moduloId,
+                              seccionId,
+                              subseccionPath,
+                              modo: "editar",
+                              nombreExamen: grupo.nombreExamen,
+                            },
+                          } as any)
+                        }
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        style={styles.iconActionBtn}
+                      >
+                        <Ionicons name="pencil-outline" size={18} color="#0F4A32" />
+                      </TouchableOpacity>
+                      {esAdmin && (
+                        <TouchableOpacity
+                          onPress={() => setExamenAEliminar(grupo.nombreExamen)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          style={styles.iconActionBtn}
+                        >
+                          <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   )}
                 </View>
 
@@ -210,16 +242,20 @@ export default function MisNotasScreen() {
                     <Text
                       style={[
                         styles.notaAlumnoValor,
-                        (grupo.notas[0]?.nota ?? 0) >= 4
-                          ? styles.notaAprobada
-                          : styles.notaDesaprobada,
+                        esNotaAusente(grupo.notas[0]?.nota)
+                          ? styles.notaAusente
+                          : (obtenerNotaNumerica(grupo.notas[0]?.nota) ?? 0) >= 4
+                            ? styles.notaAprobada
+                            : styles.notaDesaprobada,
                       ]}
                     >
-                      {grupo.notas[0]?.nota ?? "—"}
+                      {grupo.notas[0] ? formatearValorNota(grupo.notas[0].nota) : "—"}
                     </Text>
                     <Text style={styles.notaAlumnoLabel}>
                       {grupo.notas[0]?.nota !== undefined
-                        ? grupo.notas[0].nota >= 4
+                        ? esNotaAusente(grupo.notas[0].nota)
+                          ? "Ausente"
+                          : (obtenerNotaNumerica(grupo.notas[0].nota) ?? 0) >= 4
                           ? "Aprobado"
                           : "Desaprobado"
                         : ""}
@@ -251,12 +287,14 @@ export default function MisNotasScreen() {
                           <Text
                             style={[
                               styles.tablaNota,
-                              nota.nota >= 4
-                                ? styles.notaAprobada
-                                : styles.notaDesaprobada,
+                              esNotaAusente(nota.nota)
+                                ? styles.notaAusente
+                                : (obtenerNotaNumerica(nota.nota) ?? 0) >= 4
+                                  ? styles.notaAprobada
+                                  : styles.notaDesaprobada,
                             ]}
                           >
-                            {nota.nota}
+                            {formatearValorNota(nota.nota)}
                           </Text>
                         </View>
                       ))}
@@ -265,7 +303,7 @@ export default function MisNotasScreen() {
                         PROMEDIO DE LA CLASE
                       </Text>
                       <Text style={styles.promedioValor}>
-                        {promedio.toFixed(1)}
+                        {promedio !== null ? promedio.toFixed(1) : "-"}
                       </Text>
                     </View>
                     <ExportarNotas
@@ -358,6 +396,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  iconActionBtn: {
+    padding: 4,
+    borderRadius: 8,
+  },
   grupoTitulo: {
     fontSize: 13,
     fontWeight: "700",
@@ -383,6 +430,7 @@ const styles = StyleSheet.create({
   },
   notaAprobada: { color: "#25B471" },
   notaDesaprobada: { color: "#DC2626" },
+  notaAusente: { color: "#6B7280" },
   // Vista admin/profesor
   tablaHeader: {
     flexDirection: "row",

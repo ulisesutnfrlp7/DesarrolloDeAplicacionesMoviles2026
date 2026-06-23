@@ -16,17 +16,27 @@ import {
 } from "react-native";
 import BuscadorAlumnos from "../../components/ui/BuscadorAlumnos";
 import ModalAlerta from "../../components/ui/ModalAlerta";
+import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import { db } from "../../config/firebaseConfig";
 import { useInscripcionesPorSeccion } from "../../hooks/useInscripciones";
-import { guardarNotas, useNotasPorSeccion } from "../../hooks/useNotas";
+import {
+  esNotaAusente,
+  formatearValorNota,
+  guardarNotas,
+  reemplazarNotasPorExamen,
+  useNotasPorSeccion,
+  type ValorNota,
+} from "../../hooks/useNotas";
 import { useUserRole } from "../../hooks/useUserRole";
 
 export default function NotasScreen() {
-  const { moduloId, seccionId, subseccionPath } = useLocalSearchParams<{
+  const { moduloId, seccionId, subseccionPath, modo, nombreExamen: nombreExamenParam } = useLocalSearchParams<{
     moduloId: string;
     seccionId: string;
     subseccionPath?: string;
+    modo?: string;
+    nombreExamen?: string;
   }>();
 
   const { rol, loading: loadingRol } = useUserRole();
@@ -35,9 +45,13 @@ export default function NotasScreen() {
 
   const [nombreExamen, setNombreExamen] = useState("");
   const [notasInput, setNotasInput] = useState<Record<string, string>>({});
+  const [ausentes, setAusentes] = useState<Record<string, boolean>>({});
   const [nombresAlumnos, setNombresAlumnos] = useState<Record<string, string>>({});
   const [filtroTexto, setFiltroTexto] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [volverAlCerrarAlerta, setVolverAlCerrarAlerta] = useState(false);
+  const [guardadoExitoso, setGuardadoExitoso] = useState(false);
+  const [confirmarCancelar, setConfirmarCancelar] = useState(false);
   const [alerta, setAlerta] = useState<{
     visible: boolean;
     titulo: string;
@@ -45,7 +59,14 @@ export default function NotasScreen() {
     tipo: "error" | "exito";
   }>({ visible: false, titulo: "", mensaje: "", tipo: "exito" });
 
+  const esEdicion = modo === "editar";
   const notasExistentes = useNotasPorSeccion(seccionId ?? null, nombreExamen, subseccionPath);
+
+  useEffect(() => {
+    if (esEdicion && nombreExamenParam) {
+      setNombreExamen(String(nombreExamenParam).replace(/\//g, "-"));
+    }
+  }, [esEdicion, nombreExamenParam]);
 
   // Resolver nombres de alumnos
   useEffect(() => {
@@ -72,11 +93,50 @@ export default function NotasScreen() {
   // Precargar notas existentes cuando cambia el nombre del examen
   useEffect(() => {
     const preloaded: Record<string, string> = {};
+    const preloadedAusentes: Record<string, boolean> = {};
     notasExistentes.forEach((nota, alumnoId) => {
-      preloaded[alumnoId] = String(nota);
+      if (esNotaAusente(nota)) {
+        preloaded[alumnoId] = "";
+        preloadedAusentes[alumnoId] = true;
+      } else {
+        preloaded[alumnoId] = formatearValorNota(nota);
+        preloadedAusentes[alumnoId] = false;
+      }
     });
     setNotasInput(preloaded);
+    setAusentes(preloadedAusentes);
   }, [notasExistentes]);
+
+  const setNotaAlumno = (alumnoId: string, valor: string) => {
+    setNotasInput((prev) => ({ ...prev, [alumnoId]: valor }));
+    if (valor.trim()) {
+      setAusentes((prev) => ({ ...prev, [alumnoId]: false }));
+    }
+  };
+
+  const toggleAusente = (alumnoId: string) => {
+    setAusentes((prev) => {
+      const nextValue = !prev[alumnoId];
+      if (nextValue) {
+        setNotasInput((notasPrev) => ({ ...notasPrev, [alumnoId]: "" }));
+      }
+      return { ...prev, [alumnoId]: nextValue };
+    });
+  };
+
+  const desmarcarAusente = (alumnoId: string) => {
+    if (ausentes[alumnoId]) {
+      setAusentes((prev) => ({ ...prev, [alumnoId]: false }));
+    }
+  };
+
+  const cerrarAlerta = () => {
+    setAlerta((prev) => ({ ...prev, visible: false }));
+    if (volverAlCerrarAlerta) {
+      setVolverAlCerrarAlerta(false);
+      router.back();
+    }
+  };
 
   const handleGuardar = async () => {
     if (!nombreExamen.trim()) {
@@ -94,12 +154,24 @@ export default function NotasScreen() {
       moduloId: string;
       seccionId: string;
       nombreExamen: string;
-      nota: number;
+      nota: ValorNota;
       subseccionPath?: string;
     }[] = [];
 
     for (const [alumnoId, valorStr] of Object.entries(notasInput)) {
-      if (!valorStr.trim()) continue;
+      const estaAusente = ausentes[alumnoId] === true;
+      if (!valorStr.trim() && !estaAusente) continue;
+      if (estaAusente) {
+        notasAGuardar.push({
+          alumnoId,
+          moduloId,
+          seccionId,
+          subseccionPath,
+          nombreExamen: nombreExamen.trim(),
+          nota: "Ausente",
+        });
+        continue;
+      }
       const valor = parseFloat(valorStr.replace(",", "."));
       if (isNaN(valor) || valor < 0 || valor > 10) {
         const nombre = nombresAlumnos[alumnoId] ?? alumnoId;
@@ -121,7 +193,7 @@ export default function NotasScreen() {
       });
     }
 
-    if (notasAGuardar.length === 0) {
+    if (notasAGuardar.length === 0 && !esEdicion) {
       setAlerta({
         visible: true,
         titulo: "Sin notas",
@@ -132,15 +204,25 @@ export default function NotasScreen() {
     }
 
     setGuardando(true);
+    setGuardadoExitoso(true);
     try {
-      await guardarNotas(notasAGuardar);
+      if (esEdicion) {
+        await reemplazarNotasPorExamen(seccionId, nombreExamen.trim(), notasAGuardar, subseccionPath);
+      } else {
+        await guardarNotas(notasAGuardar);
+      }
+      setVolverAlCerrarAlerta(true);
       setAlerta({
         visible: true,
-        titulo: "Notas guardadas",
-        mensaje: `Se guardaron ${notasAGuardar.length} nota(s) para "${nombreExamen.trim()}".`,
+        titulo: esEdicion ? "Cambios guardados" : "Notas guardadas",
+        mensaje: esEdicion
+          ? `Se actualizaron ${notasAGuardar.length} nota(s) de "${nombreExamen.trim()}".`
+          : `Se guardaron ${notasAGuardar.length} nota(s) para "${nombreExamen.trim()}".`,
         tipo: "exito",
       });
     } catch {
+      setGuardadoExitoso(false);
+      setVolverAlCerrarAlerta(false);
       setAlerta({
         visible: true,
         titulo: "Error",
@@ -155,7 +237,7 @@ export default function NotasScreen() {
   if (loadingRol) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
-        <ScreenHeader titulo="Cargar Notas" mostrarHome />
+        <ScreenHeader titulo={esEdicion ? "Editar Notas" : "Cargar Notas"} mostrarHome />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#25B471" />
         </View>
@@ -166,11 +248,28 @@ export default function NotasScreen() {
   if (rol !== "admin" && rol !== "profesor") {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
-        <ScreenHeader titulo="Cargar Notas" onBack={() => router.back()} mostrarHome />
+        <ScreenHeader titulo={esEdicion ? "Editar Notas" : "Cargar Notas"} onBack={() => router.back()} mostrarHome />
         <View style={styles.centered}>
           <Ionicons name="lock-closed-outline" size={48} color="#CBD5E0" />
           <Text style={styles.sinPermisoText}>
             No tenés permiso para acceder a esta pantalla.
+          </Text>
+          <TouchableOpacity style={styles.volverBtn} onPress={() => router.back()}>
+            <Text style={styles.volverBtnText}>Volver</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  if (esEdicion && rol !== "admin") {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="Editar Notas" onBack={() => router.back()} mostrarHome />
+        <View style={styles.centered}>
+          <Ionicons name="lock-closed-outline" size={48} color="#CBD5E0" />
+          <Text style={styles.sinPermisoText}>
+            No tenés permiso para editar notas existentes.
           </Text>
           <TouchableOpacity style={styles.volverBtn} onPress={() => router.back()}>
             <Text style={styles.volverBtnText}>Volver</Text>
@@ -193,7 +292,7 @@ export default function NotasScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScreenHeader titulo="Cargar Notas" onBack={() => router.back()} mostrarHome />
+      <ScreenHeader titulo={esEdicion ? "Editar Notas" : "Cargar Notas"} onBack={() => router.back()} mostrarHome />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -206,11 +305,28 @@ export default function NotasScreen() {
           placeholder="Escribí el nombre del exámen..."
           placeholderTextColor="#9CA3AF"
           value={nombreExamen}
-          onChangeText={(text) => setNombreExamen(text.replace(/\//g, "-"))}
+          onChangeText={(text) => {
+            setGuardadoExitoso(false);
+            setNombreExamen(text.replace(/\//g, "-"));
+          }}
+          editable={!esEdicion}
           autoCapitalize="sentences"
         />
 
-        
+        {!esEdicion &&
+          nombreExamen.trim() &&
+          notasExistentes.size > 0 &&
+          !guardadoExitoso &&
+          !guardando &&
+          !volverAlCerrarAlerta &&
+          !(alerta.visible && alerta.tipo === "exito") && (
+          <View style={styles.warningBox}>
+            <Ionicons name="alert-circle-outline" size={18} color="#B45309" />
+            <Text style={styles.warningText}>
+              Ya existen notas con ese nombre. Para modificar una tanda existente, usá el lápiz desde Ver Notas.
+            </Text>
+          </View>
+        )}
 
         {/* Lista de alumnos */}
         <Text style={styles.sectionLabel}>
@@ -248,34 +364,51 @@ export default function NotasScreen() {
                 {nombresAlumnos[insc.alumnoId] ?? "Cargando..."}
               </Text>
               <TextInput
-                style={styles.notaInput}
+                style={[styles.notaInput, ausentes[insc.alumnoId] && styles.notaInputDisabled]}
                 placeholder="—"
                 placeholderTextColor="#9CA3AF"
                 value={notasInput[insc.alumnoId] ?? ""}
-                onChangeText={(v) =>
-                  setNotasInput((prev) => ({ ...prev, [insc.alumnoId]: v }))
-                }
+                onChangeText={(v) => setNotaAlumno(insc.alumnoId, v)}
+                onFocus={() => desmarcarAusente(insc.alumnoId)}
                 keyboardType="numeric"
                 maxLength={5}
               />
+              <TouchableOpacity
+                style={[styles.ausenteBtn, ausentes[insc.alumnoId] && styles.ausenteBtnActive]}
+                onPress={() => toggleAusente(insc.alumnoId)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.ausenteBtnText, ausentes[insc.alumnoId] && styles.ausenteBtnTextActive]}>
+                  Ausente
+                </Text>
+              </TouchableOpacity>
             </View>
           ))
         )}
 
-        <TouchableOpacity
-          style={[styles.saveBtn, guardando && styles.saveBtnDisabled]}
-          onPress={handleGuardar}
-          disabled={guardando || loadingInscripciones}
-        >
-          {guardando ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <ActivityIndicator color="#FFFFFF" />
-              <Text style={styles.saveBtnText}>Guardando...</Text>
-            </View>
-          ) : (
-            <Text style={styles.saveBtnText}>Guardar Notas</Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.actionsRow}>
+          <TouchableOpacity
+            style={[styles.cancelBtn, guardando && styles.saveBtnDisabled]}
+            onPress={() => setConfirmarCancelar(true)}
+            disabled={guardando}
+          >
+            <Text style={styles.cancelBtnText}>Cancelar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.saveBtn, guardando && styles.saveBtnDisabled]}
+            onPress={handleGuardar}
+            disabled={guardando || loadingInscripciones}
+          >
+            {guardando ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <ActivityIndicator color="#FFFFFF" />
+                <Text style={styles.saveBtnText}>Guardando...</Text>
+              </View>
+            ) : (
+              <Text style={styles.saveBtnText}>{esEdicion ? "Guardar Cambios" : "Guardar Notas"}</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <ModalAlerta
@@ -283,7 +416,19 @@ export default function NotasScreen() {
         titulo={alerta.titulo}
         mensaje={alerta.mensaje}
         tipo={alerta.tipo}
-        onClose={() => setAlerta((prev) => ({ ...prev, visible: false }))}
+        onClose={cerrarAlerta}
+      />
+      <ModalConfirmacion
+        visible={confirmarCancelar}
+        titulo="Salir sin guardar"
+        mensaje="¿Querés salir sin guardar los cambios?"
+        textoConfirmar="Salir"
+        textoCancelar="Seguir editando"
+        onConfirm={() => {
+          setConfirmarCancelar(false);
+          router.back();
+        }}
+        onCancel={() => setConfirmarCancelar(false)}
       />
     </KeyboardAvoidingView>
   );
@@ -377,13 +522,75 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#0F4A32",
   },
+  notaInputDisabled: {
+    color: "#9CA3AF",
+    backgroundColor: "#F3F4F6",
+  },
+  ausenteBtn: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+  },
+  ausenteBtnActive: {
+    borderColor: "#25B471",
+    backgroundColor: "#E8F5E9",
+  },
+  ausenteBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  ausenteBtnTextActive: {
+    color: "#0F4A32",
+  },
+  warningBox: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 10,
+  },
+  warningText: {
+    flex: 1,
+    color: "#92400E",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
   saveBtn: {
+    flex: 1,
     backgroundColor: "#25B471",
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
     justifyContent: "center",
+  },
+  actionsRow: {
+    flexDirection: "row",
+    gap: 10,
     marginTop: 28,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#D1D5DB",
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnText: {
+    color: "#374151",
+    fontSize: 16,
+    fontWeight: "700",
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
