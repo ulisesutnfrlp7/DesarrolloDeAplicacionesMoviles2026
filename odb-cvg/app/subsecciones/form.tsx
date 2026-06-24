@@ -3,11 +3,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, Share, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import { db } from "../../config/firebaseConfig";
+import { generarCodigoAleatorio } from "../../hooks/useInscripciones";
 import { useSubsecciones } from "../../hooks/useSubsecciones";
 import { useUserRole } from "../../hooks/useUserRole";
 
@@ -31,7 +32,11 @@ export default function SubseccionFormScreen() {
   const { crearSubseccion, actualizarSubseccion } = useSubsecciones(moduloId, seccionId, resolvedParentPath);
 
   const [titulo, setTitulo] = useState("");
+  const [esRestringida, setEsRestringida] = useState(false);
+  const [codigoAcceso, setCodigoAcceso] = useState("");
   const [permiteCargaProfesor, setPermiteCargaProfesor] = useState(false);
+  const [permiteNotas, setPermiteNotas] = useState(false);
+  const [permitePlanillas, setPermitePlanillas] = useState(false);
   const [cargandoDatos, setCargandoDatos] = useState(modoEdicion);
   const [guardando, setGuardando] = useState(false);
   const [hayCambios, setHayCambios] = useState(false);
@@ -65,7 +70,11 @@ export default function SubseccionFormScreen() {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setTitulo(data.titulo ?? "");
+          setEsRestringida(data.esRestringida ?? false);
+          setCodigoAcceso(data.codigoAcceso ?? "");
           setPermiteCargaProfesor(data.permiteCargaProfesor ?? false);
+          setPermiteNotas(data.permiteNotas ?? false);
+          setPermitePlanillas(data.permitePlanillas ?? false);
         }
       } catch (error) {
         console.error("Error al cargar subsección:", error);
@@ -89,7 +98,14 @@ export default function SubseccionFormScreen() {
     }
     setGuardando(true);
     try {
-      const data = { titulo: titulo.trim(), permiteCargaProfesor };
+      const data = {
+        titulo: titulo.trim(),
+        esRestringida,
+        codigoAcceso: esRestringida ? (codigoAcceso || generarCodigoAleatorio()) : null,
+        permiteCargaProfesor,
+        permiteNotas,
+        permitePlanillas,
+      };
       if (modoEdicion && currentSubseccionPath) {
         await actualizarSubseccion(currentSubseccionPath, data);
         setAlerta({
@@ -180,7 +196,7 @@ export default function SubseccionFormScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}>
       <ScreenHeader
         titulo={modoEdicion ? "Editar Subsección" : "Nueva Subsección"}
         onBack={handleAtras}
@@ -205,6 +221,54 @@ export default function SubseccionFormScreen() {
         />
 
         <View style={styles.profesorSection}>
+          <Text style={styles.profesorSectionTitulo}>Control de acceso</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Requerir codigo de inscripcion</Text>
+              <Text style={styles.switchHint}>
+                Los alumnos deberan ingresar un codigo para acceder a esta subseccion.
+              </Text>
+            </View>
+            <Switch
+              value={esRestringida}
+              onValueChange={(v) => {
+                setEsRestringida(v);
+                if (v && !codigoAcceso) {
+                  setCodigoAcceso(generarCodigoAleatorio());
+                }
+                if (!v) setCodigoAcceso("");
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          {esRestringida && codigoAcceso ? (
+            <View style={styles.codigoContainer}>
+              <Text style={styles.codigoLabel}>Codigo de acceso actual</Text>
+              <View style={styles.codigoRow}>
+                <Text style={styles.codigoText}>{codigoAcceso}</Text>
+                <TouchableOpacity
+                  style={styles.compartirBtn}
+                  onPress={() =>
+                    Share.share({
+                      message: `Codigo de acceso para ${titulo.trim()}: ${codigoAcceso}`,
+                    })
+                  }
+                >
+                  <Ionicons name="share-outline" size={16} color="#0F4A32" />
+                  <Text style={styles.compartirBtnText}>Compartir</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.codigoHint}>
+                Compartilo con los alumnos. Para rotarlo, usa el panel de administracion de accesos.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.profesorSection}>
           <Text style={styles.profesorSectionTitulo}>Permitir carga de profesores</Text>
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>
@@ -217,6 +281,49 @@ export default function SubseccionFormScreen() {
               value={permiteCargaProfesor}
               onValueChange={(v) => {
                 setPermiteCargaProfesor(v);
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
+        <View style={styles.profesorSection}>
+          <Text style={styles.profesorSectionTitulo}>Notas de exámenes</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Habilitar carga de notas</Text>
+              <Text style={styles.switchHint}>
+                Permite que admins y profesores carguen notas de exámenes para los alumnos inscriptos en esta sección.
+              </Text>
+            </View>
+            <Switch
+              value={permiteNotas}
+              onValueChange={(v) => {
+                setPermiteNotas(v);
+                setHayCambios(true);
+              }}
+              trackColor={{ false: "#E5E7EB", true: "#25B471" }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
+        <View style={styles.profesorSection}>
+          <Text style={styles.profesorSectionTitulo}>Planillas de trabajos practicos</Text>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Habilitar carga de planillas</Text>
+              <Text style={styles.switchHint}>
+                Permite que admins y profesores gestionen planillas de trabajos practicos,
+                trabajos clinicos o parcialitos para alumnos inscriptos en esta seccion.
+              </Text>
+            </View>
+            <Switch
+              value={permitePlanillas}
+              onValueChange={(v) => {
+                setPermitePlanillas(v);
                 setHayCambios(true);
               }}
               trackColor={{ false: "#E5E7EB", true: "#25B471" }}
@@ -278,7 +385,7 @@ export default function SubseccionFormScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
-  content: { padding: 20, paddingBottom: 40 },
+  content: { padding: 20, paddingBottom: 120 },
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -332,6 +439,49 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
     marginTop: 2,
+  },
+  codigoContainer: {
+    marginTop: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  codigoLabel: {
+    fontSize: 11,
+    color: "#6B7280",
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  codigoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  codigoText: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#0F4A32",
+    letterSpacing: 3,
+  },
+  compartirBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#E8F5E9",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  compartirBtnText: { color: "#0F4A32", fontWeight: "700", fontSize: 12 },
+  codigoHint: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginTop: 8,
   },
   actionButtons: {
     flexDirection: "row",

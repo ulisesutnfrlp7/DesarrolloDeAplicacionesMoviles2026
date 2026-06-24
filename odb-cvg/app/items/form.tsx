@@ -15,6 +15,7 @@ import { useUserRole } from "../../hooks/useUserRole";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "texto", label: "Texto", icono: "document-text-outline" },
@@ -23,7 +24,21 @@ const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "imagen", label: "Imagen", icono: "image-outline" },
   { key: "video", label: "Video", icono: "videocam-outline" },
   { key: "documento", label: "Doc.", icono: "attach-outline" },
+  { key: "entrega", label: "Entrega", icono: "cloud-upload-outline" },
 ];
+
+const formatearFecha = (iso: string) => {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+};
+
+const detectarTipoArchivo = (nombre: string): ItemTipo => {
+  const ext = nombre.split(".").pop()?.toLowerCase() ?? "";
+  if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) return "imagen";
+  if (["mp4", "mov", "avi", "mkv"].includes(ext)) return "video";
+  if (ext === "pdf") return "pdf";
+  return "documento";
+};
 
 export default function ItemFormScreen() {
   const { moduloId, seccionId, subseccionId, subseccionPath, itemId } = useLocalSearchParams<{
@@ -52,6 +67,9 @@ export default function ItemFormScreen() {
     url: string;
     storageRef: string;
   } | null>(null);
+
+  const [mostrarDatePicker, setMostrarDatePicker] = useState(false);
+
   const [permiteCargaProfesor, setPermiteCargaProfesor] = useState(false);
   const [cargandoPermiso, setCargandoPermiso] = useState(true);
   const [cargandoDatos, setCargandoDatos] = useState(!!itemId);
@@ -130,6 +148,19 @@ export default function ItemFormScreen() {
               url: data.url ?? "",
               storageRef: data.storageRef ?? "",
             });
+          }
+          if (data.tipo === "enlace") {
+            setUrlEnlace(data.url ?? "");
+          }
+          if (data.tipo === "entrega") {
+            setUrlEnlace(data.fechaLimite ?? "");
+            if (data.archivoConsignaUrl) {
+              setArchivoExistente({
+                nombre: data.archivoConsignaNombre ?? "",
+                url: data.archivoConsignaUrl ?? "",
+                storageRef: data.archivoConsignaStorageRef ?? "",
+              });
+            }
           }
         }
       } catch (error) {
@@ -325,7 +356,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
       setAlerta({ visible: true, titulo: "Campo requerido", mensaje: "Por favor ingresá un enlace válido.", tipo: "error", cerrarAlSalir: false });
       return;
     }
-    if (tipo !== "texto" && tipo !== "enlace" && !archivo && !modoEdicion) {
+    if (tipo !== "texto" && tipo !== "enlace" && tipo !== "entrega" && !archivo && !modoEdicion) {
       setAlerta({ visible: true, titulo: "Sin archivo", mensaje: "Por favor seleccioná un archivo.", tipo: "error", cerrarAlSalir: false });
       return;
     }
@@ -333,42 +364,84 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
     setSubiendo(true);
     try {
       if (modoEdicion && itemId) {
-        if (tipo === "texto") {
-          await actualizarItem(itemId, { titulo: titulo.trim() || "Texto", contenido: contenido.trim() });
-        } else if (tipo === "enlace") {
-          await actualizarItem(itemId, { titulo: titulo.trim() || "Enlace", url: urlEnlace.trim() });
-        } else if (archivo) {
-          const cloudRes = await uploadToCloudinary(archivo.uri, tipo, archivo.nombre);
-          
-          await actualizarItem(itemId, {
-            titulo: titulo.trim() || archivo.nombre,
-            url: cloudRes.url,
-            storageRef: cloudRes.publicId,
-            nombreArchivo: archivo.nombre,
-          });
-        } else {
-          await actualizarItem(itemId, { titulo: titulo.trim() || archivoExistente?.nombre || "" });
-        }
-        setAlerta({ visible: true, titulo: "Actualizado", mensaje: "El elemento fue actualizado correctamente.", tipo: "exito", cerrarAlSalir: true });
-      } else {
-        if (tipo === "texto") {
-           await crearItem({ tipo: "texto", titulo: titulo.trim() || "Texto", contenido: contenido.trim(), url: "", storageRef: "", nombreArchivo: "" });
-        } else if (tipo === "enlace") {
-           await crearItem({ tipo: "enlace", titulo: titulo.trim() || "Enlace", contenido: "", url: urlEnlace.trim(), storageRef: "", nombreArchivo: "" });
-        } else {
-          const cloudRes = await uploadToCloudinary(archivo!.uri, tipo, archivo!.nombre);
-          
-          await crearItem({
-            tipo,
-            titulo: titulo.trim() || archivo!.nombre,
-            contenido: "",
-            url: cloudRes.url,
-            storageRef: cloudRes.publicId,
-            nombreArchivo: archivo!.nombre,
-          });
-        }
-        setAlerta({ visible: true, titulo: "Guardado", mensaje: "El elemento fue agregado correctamente.", tipo: "exito", cerrarAlSalir: true });
-      }
+  // ── EDICIÓN ──
+  if (tipo === "texto") {
+    await actualizarItem(itemId, { titulo: titulo.trim() || "Texto", contenido: contenido.trim() });
+  } else if (tipo === "enlace") {
+    await actualizarItem(itemId, { titulo: titulo.trim() || "Enlace", url: urlEnlace.trim() });
+  } else if (tipo === "entrega") {
+  let extra: Record<string, any> = {};
+  if (archivo) {
+    const tipoArchivo = detectarTipoArchivo(archivo.nombre);
+    const cloudRes = await uploadToCloudinary(archivo.uri, tipoArchivo, archivo.nombre);
+    extra = {
+      archivoConsignaUrl: cloudRes.url,
+      archivoConsignaStorageRef: cloudRes.publicId,
+      archivoConsignaNombre: archivo.nombre,
+      archivoConsignaTipo: tipoArchivo,
+    };
+  }
+  await actualizarItem(itemId, {
+    titulo: titulo.trim() || "Entrega",
+    contenido: contenido.trim(),
+    descripcionEntrega: contenido.trim(),
+    fechaLimite: urlEnlace.trim() || null,
+    ...extra,
+  });
+  } else if (archivo) {
+    const cloudRes = await uploadToCloudinary(archivo.uri, tipo, archivo.nombre);
+    await actualizarItem(itemId, {
+      titulo: titulo.trim() || archivo.nombre,
+      url: cloudRes.url,
+      storageRef: cloudRes.publicId,
+      nombreArchivo: archivo.nombre,
+    });
+  } else {
+    await actualizarItem(itemId, { titulo: titulo.trim() || archivoExistente?.nombre || "" });
+  }
+  setAlerta({ visible: true, titulo: "Actualizado", mensaje: "El elemento fue actualizado correctamente.", tipo: "exito", cerrarAlSalir: true });
+} else {
+  // ── CREACIÓN ──
+  if (tipo === "texto") {
+    await crearItem({ tipo: "texto", titulo: titulo.trim() || "Texto", contenido: contenido.trim(), url: "", storageRef: "", nombreArchivo: "" });
+  } else if (tipo === "enlace") {
+    await crearItem({ tipo: "enlace", titulo: titulo.trim() || "Enlace", contenido: "", url: urlEnlace.trim(), storageRef: "", nombreArchivo: "" });
+  } else if (tipo === "entrega") {
+  let extra: Record<string, any> = {};
+  if (archivo) {
+    const tipoArchivo = detectarTipoArchivo(archivo.nombre);
+    const cloudRes = await uploadToCloudinary(archivo.uri, tipoArchivo, archivo.nombre);
+    extra = {
+      archivoConsignaUrl: cloudRes.url,
+      archivoConsignaStorageRef: cloudRes.publicId,
+      archivoConsignaNombre: archivo.nombre,
+      archivoConsignaTipo: tipoArchivo,
+    };
+  }
+  await crearItem({
+    tipo: "entrega",
+    titulo: titulo.trim() || "Entrega",
+    contenido: contenido.trim(),
+    url: "",
+    storageRef: "",
+    nombreArchivo: "",
+    descripcionEntrega: contenido.trim(),
+    fechaLimite: urlEnlace.trim() || null,
+    ...extra,
+  });
+  } else {
+    const cloudRes = await uploadToCloudinary(archivo!.uri, tipo, archivo!.nombre);
+    await crearItem({
+      tipo,
+      titulo: titulo.trim() || archivo!.nombre,
+      contenido: "",
+      url: cloudRes.url,
+      storageRef: cloudRes.publicId,
+      nombreArchivo: archivo!.nombre,
+    });
+  }
+  setAlerta({ visible: true, titulo: "Guardado", mensaje: "El elemento fue agregado correctamente.", tipo: "exito", cerrarAlSalir: true });
+}
     } catch (error) {
       console.error(error);
       setAlerta({ visible: true, titulo: "Error", mensaje: "No se pudo guardar el archivo. Intentá nuevamente.", tipo: "error", cerrarAlSalir: false });
@@ -438,7 +511,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
   }
 
   return (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}>
         <ScreenHeader
           titulo={modoEdicion ? "Editar elemento" : "Agregar elemento"}
           onBack={handleAtras}
@@ -544,11 +617,66 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
           </>
         )}
 
+        {tipo === "entrega" && (
+          <>
+            <Text style={styles.label}>Consigna / Descripción</Text>
+            <TextInput
+              style={[styles.input, styles.inputMultiline]}
+              placeholder="Describí qué deben entregar los alumnos..."
+              placeholderTextColor="#9CA3AF"
+              value={contenido}
+              onChangeText={(v) => { setContenido(v); setHayCambios(true); }}
+              multiline
+              textAlignVertical="top"
+              autoCorrect={true}
+              autoCapitalize="sentences"
+            />
+
+            <Text style={styles.label}>Fecha límite (opcional)</Text>
+            <TouchableOpacity style={styles.input} onPress={() => setMostrarDatePicker(true)}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 15, color: urlEnlace ? "#11181C" : "#9CA3AF" }}>
+                  {urlEnlace ? formatearFecha(urlEnlace) : "Sin fecha límite"}
+                </Text>
+                <Ionicons name="calendar-outline" size={20} color="#6B7280" />
+              </View>
+            </TouchableOpacity>
+            {urlEnlace ? (
+              <TouchableOpacity
+                onPress={() => { setUrlEnlace(""); setHayCambios(true); }}
+                style={{ alignSelf: "flex-start", marginTop: 8 }}
+              >
+                <Text style={{ color: "#DC2626", fontSize: 13, fontWeight: "600" }}>Quitar fecha límite</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {mostrarDatePicker && (
+              <DateTimePicker
+                value={urlEnlace ? new Date(`${urlEnlace}T00:00:00`) : new Date()}
+                mode="date"
+                minimumDate={new Date()}
+                onChange={(_event, selectedDate) => {
+                  setMostrarDatePicker(false);
+                  if (selectedDate) {
+                    const iso = selectedDate.toISOString().split("T")[0];
+                    setUrlEnlace(iso);
+                    setHayCambios(true);
+                  }
+                }}
+              />
+            )}
+          </>
+        )}
+
         {/* Selector de archivo para tipos que NO son texto y NO son enlace */}
         {(tipo !== "texto" && tipo !== "enlace") && (
           <>
             <Text style={styles.label}>
-              Archivo{!modoEdicion && <Text style={styles.required}> *</Text>}
+              {tipo === "entrega" ? (
+                "Archivo adjunto a la consigna (opcional)"
+              ) : (
+                <>Archivo{!modoEdicion && <Text style={styles.required}> *</Text>}</>
+              )}
             </Text>
 
             {modoEdicion && archivoExistente && !archivo && (
@@ -681,7 +809,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
-  content: { padding: 20, paddingBottom: 48 },
+  content: { padding: 20, paddingBottom: 120 },
   centered: {
     flex: 1,
     justifyContent: "center",

@@ -1,10 +1,10 @@
 //hooks/useItems.ts
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { auth, db } from "../config/firebaseConfig";
 import CryptoJS from 'crypto-js';
 
-export type ItemTipo = "texto" | "pdf" | "imagen" | "documento" | "video" | "enlace";
+export type ItemTipo = "texto" | "pdf" | "imagen" | "documento" | "video" | "enlace" | "entrega";
 
 export interface Item {
   id: string;
@@ -17,6 +17,12 @@ export interface Item {
   creadoPor: string;
   fechaCreacion: any;
   fechaActualizacion: any;
+  descripcionEntrega?: string;
+  fechaLimite?: string | null;
+  archivoConsignaUrl?: string;
+  archivoConsignaNombre?: string;
+  archivoConsignaStorageRef?: string;
+  archivoConsignaTipo?: ItemTipo;
 }
 
 export type ItemInput = Omit<Item, "id" | "creadoPor" | "fechaCreacion" | "fechaActualizacion">;
@@ -58,50 +64,30 @@ const deleteFromCloudinary = async (publicId: string, tipo: ItemTipo) => {
 const getItemsCollection = (
   moduloId: string,
   seccionId: string,
-  subseccionPath?: string,
+  subseccionPath?: string | string[],
 ) => {
-  const subseccionSegments = (subseccionPath ?? "")
-    .split("/")
+  const rawPath = Array.isArray(subseccionPath) ? subseccionPath.join("/") : (subseccionPath ?? "");
+  const pathStr = decodeURIComponent(rawPath);
+
+  const subseccionSegments = pathStr
+    .split(/[\/,]/)
     .map((segment) => segment.trim())
     .filter(Boolean)
     .flatMap((id) => ["subsecciones", id]);
 
-  return collection(
-    db,
-    "modulos",
-    moduloId,
-    "secciones",
-    seccionId,
-    ...subseccionSegments,
-    "items",
-  );
+  return collection(db, "modulos", moduloId, "secciones", seccionId, ...subseccionSegments, "items");
 };
 
 const getItemDoc = (
   moduloId: string,
   seccionId: string,
   itemId: string,
-  subseccionPath?: string,
+  subseccionPath?: string | string[],
 ) => {
-  const subseccionSegments = (subseccionPath ?? "")
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .flatMap((id) => ["subsecciones", id]);
-
-  return doc(
-    db,
-    "modulos",
-    moduloId,
-    "secciones",
-    seccionId,
-    ...subseccionSegments,
-    "items",
-    itemId,
-  );
+  return doc(getItemsCollection(moduloId, seccionId, subseccionPath), itemId);
 };
 
-export function useItems(moduloId: string, seccionId: string, subseccionPath?: string) {
+export function useItems(moduloId: string, seccionId: string, subseccionPath?: string | string[]) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -149,8 +135,21 @@ export function useItems(moduloId: string, seccionId: string, subseccionPath?: s
       if (item.url && item.url.includes("firebasestorage")) {
         console.log("[ELIMINAR] Era un archivo viejo de Firebase. Se omite Cloudinary.");
       } else {
-        console.log(`[ELIMINAR] Mandando a borrar publicId: ${item.storageRef}`);
         await deleteFromCloudinary(item.storageRef, item.tipo);
+      }
+    }
+
+    if (item.tipo === "entrega" && item.archivoConsignaStorageRef) {
+      await deleteFromCloudinary(item.archivoConsignaStorageRef, item.archivoConsignaTipo ?? "documento");
+    }
+
+    if (item.tipo === "entrega") {
+      const itemDocRef = getItemDoc(moduloId, seccionId, item.id, subseccionPath);
+      const entregasSnap = await getDocs(collection(itemDocRef, "entregas_alumnos"));
+      if (!entregasSnap.empty) {
+        const batch = writeBatch(db);
+        entregasSnap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
       }
     }
 

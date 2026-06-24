@@ -15,11 +15,37 @@
         { "fieldPath": "seccionId", "order": "ASCENDING" },
         { "fieldPath": "fechaInscripcion", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "notas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "seccionId", "order": "ASCENDING" },
+        { "fieldPath": "nombreExamen", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "seccionId", "order": "ASCENDING" },
+        { "fieldPath": "alumnoId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
     {
       "collectionGroup": "secciones",
+      "fieldPath": "esRestringida",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "subsecciones",
       "fieldPath": "esRestringida",
       "indexes": [
         {

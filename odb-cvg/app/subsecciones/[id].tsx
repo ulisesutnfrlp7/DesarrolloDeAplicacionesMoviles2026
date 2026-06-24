@@ -2,14 +2,19 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Markdown from "react-native-markdown-display";
+import MatriculacionModal from "../../components/ui/MatriculacionModal";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
-import { db } from "../../config/firebaseConfig";
+import { auth, db } from "../../config/firebaseConfig";
+import {
+  useContextoInscripcionEfectivo,
+  useMisInscripciones,
+} from "../../hooks/useInscripciones";
 import type { Item } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
 import type { Subseccion } from "../../hooks/useSubsecciones";
@@ -36,6 +41,16 @@ export default function SubseccionDetalleScreen() {
   const [loadingSubseccion, setLoadingSubseccion] = useState(true);
   const [itemAEliminar, setItemAEliminar] = useState<Item | null>(null);
   const [subseccionAEliminar, setSubseccionAEliminar] = useState<string | null>(null);
+  const [modalMatriculacion, setModalMatriculacion] = useState(false);
+  const [subseccionMatricular, setSubseccionMatricular] = useState<{
+    subseccion: Subseccion;
+    path: string;
+  } | null>(null);
+  const [accesoRestringidoActual, setAccesoRestringidoActual] = useState<{
+    titulo: string;
+    codigoAcceso: string;
+    subseccionPath?: string;
+  } | null>(null);
   const [alerta, setAlerta] = useState<{
     visible: boolean;
     titulo: string;
@@ -64,10 +79,75 @@ export default function SubseccionDetalleScreen() {
 
   const esAdmin = rol === "admin";
   const esProfesor = rol === "profesor";
+  const puedeAccederComoDocente = esAdmin || esProfesor;
   const puedeGestionarEstructura = esAdmin;
   const puedeEditarEliminarItems = esAdmin;
   const puedeCrearItems =
     esAdmin || (esProfesor && subseccion?.permiteCargaProfesor === true);
+  const uid = auth.currentUser?.uid ?? null;
+  const {
+    contexto: contextoAccesoActual,
+    loading: loadingContextoAcceso,
+  } = useContextoInscripcionEfectivo(moduloId, seccionId, currentSubseccionPath);
+  const { accesosInscritos, loading: loadingInscripciones } = useMisInscripciones(
+    !loadingRol && !puedeAccederComoDocente ? uid : null,
+  );
+  const accesoKey = contextoAccesoActual?.tipoAcceso === "subseccion"
+    ? `${seccionId}::${contextoAccesoActual.subseccionPath ?? ""}`
+    : seccionId;
+  const noInscripto =
+    contextoAccesoActual?.requiereInscripcion === true &&
+    !puedeAccederComoDocente &&
+    !accesosInscritos.has(accesoKey);
+
+  useEffect(() => {
+    let activo = true;
+    const cargarDetalleAcceso = async () => {
+      if (!contextoAccesoActual?.requiereInscripcion || !moduloId || !seccionId) {
+        setAccesoRestringidoActual(null);
+        return;
+      }
+
+      try {
+        const ref = contextoAccesoActual.tipoAcceso === "subseccion"
+          ? doc(
+              db,
+              "modulos",
+              moduloId,
+              "secciones",
+              seccionId,
+              ...contextoAccesoActual.subseccionPath!
+                .split("/")
+                .filter(Boolean)
+                .flatMap((subId) => ["subsecciones", subId]),
+            )
+          : doc(db, "modulos", moduloId, "secciones", seccionId);
+        const snap = await getDoc(ref);
+        if (!activo) return;
+        const data = snap.exists() ? snap.data() : {};
+        setAccesoRestringidoActual({
+          titulo: data.titulo ?? subseccion?.titulo ?? "Acceso restringido",
+          codigoAcceso: data.codigoAcceso ?? "",
+          subseccionPath: contextoAccesoActual.tipoAcceso === "subseccion"
+            ? contextoAccesoActual.subseccionPath
+            : undefined,
+        });
+      } catch {
+        if (activo) {
+          setAccesoRestringidoActual({
+            titulo: subseccion?.titulo ?? "Acceso restringido",
+            codigoAcceso: subseccion?.codigoAcceso ?? "",
+            subseccionPath: contextoAccesoActual.subseccionPath,
+          });
+        }
+      }
+    };
+
+    cargarDetalleAcceso();
+    return () => {
+      activo = false;
+    };
+  }, [contextoAccesoActual, moduloId, seccionId, subseccion]);
 
   const handleEliminarItem = async () => {
     if (!itemAEliminar) return;
@@ -117,7 +197,7 @@ export default function SubseccionDetalleScreen() {
     await WebBrowser.openBrowserAsync(url);
   };
 
-  if (loadingSubseccion || loadingRol) {
+  if (loadingSubseccion || loadingRol || loadingContextoAcceso) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />
@@ -139,6 +219,52 @@ export default function SubseccionDetalleScreen() {
     );
   }
 
+  if (
+    contextoAccesoActual?.requiereInscripcion &&
+    !puedeAccederComoDocente &&
+    (loadingInscripciones || !accesoRestringidoActual)
+  ) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo={subseccion.titulo} mostrarHome />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#25B471" />
+        </View>
+      </View>
+    );
+  }
+
+  if (noInscripto) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo={subseccion.titulo} mostrarHome />
+        <View style={styles.centered}>
+          <Ionicons name="lock-closed-outline" size={52} color="#CBD5E0" />
+          <Text style={styles.accesoDenegadoTitulo}>Acceso restringido</Text>
+          <Text style={styles.accesoDenegadoTexto}>
+            No estas inscripto en esta subseccion.
+          </Text>
+          <TouchableOpacity style={styles.volverBtn} onPress={() => setModalMatriculacion(true)}>
+            <Text style={styles.volverBtnText}>Ingresar codigo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.volverBtn, { backgroundColor: "#6B7280" }]} onPress={() => router.back()}>
+            <Text style={styles.volverBtnText}>Volver</Text>
+          </TouchableOpacity>
+        </View>
+        <MatriculacionModal
+          visible={modalMatriculacion}
+          onClose={() => setModalMatriculacion(false)}
+          onSuccess={() => setModalMatriculacion(false)}
+          moduloId={moduloId}
+          seccionId={seccionId}
+          subseccionPath={accesoRestringidoActual?.subseccionPath}
+          seccionTitulo={accesoRestringidoActual?.titulo ?? subseccion.titulo}
+          codigoActual={accesoRestringidoActual?.codigoAcceso ?? ""}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1 }}>
       <ScreenHeader titulo={subseccion.titulo} mostrarHome />
@@ -147,6 +273,76 @@ export default function SubseccionDetalleScreen() {
           style={styles.container}
           contentContainerStyle={styles.content}
         >
+          {subseccion.permiteNotas && (
+            <View style={styles.notasBanner}>
+              {(esAdmin || esProfesor) && (
+                <TouchableOpacity
+                  style={styles.notasBtnPrimario}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/secciones/notas",
+                      params: { moduloId, seccionId, subseccionPath: currentSubseccionPath },
+                    } as any)
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="create-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.notasBtnPrimarioText}>Cargar Notas</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.notasBtnSecundario,
+                  !(esAdmin || esProfesor) && { flex: 1 },
+                ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/secciones/mis-notas",
+                    params: { moduloId, seccionId, subseccionPath: currentSubseccionPath },
+                  } as any)
+                }
+                activeOpacity={0.85}
+              >
+                <Ionicons name="school-outline" size={18} color="#0F4A32" />
+                <Text style={styles.notasBtnSecundarioText}>Ver Notas</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {subseccion.permitePlanillas && (
+            <View style={styles.notasBanner}>
+              {(esAdmin || esProfesor) && (
+                <TouchableOpacity
+                  style={styles.notasBtnPrimario}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/secciones/planillas",
+                      params: { moduloId, seccionId, subseccionPath: currentSubseccionPath },
+                    } as any)
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="clipboard-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.notasBtnPrimarioText}>Cargar Planillas</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.notasBtnSecundario,
+                  !(esAdmin || esProfesor) && { flex: 1 },
+                ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/secciones/mis-planillas",
+                    params: { moduloId, seccionId, subseccionPath: currentSubseccionPath },
+                  } as any)
+                }
+                activeOpacity={0.85}
+              >
+                <Ionicons name="list-outline" size={18} color="#0F4A32" />
+                <Text style={styles.notasBtnSecundarioText}>Ver Planillas</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Contenido</Text>
           </View>
@@ -174,7 +370,12 @@ export default function SubseccionDetalleScreen() {
                 }
                 onEliminar={() => setItemAEliminar(item)}
                 onAbrirArchivo={handleAbrirArchivo}
-              />
+                onVerEntrega={() =>
+                  router.push(
+                    `/entregas/${item.id}?moduloId=${moduloId}&seccionId=${seccionId}&subseccionPath=${encodeURIComponent(currentSubseccionPath)}` as any
+                  )
+                }
+                              />
             ))
           )}
 
@@ -206,16 +407,31 @@ export default function SubseccionDetalleScreen() {
           ) : (
             subsecciones.map((subseccionHija) => {
               const childPath = `${currentSubseccionPath}/${subseccionHija.id}`;
+              const childAccessKey = `${seccionId}::${childPath}`;
+              const bloqueada =
+                !!subseccionHija.esRestringida &&
+                !puedeAccederComoDocente &&
+                !accesosInscritos.has(childAccessKey);
               return (
                 <SubseccionCard
                   key={subseccionHija.id}
                   subseccion={subseccionHija}
                   puedeGestionar={puedeGestionarEstructura}
-                  onPress={() =>
+                  bloqueada={bloqueada}
+                  inscripta={
+                    !!subseccionHija.esRestringida &&
+                    !puedeAccederComoDocente &&
+                    accesosInscritos.has(childAccessKey)
+                  }
+                  onPress={() => {
+                    if (bloqueada) {
+                      setSubseccionMatricular({ subseccion: subseccionHija, path: childPath });
+                      return;
+                    }
                     router.push(
                       `/subsecciones/${subseccionHija.id}?moduloId=${moduloId}&seccionId=${seccionId}&subseccionPath=${encodeURIComponent(childPath)}` as any,
-                    )
-                  }
+                    );
+                  }}
                   onEditar={() =>
                     router.push(
                       `/subsecciones/form?moduloId=${moduloId}&seccionId=${seccionId}&subseccionPath=${encodeURIComponent(childPath)}` as any,
@@ -246,7 +462,11 @@ export default function SubseccionDetalleScreen() {
       <ModalConfirmacion
         visible={itemAEliminar !== null}
         titulo="Eliminar Elemento"
-        mensaje="¿Estás seguro de que deseas eliminar este elemento? Esta acción es permanente."
+        mensaje={
+          itemAEliminar?.tipo === "entrega"
+            ? "Este apartado es una Entrega. Si la eliminás, también se borrarán TODAS las entregas que los alumnos hayan subido, junto con sus archivos, notas y retroalimentaciones. Esta acción es permanente."
+            : "¿Estás seguro de que deseas eliminar este elemento? Esta acción es permanente."
+        }
         textoConfirmar="Sí, eliminar"
         textoCancelar="Cancelar"
         onConfirm={handleEliminarItem}
@@ -268,6 +488,24 @@ export default function SubseccionDetalleScreen() {
         tipo={alerta.tipo}
         onClose={() => setAlerta((prev) => ({ ...prev, visible: false }))}
       />
+      <MatriculacionModal
+        visible={subseccionMatricular !== null}
+        onClose={() => setSubseccionMatricular(null)}
+        onSuccess={() => {
+          const target = subseccionMatricular;
+          setSubseccionMatricular(null);
+          if (target) {
+            router.push(
+              `/subsecciones/${target.subseccion.id}?moduloId=${moduloId}&seccionId=${seccionId}&subseccionPath=${encodeURIComponent(target.path)}` as any,
+            );
+          }
+        }}
+        moduloId={moduloId}
+        seccionId={seccionId}
+        subseccionPath={subseccionMatricular?.path}
+        seccionTitulo={subseccionMatricular?.subseccion.titulo ?? ""}
+        codigoActual={subseccionMatricular?.subseccion.codigoAcceso ?? ""}
+      />
     </View>
   );
 }
@@ -278,11 +516,14 @@ interface ItemCardProps {
   onEditar: () => void;
   onEliminar: () => void;
   onAbrirArchivo: (url: string) => void;
+  onVerEntrega?: () => void;
 }
 
 interface SubseccionCardProps {
   subseccion: Subseccion;
   puedeGestionar: boolean;
+  bloqueada?: boolean;
+  inscripta?: boolean;
   onPress: () => void;
   onEditar: () => void;
   onEliminar: () => void;
@@ -291,22 +532,30 @@ interface SubseccionCardProps {
 function SubseccionCard({
   subseccion,
   puedeGestionar,
+  bloqueada = false,
+  inscripta = false,
   onPress,
   onEditar,
   onEliminar,
 }: SubseccionCardProps) {
   return (
     <TouchableOpacity
-      style={styles.subseccionCard}
+      style={[styles.subseccionCard, bloqueada && styles.subseccionCardBloqueada]}
       onPress={onPress}
       activeOpacity={0.8}
     >
       <View style={styles.subseccionRow}>
         <View style={styles.subseccionLeft}>
-          <View style={styles.subseccionIconBg}>
-            <Ionicons name="folder-outline" size={18} color="#0F4A32" />
+          <View style={[styles.subseccionIconBg, bloqueada && styles.subseccionIconBgBloqueada]}>
+            <Ionicons
+              name={bloqueada ? "lock-closed-outline" : "folder-outline"}
+              size={18}
+              color={bloqueada ? "#9CA3AF" : "#0F4A32"}
+            />
           </View>
-          <Text style={styles.subseccionTitulo}>{subseccion.titulo}</Text>
+          <Text style={[styles.subseccionTitulo, bloqueada && styles.subseccionTituloBloqueada]}>
+            {subseccion.titulo}
+          </Text>
         </View>
         <View style={styles.subseccionRight}>
           {puedeGestionar && (
@@ -325,6 +574,18 @@ function SubseccionCard({
               </TouchableOpacity>
             </>
           )}
+          {subseccion.esRestringida && (bloqueada || inscripta) && (
+            <View style={[styles.badgeAcceso, bloqueada ? styles.badgeBloqueado : styles.badgeAccedido]}>
+              <Ionicons
+                name={bloqueada ? "lock-closed-outline" : "checkmark-circle-outline"}
+                size={11}
+                color={bloqueada ? "#9CA3AF" : "#0F4A32"}
+              />
+              <Text style={[styles.badgeAccesoText, bloqueada ? styles.badgeBloqueadoText : styles.badgeAccedidoText]}>
+                {inscripta ? "Inscripto" : "Bloqueado"}
+              </Text>
+            </View>
+          )}
           <Ionicons name="chevron-forward-outline" size={16} color="#CBD5E0" />
         </View>
       </View>
@@ -338,6 +599,7 @@ function ItemCard({
   onEditar,
   onEliminar,
   onAbrirArchivo,
+  onVerEntrega,
 }: ItemCardProps) {
   const iconoPorTipo: Record<string, string> = {
     pdf: "document-outline",
@@ -410,6 +672,35 @@ function ItemCard({
     );
   }
 
+  if (item.tipo === "entrega") {
+    return (
+      <TouchableOpacity
+        style={[styles.itemCard, { borderLeftWidth: 3, borderLeftColor: "#F59E0B" }]}
+        onPress={onVerEntrega}
+        activeOpacity={0.8}
+      >
+        <View style={styles.itemHeader}>
+          <View style={[styles.itemIconBg, { backgroundColor: "#FEF3C7" }]}>
+            <Ionicons name="cloud-upload-outline" size={18} color="#B45309" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.itemTitulo}>{item.titulo}</Text>
+            {item.descripcionEntrega ? (
+              <Text style={styles.itemNombreArchivo} numberOfLines={2}>
+                {item.descripcionEntrega}
+              </Text>
+            ) : null}
+            <Text style={[styles.itemNombreArchivo, { color: "#B45309" }]}>
+              {item.fechaLimite ? `Límite: ${item.fechaLimite}` : "Sin fecha límite"}
+            </Text>
+          </View>
+          {acciones}
+          <Ionicons name="chevron-forward-outline" size={16} color="#CBD5E0" />
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <TouchableOpacity
       style={styles.itemCard}
@@ -477,6 +768,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: "#25B471",
   },
+  subseccionCardBloqueada: {
+    opacity: 0.78,
+    borderLeftColor: "#CBD5E0",
+    backgroundColor: "#F9FAFB",
+  },
   subseccionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -496,13 +792,49 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  subseccionIconBgBloqueada: { backgroundColor: "#F3F4F6" },
   subseccionTitulo: { fontSize: 15, fontWeight: "600", color: "#11181C", flex: 1 },
+  subseccionTituloBloqueada: { color: "#6B7280" },
   subseccionRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     marginLeft: 8,
   },
+  badgeAcceso: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  badgeBloqueado: { backgroundColor: "#F3F4F6" },
+  badgeAccedido: { backgroundColor: "#E8F5E9" },
+  badgeAccesoText: { fontSize: 11, fontWeight: "700" },
+  badgeBloqueadoText: { color: "#9CA3AF" },
+  badgeAccedidoText: { color: "#0F4A32" },
+  accesoDenegadoTitulo: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#374151",
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  accesoDenegadoTexto: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  volverBtn: {
+    marginTop: 16,
+    backgroundColor: "#0F4A32",
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  volverBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
   emptyContainer: {
     flex: 1,
     alignItems: "center",
@@ -583,6 +915,43 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 10,
     backgroundColor: "#F3F4F6",
+  },
+  notasBanner: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  notasBtnPrimario: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#25B471",
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  notasBtnPrimarioText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  notasBtnSecundario: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 10,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  notasBtnSecundarioText: {
+    color: "#0F4A32",
+    fontWeight: "700",
+    fontSize: 14,
   },
 });
 

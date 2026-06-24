@@ -21244,4 +21244,3 @@ tsx
 ✅ Con esto, todos los campos de texto donde los usuarios escriban títulos o nombres van a tener **sugerencias de ortografía** y además se van a **capitalizar automáticamente las palabras**.
 
 ¿Querés que te arme un **CustomTextInput** que ya tenga `autoCorrect` y `autoCapitalize="words"` por defecto, para que lo uses en toda la app sin tener que repetir esas props en cada input?
-

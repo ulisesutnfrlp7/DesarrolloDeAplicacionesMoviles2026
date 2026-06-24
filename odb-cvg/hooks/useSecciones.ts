@@ -21,12 +21,16 @@ export interface Seccion {
   esRestringida?: boolean;
   codigoAcceso?: string | null;
   permiteCargaProfesor?: boolean;
+  permiteNotas?: boolean;
+  permitePlanillas?: boolean;
 }
 
 export type SeccionInput = Pick<Seccion, "titulo"> & {
   esRestringida?: boolean;
   codigoAcceso?: string | null;
   permiteCargaProfesor?: boolean;
+  permiteNotas?: boolean;
+  permitePlanillas?: boolean;
 };
 
 export function useSecciones(moduloId: string) {
@@ -64,6 +68,8 @@ export function useSecciones(moduloId: string) {
     await addDoc(collection(db, "modulos", moduloId, "secciones"), {
       ...data,
       permiteCargaProfesor: data.permiteCargaProfesor ?? false,
+      permiteNotas: data.permiteNotas ?? false,
+      permitePlanillas: data.permitePlanillas ?? false,
       creadoPor: user.uid,
       fechaCreacion: serverTimestamp(),
       fechaActualizacion: serverTimestamp(),

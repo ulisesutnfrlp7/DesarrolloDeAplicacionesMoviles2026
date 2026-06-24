@@ -1,22 +1,23 @@
 //app/secciones/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, } from "react-native";
 import Markdown from "react-native-markdown-display";
+import MatriculacionModal from "../../components/ui/MatriculacionModal";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
+import ScreenHeader from "../../components/ui/ScreenHeader";
 import { auth, db } from "../../config/firebaseConfig";
+import { useMisInscripciones } from "../../hooks/useInscripciones";
 import type { Item } from "../../hooks/useItems";
 import { useItems } from "../../hooks/useItems";
-import { useMisInscripciones } from "../../hooks/useInscripciones";
 import type { Seccion } from "../../hooks/useSecciones";
 import type { Subseccion } from "../../hooks/useSubsecciones";
 import { useSubsecciones } from "../../hooks/useSubsecciones";
 import { useUserRole } from "../../hooks/useUserRole";
-import ScreenHeader from "../../components/ui/ScreenHeader";
 
 export default function SeccionDetalleScreen() {
   const { id, moduloId } = useLocalSearchParams<{
@@ -35,6 +36,7 @@ export default function SeccionDetalleScreen() {
   const [loadingSeccion, setLoadingSeccion] = useState(true);
   const [itemAEliminar, setItemAEliminar] = useState<Item | null>(null);
   const [subseccionAEliminar, setSubseccionAEliminar] = useState<string | null>(null);
+  const [subseccionMatricular, setSubseccionMatricular] = useState<Subseccion | null>(null);
   const [alerta, setAlerta] = useState<{
     visible: boolean;
     titulo: string;
@@ -114,7 +116,7 @@ export default function SeccionDetalleScreen() {
     esAdmin || (esProfesor && seccion?.permiteCargaProfesor === true);
 
   const uid = auth.currentUser?.uid ?? null;
-  const { seccionesInscritas, loading: loadingInscripciones } = useMisInscripciones(
+  const { seccionesInscritas, accesosInscritos, loading: loadingInscripciones } = useMisInscripciones(
     !loadingRol && !puedeAccederComoDocente ? uid : null,
   );
 
@@ -186,6 +188,76 @@ export default function SeccionDetalleScreen() {
           style={styles.container}
           contentContainerStyle={styles.content}
         >
+          {seccion.permiteNotas && (
+            <View style={styles.notasBanner}>
+              {puedeAccederComoDocente && (
+                <TouchableOpacity
+                  style={styles.notasBtnPrimario}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/secciones/notas",
+                      params: { moduloId, seccionId: id },
+                    } as any)
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="create-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.notasBtnPrimarioText}>Cargar Notas</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.notasBtnSecundario,
+                  !puedeAccederComoDocente && { flex: 1 },
+                ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/secciones/mis-notas",
+                    params: { moduloId, seccionId: id },
+                  } as any)
+                }
+                activeOpacity={0.85}
+              >
+                <Ionicons name="school-outline" size={18} color="#0F4A32" />
+                <Text style={styles.notasBtnSecundarioText}>Ver Notas</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {seccion.permitePlanillas && (
+            <View style={styles.notasBanner}>
+              {puedeAccederComoDocente && (
+                <TouchableOpacity
+                  style={styles.notasBtnPrimario}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/secciones/planillas",
+                      params: { moduloId, seccionId: id },
+                    } as any)
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="clipboard-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.notasBtnPrimarioText}>Cargar Planillas</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.notasBtnSecundario,
+                  !puedeAccederComoDocente && { flex: 1 },
+                ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/secciones/mis-planillas",
+                    params: { moduloId, seccionId: id },
+                  } as any)
+                }
+                activeOpacity={0.85}
+              >
+                <Ionicons name="list-outline" size={18} color="#0F4A32" />
+                <Text style={styles.notasBtnSecundarioText}>Ver Planillas</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Contenido</Text>
           </View>
@@ -213,6 +285,11 @@ export default function SeccionDetalleScreen() {
                 }
                 onEliminar={() => setItemAEliminar(item)}
                 onAbrirArchivo={handleAbrirArchivo}
+                onVerEntrega={() =>
+                  router.push(
+                    `/entregas/${item.id}?moduloId=${moduloId}&seccionId=${id}` as any
+                  )
+                }
               />
             ))
           )}
@@ -241,22 +318,39 @@ export default function SeccionDetalleScreen() {
                 : "No hay subsecciones disponibles."}
             </Text>
           ) : (
-            subsecciones.map((subseccion) => (
-              <SubseccionCard
-                key={subseccion.id}
-                subseccion={subseccion}
-                puedeGestionar={puedeGestionarEstructura}
-                onPress={() =>
-                  router.push(`/subsecciones/${subseccion.id}?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any)
-                }
-                onEditar={() =>
-                  router.push(
-                    `/subsecciones/form?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any,
-                  )
-                }
-                onEliminar={() => setSubseccionAEliminar(subseccion.id)}
-              />
-            ))
+            subsecciones.map((subseccion) => {
+              const accessKey = `${id}::${subseccion.id}`;
+              const bloqueada =
+                !!subseccion.esRestringida &&
+                !puedeAccederComoDocente &&
+                !accesosInscritos.has(accessKey);
+              return (
+                <SubseccionCard
+                  key={subseccion.id}
+                  subseccion={subseccion}
+                  puedeGestionar={puedeGestionarEstructura}
+                  bloqueada={bloqueada}
+                  inscripta={
+                    !!subseccion.esRestringida &&
+                    !puedeAccederComoDocente &&
+                    accesosInscritos.has(accessKey)
+                  }
+                  onPress={() => {
+                    if (bloqueada) {
+                      setSubseccionMatricular(subseccion);
+                      return;
+                    }
+                    router.push(`/subsecciones/${subseccion.id}?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any);
+                  }}
+                  onEditar={() =>
+                    router.push(
+                      `/subsecciones/form?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(subseccion.id)}` as any,
+                    )
+                  }
+                  onEliminar={() => setSubseccionAEliminar(subseccion.id)}
+                />
+              );
+            })
           )}
         </ScrollView>
 
@@ -278,7 +372,11 @@ export default function SeccionDetalleScreen() {
       <ModalConfirmacion
         visible={itemAEliminar !== null}
         titulo="Eliminar Elemento"
-        mensaje="¿Estás seguro de que deseas eliminar este elemento? Esta acción es permanente."
+        mensaje={
+          itemAEliminar?.tipo === "entrega"
+            ? "Este apartado es una Entrega. Si la eliminás, también se borrarán TODAS las entregas que los alumnos hayan subido, junto con sus archivos, notas y retroalimentaciones. Esta acción es permanente."
+            : "¿Estás seguro de que deseas eliminar este elemento? Esta acción es permanente."
+        }
         textoConfirmar="Sí, eliminar"
         textoCancelar="Cancelar"
         onConfirm={handleEliminarItem}
@@ -300,6 +398,22 @@ export default function SeccionDetalleScreen() {
         tipo={alerta.tipo}
         onClose={() => setAlerta((prev) => ({ ...prev, visible: false }))}
       />
+      <MatriculacionModal
+        visible={subseccionMatricular !== null}
+        onClose={() => setSubseccionMatricular(null)}
+        onSuccess={() => {
+          const target = subseccionMatricular;
+          setSubseccionMatricular(null);
+          if (target) {
+            router.push(`/subsecciones/${target.id}?moduloId=${moduloId}&seccionId=${id}&subseccionPath=${encodeURIComponent(target.id)}` as any);
+          }
+        }}
+        moduloId={moduloId}
+        seccionId={id}
+        subseccionPath={subseccionMatricular?.id}
+        seccionTitulo={subseccionMatricular?.titulo ?? ""}
+        codigoActual={subseccionMatricular?.codigoAcceso ?? ""}
+      />
     </View>
   );
 }
@@ -312,11 +426,14 @@ interface ItemCardProps {
   onEditar: () => void;
   onEliminar: () => void;
   onAbrirArchivo: (url: string) => void;
+  onVerEntrega?: () => void;
 }
 
 interface SubseccionCardProps {
   subseccion: Subseccion;
   puedeGestionar: boolean;
+  bloqueada?: boolean;
+  inscripta?: boolean;
   onPress: () => void;
   onEditar: () => void;
   onEliminar: () => void;
@@ -325,22 +442,30 @@ interface SubseccionCardProps {
 function SubseccionCard({
   subseccion,
   puedeGestionar,
+  bloqueada = false,
+  inscripta = false,
   onPress,
   onEditar,
   onEliminar,
 }: SubseccionCardProps) {
   return (
     <TouchableOpacity
-      style={styles.subseccionCard}
+      style={[styles.subseccionCard, bloqueada && styles.subseccionCardBloqueada]}
       onPress={onPress}
       activeOpacity={0.8}
     >
       <View style={styles.subseccionRow}>
         <View style={styles.subseccionLeft}>
-          <View style={styles.subseccionIconBg}>
-            <Ionicons name="folder-outline" size={18} color="#0F4A32" />
+          <View style={[styles.subseccionIconBg, bloqueada && styles.subseccionIconBgBloqueada]}>
+            <Ionicons
+              name={bloqueada ? "lock-closed-outline" : "folder-outline"}
+              size={18}
+              color={bloqueada ? "#9CA3AF" : "#0F4A32"}
+            />
           </View>
-          <Text style={styles.subseccionTitulo}>{subseccion.titulo}</Text>
+          <Text style={[styles.subseccionTitulo, bloqueada && styles.subseccionTituloBloqueada]}>
+            {subseccion.titulo}
+          </Text>
         </View>
         <View style={styles.subseccionRight}>
           {puedeGestionar && (
@@ -359,6 +484,18 @@ function SubseccionCard({
               </TouchableOpacity>
             </>
           )}
+          {subseccion.esRestringida && (bloqueada || inscripta) && (
+            <View style={[styles.badgeAcceso, bloqueada ? styles.badgeBloqueado : styles.badgeAccedido]}>
+              <Ionicons
+                name={bloqueada ? "lock-closed-outline" : "checkmark-circle-outline"}
+                size={11}
+                color={bloqueada ? "#9CA3AF" : "#0F4A32"}
+              />
+              <Text style={[styles.badgeAccesoText, bloqueada ? styles.badgeBloqueadoText : styles.badgeAccedidoText]}>
+                {inscripta ? "Inscripto" : "Bloqueado"}
+              </Text>
+            </View>
+          )}
           <Ionicons name="chevron-forward-outline" size={16} color="#CBD5E0" />
         </View>
       </View>
@@ -372,6 +509,7 @@ function ItemCard({
   onEditar,
   onEliminar,
   onAbrirArchivo,
+  onVerEntrega,
 }: ItemCardProps) {
   const iconoPorTipo: Record<string, string> = {
     pdf: "document-outline",
@@ -446,6 +584,37 @@ function ItemCard({
     );
   }
 
+  if (item.tipo === "entrega") {
+  return (
+    <TouchableOpacity
+      style={[styles.itemCard, { borderLeftWidth: 3, borderLeftColor: "#F59E0B" }]}
+      onPress={onVerEntrega}  // o una prop onVerEntrega que reciba el id
+      activeOpacity={0.8}
+    >
+      <View style={styles.itemHeader}>
+        <View style={[styles.itemIconBg, { backgroundColor: "#FEF3C7" }]}>
+          <Ionicons name="cloud-upload-outline" size={18} color="#B45309" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.itemTitulo}>{item.titulo}</Text>
+          {item.descripcionEntrega ? (
+            <Text style={styles.itemNombreArchivo} numberOfLines={2}>
+              {item.descripcionEntrega}
+            </Text>
+          ) : null}
+          {item.fechaLimite ? (
+            <Text style={[styles.itemNombreArchivo, { color: "#B45309" }]}>
+              Límite: {item.fechaLimite}
+            </Text>
+          ) : null}
+        </View>
+        {acciones}
+        <Ionicons name="chevron-forward-outline" size={16} color="#CBD5E0" />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
   // ── PDF / Documento ────────────────────────────────────────────────────────
   return (
     <TouchableOpacity
@@ -516,6 +685,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: "#25B471",
   },
+  subseccionCardBloqueada: {
+    opacity: 0.78,
+    borderLeftColor: "#CBD5E0",
+    backgroundColor: "#F9FAFB",
+  },
   subseccionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -535,13 +709,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  subseccionIconBgBloqueada: { backgroundColor: "#F3F4F6" },
   subseccionTitulo: { fontSize: 15, fontWeight: "600", color: "#11181C", flex: 1 },
+  subseccionTituloBloqueada: { color: "#6B7280" },
   subseccionRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     marginLeft: 8,
   },
+  badgeAcceso: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  badgeBloqueado: { backgroundColor: "#F3F4F6" },
+  badgeAccedido: { backgroundColor: "#E8F5E9" },
+  badgeAccesoText: { fontSize: 11, fontWeight: "700" },
+  badgeBloqueadoText: { color: "#9CA3AF" },
+  badgeAccedidoText: { color: "#0F4A32" },
   accesoDenegadoTitulo: {
     fontSize: 18, fontWeight: "700", color: "#374151", marginTop: 14, marginBottom: 8,
   },
@@ -633,6 +822,43 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 10,
     backgroundColor: "#F3F4F6",
+  },
+  notasBanner: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  notasBtnPrimario: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#25B471",
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  notasBtnPrimarioText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  notasBtnSecundario: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: "#0F4A32",
+  },
+  notasBtnSecundarioText: {
+    color: "#0F4A32",
+    fontWeight: "700",
+    fontSize: 14,
   },
 });
 
