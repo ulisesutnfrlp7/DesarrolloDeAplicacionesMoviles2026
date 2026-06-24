@@ -152,5 +152,10 @@ service cloud.firestore {
       allow read: if isAdmin() || isProfesor();
       allow create, update, delete: if isAdmin();
     }
+
+    match /{path=**}/inscripciones/{inscripcionId} {
+      allow read, write: if request.auth != null 
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
+    }
   }
 }
