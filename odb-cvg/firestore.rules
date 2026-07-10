@@ -37,8 +37,20 @@ service cloud.firestore {
     // 1. Usuarios
     match /usuarios/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.rol == resource.data.rol
+        && (!('legajo' in resource.data) || request.resource.data.legajo == resource.data.legajo)
+        && (!('dniEncriptado' in resource.data) || request.resource.data.dniEncriptado == resource.data.dniEncriptado);
       allow read, update, delete: if isAdmin();
+    }
+
+    // Índice de legajos únicos: el ID del documento ES el legajo (normalizado).
+    // Si ya existe, el intento de "crearlo" pasa a evaluarse como update y se rechaza.
+    match /legajos_index/{legajoId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
     // 2. Módulos y Secciones
@@ -110,7 +122,23 @@ service cloud.firestore {
         && validSubseccionAccessCode();
 
       allow create: if isAdmin() && request.resource.data.tipo == 'manual';
-      allow delete: if isAdmin();
+
+      // El alumno puede borrar SU PROPIA inscripción (necesario para cambiar de comisión)
+      allow delete: if isAdmin() || (request.auth != null && resource.data.alumnoId == request.auth.uid);
+      allow update: if false;
+    }
+
+    function esPermisoPropio(permisoId) {
+      let uid = request.auth.uid;
+      return permisoId.size() > uid.size() + 1
+        && permisoId[0:uid.size()] == uid
+        && permisoId[uid.size():uid.size()+1] == '_';
+    }
+
+    match /permisos_multi_comision/{permisoId} {
+      allow read: if request.auth != null &&
+        (isAdmin() || isProfesor() || esPermisoPropio(permisoId));
+      allow create, delete: if isAdmin() || isProfesor();
       allow update: if false;
     }
 

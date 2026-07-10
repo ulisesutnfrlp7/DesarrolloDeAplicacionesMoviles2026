@@ -20,6 +20,7 @@ import type { Item } from "../../hooks/useItems";
 import type { EntregaAlumno } from "../../hooks/useEntregasAlumnos";
 import { useEntregasAlumnos, useMiEntrega } from "../../hooks/useEntregasAlumnos";
 import { useUserRole } from "../../hooks/useUserRole";
+import { useComisionesPorSeccion } from "../../hooks/useInscripciones";
 
 const formatearFecha = (iso: string) => {
   const [y, m, d] = iso.split("-");
@@ -302,6 +303,7 @@ export default function EntregaDetalleScreen() {
         {esDocente ? (
           <DocenteVista
             entregas={entregas}
+            seccionId={seccionId}
             loading={loadingEntregas}
             fechaLimite={item?.fechaLimite}
             actualizarCalificacion={actualizarCalificacion}
@@ -521,6 +523,7 @@ export default function EntregaDetalleScreen() {
 interface DocenteVistaProps {
   entregas: EntregaAlumno[];
   loading: boolean;
+  seccionId: string;
   fechaLimite?: string | null;
   actualizarCalificacion: (entregaId: string, data: { nota: number | null; retroalimentacion: string; requiereReentrega: boolean }) => Promise<void>;
   setAlerta: (a: { visible: boolean; titulo: string; mensaje: string; tipo: "error" | "exito" }) => void;
@@ -528,8 +531,11 @@ interface DocenteVistaProps {
   setModalDocente: (modal: any) => void;
 }
 
-function DocenteVista({ entregas, loading, fechaLimite, actualizarCalificacion, setAlerta, setHayCambiosDocente, setModalDocente }: DocenteVistaProps) {
+function DocenteVista({ entregas, loading, seccionId, fechaLimite, actualizarCalificacion, setAlerta, setHayCambiosDocente, setModalDocente }: DocenteVistaProps) {
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
+
+  const comisionesInfo = useComisionesPorSeccion(seccionId ?? null);
+
   const [notaInput, setNotaInput] = useState("");
   const [retroInput, setRetroInput] = useState("");
   const [requiereReentregaInput, setRequiereReentregaInput] = useState(false);
@@ -676,11 +682,24 @@ function DocenteVista({ entregas, loading, fechaLimite, actualizarCalificacion, 
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.entregaAlumno}>{e.alumnoNombre}</Text>
-                  <Text style={styles.entregaFecha}>
+                  
+                  {comisionesInfo[e.alumnoId]?.cambioComision && (
+                    <Text style={styles.entregaTardeText}>
+                      ⚠ Cambió de comisión: antes en "{comisionesInfo[e.alumnoId].comisionAnteriorTitulo}", ahora en "{comisionesInfo[e.alumnoId].comisionActualTitulo}"
+                    </Text>
+                  )}
+                  {comisionesInfo[e.alumnoId]?.multiComision && (
+                    <Text style={[styles.entregaTardeText, { color: "#0F4A32" }]}>
+                      ⓘ En {comisionesInfo[e.alumnoId].comisionesActuales.length} comisiones: {comisionesInfo[e.alumnoId].comisionesActuales.join(", ")}
+                    </Text>
+                  )}
+
+                  <Text style={[styles.entregaFecha, { marginTop: 2 }]}>
                     {e.fechaEntrega?.toDate ? e.fechaEntrega.toDate().toLocaleDateString("es-AR") : ""}
                     {typeof e.nota === "number" ? `  ·  Nota: ${e.nota}/100` : ""}
                     {e.requiereReentrega ? "  ·  Reentrega solicitada" : ""}
                   </Text>
+                  
                   {(() => {
                     const atraso = calcularAtraso(e.fechaEntrega, fechaLimite);
                     return atraso ? (

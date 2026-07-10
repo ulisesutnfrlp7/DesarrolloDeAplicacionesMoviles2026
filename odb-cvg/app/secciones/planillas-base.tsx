@@ -1,3 +1,4 @@
+//app/secciones/planillas-base.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
