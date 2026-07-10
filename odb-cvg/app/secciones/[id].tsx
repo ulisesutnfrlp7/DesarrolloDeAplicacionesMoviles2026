@@ -18,6 +18,8 @@ import type { Seccion } from "../../hooks/useSecciones";
 import type { Subseccion } from "../../hooks/useSubsecciones";
 import { useSubsecciones } from "../../hooks/useSubsecciones";
 import { useUserRole } from "../../hooks/useUserRole";
+import ModalCompletarPerfil from "../../components/ui/ModalCompletarPerfil";
+import { useUserProfile } from "../../hooks/useUserProfile";
 
 export default function SeccionDetalleScreen() {
   const { id, moduloId } = useLocalSearchParams<{
@@ -25,6 +27,7 @@ export default function SeccionDetalleScreen() {
     moduloId: string;
   }>();
   const { rol, loading: loadingRol } = useUserRole();
+  const { perfilCompleto, loading: loadingPerfil } = useUserProfile();
   const { items, loading: loadingItems, eliminarItem } = useItems(moduloId, id);
   const {
     subsecciones,
@@ -125,7 +128,7 @@ export default function SeccionDetalleScreen() {
     !puedeAccederComoDocente &&
     !seccionesInscritas.has(id ?? "");
 
-  if (loadingSeccion || loadingRol) {
+  if (loadingSeccion || loadingRol || (rol === "alumno" && loadingPerfil)) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
         <ScreenHeader titulo="" mostrarHome />
@@ -146,6 +149,19 @@ export default function SeccionDetalleScreen() {
       </View>
     );
   }
+
+  if (rol === "alumno" && !perfilCompleto) {
+  return (
+    <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+      <ScreenHeader titulo={seccion.titulo} mostrarHome />
+      <ModalCompletarPerfil
+        visible={true}
+        onSuccess={() => {}}
+        onCancelar={() => router.back()}
+      />
+    </View>
+  );
+}
 
   if (seccion.esRestringida && !puedeAccederComoDocente && loadingInscripciones) {
     return (
