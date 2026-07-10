@@ -8,7 +8,8 @@ import ModalAlerta from '../../components/ui/ModalAlerta';
 import { auth, db } from '../../config/firebaseConfig';
 import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import ScreenHeader from '../../components/ui/ScreenHeader';
-import { inscribirManualmente, revocarInscripcion, regenerarCodigo, useInscripcionesPorSeccion, type Inscripcion } from '../../hooks/useInscripciones';
+import * as Clipboard from 'expo-clipboard';
+import { inscribirManualmente, revocarInscripcion, regenerarCodigo, useInscripcionesPorSeccion, otorgarPermisoMultiComision, revocarPermisoMultiComision, usePermisosMultiComisionSeccion, type Inscripcion, useComisionesPorSeccion } from '../../hooks/useInscripciones';
 import { useModulos } from '../../hooks/useModulos';
 import { transferirPlanillasAlumnoAContexto } from '../../hooks/usePlanillas';
 import { Background } from '@react-navigation/elements';
@@ -77,6 +78,8 @@ export default function UserManagementScreen() {
   const [eliminando, setEliminando] = useState(false);
   const { inscripciones: inscripcionesExpandida, loading: loadingInscripciones } =
     useInscripcionesPorSeccion(cursadaExpandida?.seccionId ?? null, cursadaExpandida?.subseccionPath ?? "");
+    const permisosMultiComision = usePermisosMultiComisionSeccion(cursadaExpandida?.seccionId ?? null);
+    const comisionesInfo = useComisionesPorSeccion(cursadaExpandida?.seccionId ?? null);
   const { modulos, loading: loadingModulos } = useModulos();
   const [usuarioAEliminarNombre, setUsuarioAEliminarNombre] = useState<string | null>(null);
   const rootNavigationState = useRootNavigationState();
@@ -587,10 +590,23 @@ const eliminarUsuario = async (usuario: Usuario) => {
                       <Text style={styles.panelLabel}>Código de acceso</Text>
                       <View style={styles.codigoRow}>
                         <Text style={styles.codigoTexto}>{cursada.codigoAcceso || '—'}</Text>
-                        <TouchableOpacity style={styles.regenerarBtn} onPress={() => setCursadaARegenerar(cursada)}>
-                          <Ionicons name="refresh-outline" size={14} color="#DC2626" />
-                          <Text style={styles.regenerarBtnText}>Regenerar</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                          <TouchableOpacity
+                            style={styles.copiarBtn}
+                            onPress={async () => {
+                              if (!cursada.codigoAcceso) return;
+                              await Clipboard.setStringAsync(cursada.codigoAcceso);
+                              setAlerta({ visible: true, titulo: 'Copiado', mensaje: 'El código se copió al portapapeles.', tipo: 'exito' });
+                            }}
+                          >
+                            <Ionicons name="copy-outline" size={14} color="#0F4A32" />
+                            <Text style={styles.copiarBtnText}>Copiar</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.regenerarBtn} onPress={() => setCursadaARegenerar(cursada)}>
+                            <Ionicons name="refresh-outline" size={14} color="#DC2626" />
+                            <Text style={styles.regenerarBtnText}>Regenerar</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
 
                       <View style={styles.inscriptosHeader}>
@@ -612,11 +628,44 @@ const eliminarUsuario = async (usuario: Usuario) => {
                       ) : inscritos.length === 0 ? (
                         <Text style={styles.emptyText}>Sin inscriptos aún.</Text>
                       ) : (
-                        inscritos.map((insc) => (
+                        inscritos.map((insc) => {
+                          const tieneMultiComision = permisosMultiComision.has(insc.alumnoId);
+                          return (
                           <View key={insc.id} style={styles.inscriptoRow}>
                             <View style={{ flex: 1 }}>
                               <Text style={styles.inscriptoNombre}>{usuariosMap[insc.alumnoId] || insc.alumnoId}</Text>
+                              
+                              {comisionesInfo[insc.alumnoId]?.cambioComision && (
+                                <Text style={{ fontSize: 10, color: "#B45309", fontWeight: "700", marginTop: 2 }}>
+                                  ⚠ Cambió de comisión: antes en "{comisionesInfo[insc.alumnoId].comisionAnteriorTitulo}", ahora en "{comisionesInfo[insc.alumnoId].comisionActualTitulo}"
+                                </Text>
+                              )}
+                              {comisionesInfo[insc.alumnoId]?.multiComision && (
+                                <Text style={{ fontSize: 10, color: "#0F4A32", fontWeight: "700", marginTop: 2 }}>
+                                  ⓘ En {comisionesInfo[insc.alumnoId].comisionesActuales.length} comisiones: {comisionesInfo[insc.alumnoId].comisionesActuales.join(", ")}
+                                </Text>
+                              )}
                             </View>
+                            <TouchableOpacity
+                              style={[styles.multiComisionBtn, tieneMultiComision && styles.multiComisionBtnActivo]}
+                              onPress={async () => {
+                                if (!cursadaExpandida) return;
+                                if (tieneMultiComision) {
+                                  await revocarPermisoMultiComision(insc.alumnoId, cursadaExpandida.seccionId);
+                                } else {
+                                  await otorgarPermisoMultiComision(insc.alumnoId, cursadaExpandida.seccionId, cursadaExpandida.moduloId);
+                                }
+                              }}
+                            >
+                              <Ionicons
+                                name={tieneMultiComision ? "checkmark-circle" : "add-circle-outline"}
+                                size={16}
+                                color={tieneMultiComision ? "#0F4A32" : "#9CA3AF"}
+                              />
+                              <Text style={[styles.multiComisionBtnText, tieneMultiComision && styles.multiComisionBtnTextActivo]}>
+                                2 comisiones
+                              </Text>
+                            </TouchableOpacity>
                             {cursada.tipoAcceso === "subseccion" && (
                               <TouchableOpacity style={styles.moverBtn} onPress={() => abrirMoverAlumno(insc)}>
                                 <Text style={styles.moverBtnText}>Mover</Text>
@@ -626,7 +675,8 @@ const eliminarUsuario = async (usuario: Usuario) => {
                               <Ionicons name={inscripcionesSeleccionadas.includes(insc.id) ? "checkmark-circle" : "close-circle-outline"} size={22} color="#DC2626" />
                             </TouchableOpacity>
                           </View>
-                        ))
+                          );
+                        })
                       )}
 
                       {/* Modal Asignar */}
@@ -845,6 +895,12 @@ const styles = StyleSheet.create({
   moverBtn: { backgroundColor: '#E8F5E9', paddingHorizontal: 9, paddingVertical: 6, borderRadius: 8 },
   moverBtnText: { fontSize: 12, fontWeight: '700', color: '#0F4A32' },
   revocarBtn: { padding: 4 },
+  copiarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  copiarBtnText: { fontSize: 13, fontWeight: '600', color: '#0F4A32' },
+  multiComisionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8 },
+  multiComisionBtnActivo: { backgroundColor: '#E8F5E9' },
+  multiComisionBtnText: { fontSize: 11, fontWeight: '600', color: '#9CA3AF' },
+  multiComisionBtnTextActivo: { color: '#0F4A32' },
   alumnoPickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   moverResumen: { fontSize: 14, color: '#374151', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12 },
   destinoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', borderRadius: 10 },

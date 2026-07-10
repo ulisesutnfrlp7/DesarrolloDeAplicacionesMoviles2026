@@ -11,6 +11,7 @@ import { db } from "../../config/firebaseConfig";
 import { generarCodigoAleatorio } from "../../hooks/useInscripciones";
 import { useSecciones } from "../../hooks/useSecciones";
 import { useUserRole } from "../../hooks/useUserRole";
+import * as Clipboard from "expo-clipboard";
 
 export default function SeccionFormScreen() {
   const { moduloId, seccionId } = useLocalSearchParams<{
@@ -240,14 +241,13 @@ export default function SeccionFormScreen() {
                 <Text style={styles.codigoText}>{codigoAcceso}</Text>
                 <TouchableOpacity
                   style={styles.compartirBtn}
-                  onPress={() =>
-                    Share.share({
-                      message: `Código de acceso para ${titulo.trim()}: ${codigoAcceso}`,
-                    })
-                  }
+                  onPress={async () => {
+                    await Clipboard.setStringAsync(codigoAcceso);
+                    setAlerta({ visible: true, titulo: "Copiado", mensaje: "El código se copió al portapapeles.", tipo: "exito", cerrarAlSalir: false });
+                  }}
                 >
-                  <Ionicons name="share-outline" size={16} color="#0F4A32" />
-                  <Text style={styles.compartirBtnText}>Compartir</Text>
+                  <Ionicons name="copy-outline" size={16} color="#0F4A32" />
+                  <Text style={styles.compartirBtnText}>Copiar</Text>
                 </TouchableOpacity>
               </View>
               <Text style={styles.codigoHint}>

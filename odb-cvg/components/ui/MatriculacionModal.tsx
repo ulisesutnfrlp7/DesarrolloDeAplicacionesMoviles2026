@@ -1,16 +1,10 @@
+//components/ui/MatriculacionModal.tsx
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import {
-  ActivityIndicator,
-  Modal,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import { auth } from "../../config/firebaseConfig";
-import { inscribirConCodigo } from "../../hooks/useInscripciones";
+import { ComisionConflictoError, inscribirConCodigo } from "../../hooks/useInscripciones";
+import ModalConfirmacion from "./ModalConfirmacion";
 
 interface Props {
   visible: boolean;
@@ -37,28 +31,34 @@ export default function MatriculacionModal({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleAcceder = async () => {
-    if (!codigo.trim()) {
-      setError("Ingresá el código de acceso.");
-      return;
-    }
-    const uid = auth.currentUser?.uid;
-    if (!uid) {
-      setError("No estás autenticado.");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    try {
-      await inscribirConCodigo(moduloId, seccionId, codigo, codigoActual, uid, subseccionPath);
-      setCodigo("");
-      onSuccess();
-    } catch (e: any) {
+  const [confirmarCambio, setConfirmarCambio] = useState<{ anterior: string } | null>(null);
+
+  const handleAcceder = async (forzarCambio = false) => {
+  if (!codigo.trim()) {
+    setError("Ingresá el código de acceso.");
+    return;
+  }
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    setError("No estás autenticado.");
+    return;
+  }
+  setLoading(true);
+  setError("");
+  try {
+    await inscribirConCodigo(moduloId, seccionId, codigo, codigoActual, uid, subseccionPath, forzarCambio);
+    setCodigo("");
+    onSuccess();
+  } catch (e: any) {
+    if (e instanceof ComisionConflictoError) {
+      setConfirmarCambio({ anterior: e.comisionAnteriorTitulo });
+    } else {
       setError(e.message || "Código incorrecto.");
-    } finally {
-      setLoading(false);
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleClose = () => {
     setCodigo("");
@@ -67,55 +67,71 @@ export default function MatriculacionModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleClose}
-    >
-      <View style={styles.overlay}>
-        <View style={styles.card}>
-          <View style={styles.iconWrapper}>
-            <Ionicons name="lock-closed" size={28} color="#0F4A32" />
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleClose}
+      >
+        <View style={styles.overlay}>
+          <View style={styles.card}>
+            <View style={styles.iconWrapper}>
+              <Ionicons name="lock-closed" size={28} color="#0F4A32" />
+            </View>
+            <Text style={styles.titulo}>Acceso Restringido</Text>
+            <Text style={styles.seccionNombre} numberOfLines={2}>
+              {seccionTitulo}
+            </Text>
+            <Text style={styles.descripcion}>
+              Esta cursada requiere un código de acceso proporcionado por la cátedra.
+            </Text>
+            <TextInput
+              style={[styles.input, error ? styles.inputError : null]}
+              placeholder="Código de acceso"
+              placeholderTextColor="#9CA3AF"
+              value={codigo}
+              onChangeText={(v) => {
+                setCodigo(v.toUpperCase());
+                setError("");
+              }}
+              autoCapitalize="characters"
+              maxLength={12}
+            />
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            
+            <TouchableOpacity
+              style={[styles.btn, loading && styles.btnDisabled]}
+              onPress={() => handleAcceder(false)} 
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <Text style={styles.btnText}>Acceder</Text>
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.cancelLink} onPress={handleClose}>
+              <Text style={styles.cancelText}>Cancelar</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.titulo}>Acceso Restringido</Text>
-          <Text style={styles.seccionNombre} numberOfLines={2}>
-            {seccionTitulo}
-          </Text>
-          <Text style={styles.descripcion}>
-            Esta cursada requiere un código de acceso proporcionado por la
-            cátedra.
-          </Text>
-          <TextInput
-            style={[styles.input, error ? styles.inputError : null]}
-            placeholder="Código de acceso"
-            placeholderTextColor="#9CA3AF"
-            value={codigo}
-            onChangeText={(v) => {
-              setCodigo(v.toUpperCase());
-              setError("");
-            }}
-            autoCapitalize="characters"
-            maxLength={12}
-          />
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          <TouchableOpacity
-            style={[styles.btn, loading && styles.btnDisabled]}
-            onPress={handleAcceder}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
-              <Text style={styles.btnText}>Acceder</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelLink} onPress={handleClose}>
-            <Text style={styles.cancelText}>Cancelar</Text>
-          </TouchableOpacity>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+
+      <ModalConfirmacion
+        visible={confirmarCambio !== null}
+        titulo="Cambiar de comisión"
+        mensaje={`Ya estás inscripto en "${confirmarCambio?.anterior}". Si continuás, vas a dejar esa comisión y vas a quedar inscripto en "${seccionTitulo}".\n\nSi necesitás pertenecer a más de una comisión, hablá con tu profesor o administrador.\n\n¿Estás seguro de que querés cambiar de comisión?`}
+        textoConfirmar="Sí, cambiar de comisión"
+        textoCancelar="Cancelar"
+        onConfirm={() => {
+          setConfirmarCambio(null);
+          handleAcceder(true);
+        }}
+        onCancel={() => setConfirmarCambio(null)}
+      />
+    </>
   );
 }
 

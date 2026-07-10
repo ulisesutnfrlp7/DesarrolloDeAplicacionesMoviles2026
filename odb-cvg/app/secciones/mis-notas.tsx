@@ -1,23 +1,9 @@
 // app/secciones/mis-notas.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, where,} from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
 import BuscadorAlumnos from "../../components/ui/BuscadorAlumnos";
 import ExportarNotas from "../../components/ui/ExportarNotas";
 import ModalAlerta from "../../components/ui/ModalAlerta";
@@ -25,13 +11,9 @@ import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import { auth, db } from "../../config/firebaseConfig";
 import type { Nota } from "../../hooks/useNotas";
-import {
-  eliminarNotasPorExamen,
-  esNotaAusente,
-  formatearValorNota,
-  obtenerNotaNumerica,
-} from "../../hooks/useNotas";
+import { eliminarNotasPorExamen, esNotaAusente, formatearValorNota, obtenerNotaNumerica,} from "../../hooks/useNotas";
 import { useUserRole } from "../../hooks/useUserRole";
+import { useComisionesPorSeccion } from "../../hooks/useInscripciones";
 
 type NotaConNombre = Nota & { nombreAlumno?: string };
 
@@ -47,6 +29,7 @@ export default function MisNotasScreen() {
     subseccionPath?: string;
   }>();
   const contextoSubseccion = subseccionPath ?? "";
+  const comisionesInfo = useComisionesPorSeccion(seccionId ?? null);
 
   const { rol, loading: loadingRol } = useUserRole();
   const uid = auth.currentUser?.uid ?? null;
@@ -279,25 +262,43 @@ export default function MisNotasScreen() {
                         const nombre = (nota.nombreAlumno ?? nota.alumnoId).toLowerCase();
                         return nombre.includes(filtroTexto.toLowerCase().trim());
                       })
-                      .map((nota) => (
-                        <View key={nota.id} style={styles.tablaFila}>
-                          <Text style={styles.tablaAlumno} numberOfLines={1}>
-                            {nota.nombreAlumno ?? nota.alumnoId}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.tablaNota,
-                              esNotaAusente(nota.nota)
-                                ? styles.notaAusente
-                                : (obtenerNotaNumerica(nota.nota) ?? 0) >= 4
-                                  ? styles.notaAprobada
-                                  : styles.notaDesaprobada,
-                            ]}
-                          >
-                            {formatearValorNota(nota.nota)}
-                          </Text>
-                        </View>
-                      ))}
+                      .map((nota) => {
+                        const info = comisionesInfo[nota.alumnoId];
+                        return (
+                          <View key={nota.id} style={styles.tablaFila}>
+                            {/* Envolvemos la info del alumno en un View con flex: 1 para que tome el espacio izquierdo y los carteles queden abajo del nombre */}
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.tablaAlumno} numberOfLines={1}>
+                                {nota.nombreAlumno ?? nota.alumnoId}
+                              </Text>
+                              {info?.cambioComision && (
+                                <Text style={{ fontSize: 10, color: "#B45309", fontWeight: "700", marginTop: 2 }}>
+                                  ⚠ Cambió de comisión: antes en "{info.comisionAnteriorTitulo}", ahora en "{info.comisionActualTitulo}"
+                                </Text>
+                              )}
+                              {info?.multiComision && (
+                                <Text style={{ fontSize: 10, color: "#0F4A32", fontWeight: "700", marginTop: 2 }}>
+                                  ⓘ En {info.comisionesActuales.length} comisiones: {info.comisionesActuales.join(", ")}
+                                </Text>
+                              )}
+                            </View>
+                            
+                            {/* El texto de la nota ahora queda bien dentro de la fila y a la derecha */}
+                            <Text
+                              style={[
+                                styles.tablaNota,
+                                esNotaAusente(nota.nota)
+                                  ? styles.notaAusente
+                                  : (obtenerNotaNumerica(nota.nota) ?? 0) >= 4
+                                    ? styles.notaAprobada
+                                    : styles.notaDesaprobada,
+                              ]}
+                            >
+                              {formatearValorNota(nota.nota)}
+                            </Text>
+                          </View>
+                        );
+                      })}
                     <View style={styles.promedioRow}>
                       <Text style={styles.promedioLabel}>
                         PROMEDIO DE LA CLASE

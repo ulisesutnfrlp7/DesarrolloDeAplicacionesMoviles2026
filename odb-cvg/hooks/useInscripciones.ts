@@ -1,18 +1,7 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  where,
-  writeBatch,
-} from "firebase/firestore";
+//hooks/useInscripciones.ts
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where, writeBatch,} from "firebase/firestore";
 import { useEffect, useState } from "react";
-import { db } from "../config/firebaseConfig";
+import { auth, db } from "../config/firebaseConfig";
 
 export interface Inscripcion {
   id: string;
@@ -21,10 +10,29 @@ export interface Inscripcion {
   seccionId: string;
   subseccionPath?: string;
   subseccionIds?: string[];
+  subseccionTitulo?: string;
   tipoAcceso?: "seccion" | "subseccion";
   tipo: "codigo" | "manual";
   codigoUsado: string | null;
   fechaInscripcion: any;
+  multiComisionAutorizada?: boolean;
+}
+
+export interface InscripcionConComision extends Inscripcion {
+  cambioComision?: boolean;
+  comisionAnteriorTitulo?: string;
+  fechaCambioComision?: any;
+}
+
+// Se lanza cuando el alumno intenta anotarse a una comisión distinta de otra
+// en la que ya está inscripto, dentro de la MISMA sección, sin haber confirmado el cambio.
+export class ComisionConflictoError extends Error {
+  comisionAnteriorTitulo: string;
+  constructor(comisionAnteriorTitulo: string) {
+    super("Ya estás inscripto en otra comisión de esta sección.");
+    this.name = "ComisionConflictoError";
+    this.comisionAnteriorTitulo = comisionAnteriorTitulo;
+  }
 }
 
 export interface ContextoInscripcionEfectivo {
@@ -266,6 +274,52 @@ function getSubseccionIds(subseccionPath?: string): string[] {
   return subseccionPath?.split("/").filter(Boolean) ?? [];
 }
 
+async function obtenerTituloSubseccion(
+  moduloId: string,
+  seccionId: string,
+  subseccionPath: string,
+): Promise<string> {
+  try {
+    const snap = await getDoc(
+      doc(db, "modulos", moduloId, "secciones", seccionId, ...getSubseccionPathSegments(subseccionPath)),
+    );
+    return snap.exists() ? ((snap.data().titulo as string) ?? "otra comisión") : "otra comisión";
+  } catch {
+    return "otra comisión";
+  }
+}
+
+function idPermisoMultiComision(alumnoId: string, seccionId: string) {
+  return `${alumnoId}_${seccionId}`;
+}
+
+// Consulta si un admin/profesor ya habilitó a este alumno a estar en 2+ comisiones de esta sección.
+export async function tienePermisoMultiComision(alumnoId: string, seccionId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, "permisos_multi_comision", idPermisoMultiComision(alumnoId, seccionId)));
+  return snap.exists();
+}
+
+// Admin/profesor: habilita manualmente al alumno a pertenecer a más de una comisión en esta sección.
+export async function otorgarPermisoMultiComision(
+  alumnoId: string,
+  seccionId: string,
+  moduloId: string,
+): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("No autenticado");
+  await setDoc(doc(db, "permisos_multi_comision", idPermisoMultiComision(alumnoId, seccionId)), {
+    alumnoId,
+    seccionId,
+    moduloId,
+    otorgadoPor: uid,
+    fechaOtorgado: serverTimestamp(),
+  });
+}
+
+export async function revocarPermisoMultiComision(alumnoId: string, seccionId: string): Promise<void> {
+  await deleteDoc(doc(db, "permisos_multi_comision", idPermisoMultiComision(alumnoId, seccionId)));
+}
+
 // Inscribe al alumno actual usando un código. Valida el código antes de escribir.
 export async function inscribirConCodigo(
   moduloId: string,
@@ -274,6 +328,7 @@ export async function inscribirConCodigo(
   codigoActual: string,
   uid: string,
   subseccionPath?: string,
+  confirmarCambioComision: boolean = false,
 ): Promise<void> {
   if (!codigoActual) {
     throw new Error(
@@ -287,7 +342,8 @@ export async function inscribirConCodigo(
       "Código incorrecto. Verificá el código proporcionado por la cátedra.",
     );
   }
-  // Verificar si ya está inscripto para evitar duplicados.
+
+  // Ya inscripto exactamente en esta misma comisión: no hacer nada.
   const existingConstraints = [
     where("alumnoId", "==", uid),
     where("seccionId", "==", seccionId),
@@ -297,14 +353,96 @@ export async function inscribirConCodigo(
   const yaInscripto = existing.docs.some(
     (d) => ((d.data().subseccionPath as string | undefined) ?? "") === (subseccionPath ?? ""),
   );
-  if (yaInscripto) return; // Ya inscripto, no hacer nada.
+  if (yaInscripto) return;
 
+  // NUEVO: Buscamos el título de la subsección actual antes de guardar
+  let subseccionTitulo = "";
+  if (subseccionPath) {
+    subseccionTitulo = await obtenerTituloSubseccion(moduloId, seccionId, subseccionPath);
+  }
+
+  // La lógica de "comisión" solo aplica quando se ingresa a una SUBSECCIÓN dentro de una sección.
+  if (subseccionPath) {
+    const todasSnap = await getDocs(
+      query(
+        collection(db, "inscripciones"),
+        where("alumnoId", "==", uid),
+        where("seccionId", "==", seccionId),
+      ),
+    );
+    const otraComisionDoc = todasSnap.docs.find((d) => {
+      const path = (d.data().subseccionPath as string | undefined) ?? "";
+      return path !== "" && path !== subseccionPath;
+    });
+
+    if (otraComisionDoc) {
+      const permiteMulti = await tienePermisoMultiComision(uid, seccionId);
+
+      if (!permiteMulti) {
+        const tituloAnterior = await obtenerTituloSubseccion(
+          moduloId,
+          seccionId,
+          otraComisionDoc.data().subseccionPath as string,
+        );
+
+        if (!confirmarCambioComision) {
+          throw new ComisionConflictoError(tituloAnterior);
+        }
+
+        // Confirmado: se borran TODAS las otras comisiones de esta sección y se registra el cambio.
+        const batch = writeBatch(db);
+        todasSnap.docs
+          .filter((d) => {
+            const path = (d.data().subseccionPath as string | undefined) ?? "";
+            return path !== "" && path !== subseccionPath;
+          })
+          .forEach((d) => batch.delete(d.ref));
+
+        batch.set(doc(collection(db, "inscripciones")), {
+          alumnoId: uid,
+          moduloId,
+          seccionId,
+          subseccionPath,
+          subseccionIds: getSubseccionIds(subseccionPath),
+          subseccionTitulo, // NUEVO
+          tipoAcceso: "subseccion",
+          tipo: "codigo",
+          codigoUsado: codigoIngresado.trim().toUpperCase(),
+          fechaInscripcion: serverTimestamp(),
+          cambioComision: true,
+          comisionAnteriorTitulo: tituloAnterior,
+          fechaCambioComision: serverTimestamp(),
+        });
+        await batch.commit();
+        return;
+      }
+
+      // Tiene permiso explícito: se agrega sin borrar la anterior.
+      await addDoc(collection(db, "inscripciones"), {
+        alumnoId: uid,
+        moduloId,
+        seccionId,
+        subseccionPath,
+        subseccionIds: getSubseccionIds(subseccionPath),
+        subseccionTitulo, // NUEVO
+        tipoAcceso: "subseccion",
+        tipo: "codigo",
+        codigoUsado: codigoIngresado.trim().toUpperCase(),
+        fechaInscripcion: serverTimestamp(),
+        multiComisionAutorizada: true,
+      });
+      return;
+    }
+  }
+
+  // Sin conflicto: inscripción normal.
   await addDoc(collection(db, "inscripciones"), {
     alumnoId: uid,
     moduloId,
     seccionId,
     subseccionPath: subseccionPath ?? "",
     subseccionIds: getSubseccionIds(subseccionPath),
+    subseccionTitulo, // NUEVO
     tipoAcceso: subseccionPath ? "subseccion" : "seccion",
     tipo: "codigo",
     codigoUsado: codigoIngresado.trim().toUpperCase(),
@@ -331,17 +469,104 @@ export async function inscribirManualmente(
   if (yaInscripto) {
     throw new Error("Este alumno ya está inscripto en la cursada.");
   }
+
+  // NUEVO: Buscamos el título de la subsección actual antes de guardar
+  let subseccionTitulo = "";
+  if (subseccionPath) {
+    subseccionTitulo = await obtenerTituloSubseccion(moduloId, seccionId, subseccionPath);
+  }
+
   await addDoc(collection(db, "inscripciones"), {
     alumnoId,
     moduloId,
     seccionId,
     subseccionPath: subseccionPath ?? "",
     subseccionIds: getSubseccionIds(subseccionPath),
+    subseccionTitulo, // NUEVO
     tipoAcceso: subseccionPath ? "subseccion" : "seccion",
     tipo: "manual",
     codigoUsado: null,
     fechaInscripcion: serverTimestamp(),
   });
+}
+
+// Devuelve, por alumnoId, el historial de comisiones de forma enriquecida
+export function useComisionesPorSeccion(seccionId: string | null) {
+  const [porAlumno, setPorAlumno] = useState<
+    Record<string, { 
+      cambioComision: boolean; 
+      comisionAnteriorTitulo?: string; 
+      comisionActualTitulo?: string; 
+      multiComision: boolean; 
+      comisionesActuales: string[];
+    }>
+  >({});
+
+  useEffect(() => {
+    if (!seccionId) {
+      setPorAlumno({});
+      return;
+    }
+    const q = query(collection(db, "inscripciones"), where("seccionId", "==", seccionId));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const agrupado: Record<string, any[]> = {};
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        const alumnoId = data.alumnoId as string;
+        (agrupado[alumnoId] ??= []).push(data);
+      });
+      const resultado: typeof porAlumno = {};
+      
+      Object.entries(agrupado).forEach(([alumnoId, inscs]) => {
+        const conCambio = inscs.find((i) => i.cambioComision === true);
+        const conSubseccion = inscs.filter((i) => (i.subseccionPath ?? "") !== "");
+
+        let comisionActualTitulo: string | undefined = undefined;
+        let comisionesActuales: string[] = [];
+
+        if (conSubseccion.length > 0) {
+          comisionesActuales = conSubseccion.map(i => i.subseccionTitulo || "Comisión sin nombre");
+          if (conSubseccion.length === 1) {
+            comisionActualTitulo = comisionesActuales[0];
+          } else {
+            // Estado inconsistente (0 o 2+ activas): no dejamos undefined
+            comisionActualTitulo = comisionesActuales.join(", ") || "sin comisión activa";
+          }
+        } else {
+          comisionActualTitulo = "sin comisión activa";
+        }
+
+        resultado[alumnoId] = {
+          cambioComision: !!conCambio,
+          comisionAnteriorTitulo: conCambio?.comisionAnteriorTitulo,
+          comisionActualTitulo,
+          multiComision: conSubseccion.length > 1,
+          comisionesActuales,
+        };
+      });
+      setPorAlumno(resultado);
+    });
+    return () => unsubscribe();
+  }, [seccionId]);
+
+  return porAlumno;
+}
+
+// Para el panel admin: qué alumnos tienen permiso de multi-comisión en una sección dada.
+export function usePermisosMultiComisionSeccion(seccionId: string | null) {
+  const [permitidos, setPermitidos] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!seccionId) {
+      setPermitidos(new Set());
+      return;
+    }
+    const q = query(collection(db, "permisos_multi_comision"), where("seccionId", "==", seccionId));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setPermitidos(new Set(snap.docs.map((d) => d.data().alumnoId as string)));
+    });
+    return () => unsubscribe();
+  }, [seccionId]);
+  return permitidos;
 }
 
 // Admin: revoca la inscripción individual de un alumno.

@@ -3,34 +3,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import BuscadorAlumnos from "../../components/ui/BuscadorAlumnos";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import { db } from "../../config/firebaseConfig";
-import {
-  useContextoInscripcionEfectivo,
-  useInscripcionesPorSeccion,
-} from "../../hooks/useInscripciones";
-import {
-  esNotaAusente,
-  formatearValorNota,
-  guardarNotas,
-  reemplazarNotasPorExamen,
-  useNotasPorSeccion,
-  type ValorNota,
-} from "../../hooks/useNotas";
+import { useComisionesPorSeccion, useContextoInscripcionEfectivo, useInscripcionesPorSeccion,} from "../../hooks/useInscripciones";
+import { esNotaAusente, formatearValorNota, guardarNotas, reemplazarNotasPorExamen, useNotasPorSeccion, type ValorNota,} from "../../hooks/useNotas";
 import { useUserRole } from "../../hooks/useUserRole";
 
 export default function NotasScreen() {
@@ -44,6 +24,7 @@ export default function NotasScreen() {
 
   const { rol, loading: loadingRol } = useUserRole();
   const contextoSubseccion = subseccionPath ?? "";
+  const comisionesInfo = useComisionesPorSeccion(seccionId ?? null);
   const {
     contexto: contextoInscripcion,
     loading: loadingContextoInscripcion,
@@ -371,9 +352,21 @@ export default function NotasScreen() {
               <View style={styles.alumnoIconBg}>
                 <Ionicons name="person-outline" size={18} color="#0F4A32" />
               </View>
-              <Text style={styles.alumnoNombre} numberOfLines={1}>
-                {nombresAlumnos[insc.alumnoId] ?? "Cargando..."}
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.alumnoNombre} numberOfLines={1}>
+                  {nombresAlumnos[insc.alumnoId] ?? "Cargando..."}
+                </Text>
+                {comisionesInfo[insc.alumnoId]?.cambioComision && (
+                  <Text style={{ fontSize: 10, color: "#B45309", fontWeight: "700", marginTop: 2 }}>
+                    ⚠ Cambió de comisión: antes en "{comisionesInfo[insc.alumnoId].comisionAnteriorTitulo}", ahora en "{comisionesInfo[insc.alumnoId].comisionActualTitulo}"
+                  </Text>
+                )}
+                {comisionesInfo[insc.alumnoId]?.multiComision && (
+                  <Text style={{ fontSize: 10, color: "#0F4A32", fontWeight: "700", marginTop: 2 }}>
+                    ⓘ En {comisionesInfo[insc.alumnoId].comisionesActuales.length} comisiones: {comisionesInfo[insc.alumnoId].comisionesActuales.join(", ")}
+                  </Text>
+                )}
+              </View>
               <TextInput
                 style={[styles.notaInput, ausentes[insc.alumnoId] && styles.notaInputDisabled]}
                 placeholder="—"
@@ -517,7 +510,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   alumnoNombre: {
-    flex: 1,
     fontSize: 14,
     fontWeight: "600",
     color: "#374151",

@@ -1,3 +1,4 @@
+//hooks/useSecciones.ts
 import {
     addDoc,
     collection,

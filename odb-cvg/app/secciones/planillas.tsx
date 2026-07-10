@@ -1,3 +1,4 @@
+//app/secciones/planillas.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
