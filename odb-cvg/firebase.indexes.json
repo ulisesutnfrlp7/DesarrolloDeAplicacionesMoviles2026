@@ -35,6 +35,26 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "items",
+      "fieldPath": "tipo",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "eventos_cronograma",
+      "fieldPath": "fecha",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
       "collectionGroup": "secciones",
       "fieldPath": "esRestringida",
       "indexes": [

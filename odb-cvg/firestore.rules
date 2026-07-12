@@ -100,7 +100,13 @@ service cloud.firestore {
       allow delete: if isAdmin() || isProfesor();
     }
 
-    // 6. Inscripciones y Notas
+    // 6. Cronograma
+    match /eventos_cronograma/{eventoId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 7. Inscripciones y Notas
     match /inscripciones/{inscripcionId} {
       allow read: if request.auth != null &&
         (isAdmin() || isProfesor() || (resource != null && resource.data.alumnoId == request.auth.uid));
