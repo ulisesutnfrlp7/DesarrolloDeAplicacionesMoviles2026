@@ -36,6 +36,16 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
+        name="cronograma"
+        options={{
+          title: 'Cronograma',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="perfil"
         options={{
           title: 'Perfil',

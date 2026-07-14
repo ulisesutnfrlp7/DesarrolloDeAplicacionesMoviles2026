@@ -612,7 +612,7 @@ const eliminarUsuario = async (usuario: Usuario) => {
                       <View style={styles.inscriptosHeader}>
                         <Text style={styles.panelLabel}>Inscriptos ({inscritos.length})</Text>
                         <TouchableOpacity style={styles.asignarBtn} onPress={() => { setAlumnosSeleccionados([]); setModalAsignar(true); }}>
-                          <Ionicons name="person-add-outline" size={14} color="#0F4A32" />
+                          <Ionicons name="person-add-outline" size={16} color="#0F4A32" />
                           <Text style={styles.asignarBtnText}>Asignar</Text>
                         </TouchableOpacity>
                       </View>
