@@ -1,11 +1,13 @@
+//components/ui/ExportarPlanilla.tsx
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import React, { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import * as XLSX from "xlsx";
 import type { ColumnaPlanilla, TipoPlanilla } from "../../hooks/usePlanillas";
+import { obtenerLogoBase64 } from "../../utils/logoBase64";
+import * as XLSX from "xlsx";
 
 interface ExportarPlanillaProps {
   titulo: string;
@@ -34,7 +36,8 @@ export default function ExportarPlanilla({
   const columnasOrdenadas = [...columnas].sort((a, b) => a.orden - b.orden);
   const filasOrdenadas = [...filas].sort((a, b) => a.orden - b.orden);
 
-  const generarHTML = () => {
+  const generarHTML = async () => {
+    const logoDataUri = await obtenerLogoBase64();
     const headers = columnasOrdenadas.map((col) => `<th>${escapeHtml(col.titulo)}</th>`).join("");
     const rows = filasOrdenadas
       .map(
@@ -53,9 +56,23 @@ export default function ExportarPlanilla({
         <style>
           @page { size: A4 landscape; margin: 12mm; }
           body { font-family: Arial, sans-serif; color: #222; font-size: 10pt; }
-          .header { border-bottom: 2px solid #0F4A32; padding-bottom: 10px; margin-bottom: 14px; }
-          h1 { color: #0F4A32; font-size: 16pt; margin: 0 0 6px 0; }
-          p { margin: 2px 0; }
+          .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 2px solid #0F4A32;
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+          }
+          .header img.logo {
+            width: 46px;
+            height: 46px;
+            border-radius: 23px;
+            object-fit: cover;
+            flex-shrink: 0;
+          }
+          .header .header-texto h1 { color: #0F4A32; font-size: 16pt; margin: 0 0 6px 0; }
+          .header .header-texto p { margin: 2px 0; }
           table { width: 100%; border-collapse: collapse; margin-top: 12px; }
           th { background: #0F4A32; color: white; padding: 7px; text-align: left; }
           td { border: 1px solid #DDD; padding: 6px; vertical-align: top; }
@@ -65,16 +82,19 @@ export default function ExportarPlanilla({
       </head>
       <body>
         <div class="header">
-          <h1>${escapeHtml(titulo)}</h1>
-          <p><strong>Alumno:</strong> ${escapeHtml(alumno || "-")}</p>
-          <p><strong>Tipo:</strong> ${tipo === "diaria" ? "Diaria" : "Final"}</p>
-          <p><strong>Fecha de exportación:</strong> ${fechaActual}</p>
+          <img src="${logoDataUri}" class="logo" />
+          <div class="header-texto">
+            <h1>${escapeHtml(titulo)}</h1>
+            <p><strong>Alumno:</strong> ${escapeHtml(alumno || "-")}</p>
+            <p><strong>Tipo:</strong> ${tipo === "diaria" ? "Diaria" : "Final"}</p>
+            <p><strong>Fecha de exportación:</strong> ${fechaActual}</p>
+          </div>
         </div>
         <table>
           <thead><tr>${headers}</tr></thead>
           <tbody>${rows}</tbody>
         </table>
-        <div class="footer">Sistema CVG Operatoria Dental B</div>
+        <div class="footer">OpB Virtual - Operatoria Dental B</div>
       </body>
       </html>
     `;
@@ -84,7 +104,7 @@ export default function ExportarPlanilla({
     if (columnasOrdenadas.length === 0) return;
     setExportandoPDF(true);
     try {
-      const { uri } = await Print.printToFileAsync({ html: generarHTML() });
+      const { uri } = await Print.printToFileAsync({ html: await generarHTML() });
       const nombreArchivo = `${safeFileName(titulo)}.pdf`;
       const uriFinal = `${FileSystem.cacheDirectory}${nombreArchivo}`;
       await FileSystem.moveAsync({ from: uri, to: uriFinal });
@@ -100,20 +120,32 @@ export default function ExportarPlanilla({
     }
   };
 
-  const exportarXLSX = async () => {
+ const exportarXLSX = async () => {
     if (columnasOrdenadas.length === 0) return;
     setExportandoXLSX(true);
     try {
-      const data = filasOrdenadas.map((fila) => {
-        const row: Record<string, any> = {};
-        columnasOrdenadas.forEach((col) => {
-          row[col.titulo] = formatValue(fila.celdas?.[col.id]);
-        });
-        return row;
-      });
+      const encabezado = [
+        ["Facultad de Odontología - UNLP"],
+        ["Asignatura Operatoria Dental B"],
+        [`${titulo}${alumno ? ` — ${alumno}` : ""}`],
+        [`Tipo: ${tipo === "diaria" ? "Diaria" : "Final"} · Exportado: ${fechaActual}`],
+        [],
+        columnasOrdenadas.map((col) => col.titulo),
+      ];
 
-      const ws = XLSX.utils.json_to_sheet(data);
+      const filasDatos = filasOrdenadas.map((fila) =>
+        columnasOrdenadas.map((col) => formatValue(fila.celdas?.[col.id])),
+      );
+
+      const ws = XLSX.utils.aoa_to_sheet([...encabezado, ...filasDatos]);
       ws["!cols"] = columnasOrdenadas.map((col) => ({ wch: col.tipo === "textarea" ? 34 : 18 }));
+      const ultimaColumna = columnasOrdenadas.length - 1;
+      ws["!merges"] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: ultimaColumna } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: ultimaColumna } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: ultimaColumna } },
+      ];
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Planilla");
       const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });

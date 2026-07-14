@@ -4,15 +4,10 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import React, { useState } from "react";
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from "react-native";
-import * as XLSX from "xlsx";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View} from "react-native";
 import { formatearValorNota, obtenerNotaNumerica, type ValorNota } from "../../hooks/useNotas";
+import { obtenerLogoBase64 } from "../../utils/logoBase64";
+import * as XLSX from "xlsx";
 
 interface NotaExportable {
   nombre: string;
@@ -50,7 +45,8 @@ export default function ExportarNotas({
     : null;
 
   // ─── GENERAR HTML PARA PDF ──────────────────────────────────────────────
-  const generarHTML = (): string => {
+  const generarHTML = async (): Promise<string> => {
+    const logoDataUri = await obtenerLogoBase64();
     const filas = notas
       .map(
         (n, i) => `
@@ -76,18 +72,27 @@ export default function ExportarNotas({
             padding: 0 10px;
           }
           .header {
-            text-align: center;
+            display: flex;
+            align-items: center;
+            gap: 14px;
             margin-bottom: 24px;
             padding-bottom: 16px;
             border-bottom: 2px solid #0F4A32;
           }
-          .header h1 {
+          .header img.logo {
+            width: 56px;
+            height: 56px;
+            border-radius: 28px;
+            object-fit: cover;
+            flex-shrink: 0;
+          }
+          .header .header-texto h1 {
             font-size: 14pt;
             font-weight: bold;
             color: #0F4A32;
             margin-bottom: 4px;
           }
-          .header h2 {
+          .header .header-texto h2 {
             font-size: 12pt;
             font-weight: normal;
             color: #444;
@@ -147,8 +152,11 @@ export default function ExportarNotas({
       </head>
       <body>
         <div class="header">
-          <h1>Universidad Nacional de La Plata - Facultad de Odontología</h1>
-          <h2>Cátedra de Operatoria Dental B</h2>
+          <img src="${logoDataUri}" class="logo" />
+          <div class="header-texto">
+            <h1>Facultad de Odontología - UNLP</h1>
+            <h2>Asignatura Operatoria Dental B</h2>
+          </div>
         </div>
 
         <div class="info">
@@ -174,7 +182,7 @@ export default function ExportarNotas({
         </div>
 
         <div class="footer">
-          FECHA DE GENERACIÓN: ${fechaActual} - Sistema CVG Operatoria Dental B
+          FECHA DE GENERACIÓN: ${fechaActual} - OpB Virtual - Operatoria Dental B
         </div>
       </body>
       </html>
@@ -186,7 +194,7 @@ export default function ExportarNotas({
     if (notas.length === 0) return;
     setExportandoPDF(true);
     try {
-      const html = generarHTML();
+      const html = await generarHTML();
       const { uri } = await Print.printToFileAsync({ html });
       const nombreArchivo = `Notas_${nombreExamen.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`;
       const uriFinal = `${FileSystem.cacheDirectory}${nombreArchivo}`;
@@ -210,31 +218,31 @@ export default function ExportarNotas({
     if (notas.length === 0) return;
     setExportandoXLSX(true);
     try {
-      // Preparar datos para SheetJS
-      const data = notas.map((n, i) => ({
-        "#": i + 1,
-        Alumno: n.nombre,
-        Nota: formatearValorNota(n.nota),
-      }));
+      const encabezado = [
+        ["Facultad de Odontología - UNLP"],
+        ["Asignatura Operatoria Dental B"],
+        [`Exámen: ${nombreExamen}`],
+        [`Año Lectivo: ${anioLectivo}`],
+        [],
+        ["#", "Alumno", "Nota"],
+      ];
 
-      const ws = XLSX.utils.json_to_sheet(data);
+      const filasDatos = notas.map((n, i) => [i + 1, n.nombre, formatearValorNota(n.nota)]);
 
-      // Ajustar ancho de columnas
-      ws["!cols"] = [
-        { wch: 6 },   // #
-        { wch: 40 },  // Alumno
-        { wch: 10 },  // Nota
+      const ws = XLSX.utils.aoa_to_sheet([...encabezado, ...filasDatos]);
+
+      ws["!cols"] = [{ wch: 6 }, { wch: 40 }, { wch: 10 }];
+      ws["!merges"] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 2 } },
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 2 } },
       ];
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, nombreExamen.slice(0, 31));
 
-      // Generar archivo como base64
-      const wbout = XLSX.write(wb, {
-        type: "base64",
-        bookType: "xlsx",
-      });
-
+      const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
       const nombreArchivo = `Notas_${nombreExamen.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
       const uri = `${FileSystem.cacheDirectory}${nombreArchivo}`;
 
@@ -244,8 +252,7 @@ export default function ExportarNotas({
 
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
-          mimeType:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           dialogTitle: `Compartir Excel - ${nombreExamen}`,
           UTI: "org.openxmlformats.spreadsheetml.sheet",
         });

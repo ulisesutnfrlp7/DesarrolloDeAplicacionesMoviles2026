@@ -3,8 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import { auth } from "../../config/firebaseConfig";
-import { ComisionConflictoError, inscribirConCodigo } from "../../hooks/useInscripciones";
-import ModalConfirmacion from "./ModalConfirmacion";
+import { inscribirConCodigo } from "../../hooks/useInscripciones";
 
 interface Props {
   visible: boolean;
@@ -31,9 +30,7 @@ export default function MatriculacionModal({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [confirmarCambio, setConfirmarCambio] = useState<{ anterior: string } | null>(null);
-
-  const handleAcceder = async (forzarCambio = false) => {
+  const handleAcceder = async () => {
   if (!codigo.trim()) {
     setError("Ingresá el código de acceso.");
     return;
@@ -46,16 +43,12 @@ export default function MatriculacionModal({
   setLoading(true);
   setError("");
   try {
-    await inscribirConCodigo(moduloId, seccionId, codigo, codigoActual, uid, subseccionPath, forzarCambio);
+    await inscribirConCodigo(moduloId, seccionId, codigo, codigoActual, uid, subseccionPath);
     setCodigo("");
     onSuccess();
   } catch (e: any) {
-    if (e instanceof ComisionConflictoError) {
-      setConfirmarCambio({ anterior: e.comisionAnteriorTitulo });
-    } else {
       setError(e.message || "Código incorrecto.");
-    }
-  } finally {
+    } finally {
     setLoading(false);
   }
 };
@@ -67,7 +60,6 @@ export default function MatriculacionModal({
   };
 
   return (
-    <>
       <Modal
         visible={visible}
         transparent
@@ -84,7 +76,7 @@ export default function MatriculacionModal({
               {seccionTitulo}
             </Text>
             <Text style={styles.descripcion}>
-              Esta cursada requiere un código de acceso proporcionado por la cátedra.
+              Esta cursada requiere un código de acceso proporcionado por la Asignatura.
             </Text>
             <TextInput
               style={[styles.input, error ? styles.inputError : null]}
@@ -102,7 +94,7 @@ export default function MatriculacionModal({
             
             <TouchableOpacity
               style={[styles.btn, loading && styles.btnDisabled]}
-              onPress={() => handleAcceder(false)} 
+              onPress={handleAcceder} 
               disabled={loading}
             >
               {loading ? (
@@ -118,20 +110,6 @@ export default function MatriculacionModal({
           </View>
         </View>
       </Modal>
-
-      <ModalConfirmacion
-        visible={confirmarCambio !== null}
-        titulo="Cambiar de comisión"
-        mensaje={`Ya estás inscripto en "${confirmarCambio?.anterior}". Si continuás, vas a dejar esa comisión y vas a quedar inscripto en "${seccionTitulo}".\n\nSi necesitás pertenecer a más de una comisión, hablá con tu profesor o administrador.\n\n¿Estás seguro de que querés cambiar de comisión?`}
-        textoConfirmar="Sí, cambiar de comisión"
-        textoCancelar="Cancelar"
-        onConfirm={() => {
-          setConfirmarCambio(null);
-          handleAcceder(true);
-        }}
-        onCancel={() => setConfirmarCambio(null)}
-      />
-    </>
   );
 }
 

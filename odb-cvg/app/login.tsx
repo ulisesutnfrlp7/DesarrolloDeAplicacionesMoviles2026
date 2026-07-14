@@ -2,14 +2,7 @@
 import { router } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import React, { useState } from "react";
-import {
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  View,
-} from "react-native";
+import { StyleSheet, Text, TextInput, TouchableOpacity, Image, View,} from "react-native";
 import { auth } from "../config/firebaseConfig";
 
 export default function LoginScreen() {
@@ -48,6 +41,7 @@ export default function LoginScreen() {
           source={require("../assets/images/LogoRecortado.jpg")}
           style={styles.logo}
         />
+        <Text style={styles.title}>OpB Virtual</Text>
         <Text style={styles.title}>Operatoria Dental B</Text>
         <Text style={styles.subtitle}>Facultad de Odontología - UNLP</Text>
       </View>
@@ -121,19 +115,19 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#0F4A32",
     textAlign: "center",
-    marginBottom: 8,
   },
   logo: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    marginBottom: 16,
+    marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
     color: "#000000",
     textAlign: "center",
     fontWeight: "500",
+    marginTop: 20,
   },
   formContainer: {
     backgroundColor: "#FFFFFF",

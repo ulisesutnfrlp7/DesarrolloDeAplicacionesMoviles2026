@@ -57,7 +57,7 @@ export default function RegistroScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Crear Cuenta</Text>
-      <Text style={styles.subtitle}>Completa tus datos para ingresar al CVG.</Text>
+      <Text style={styles.subtitle}>Completa tus datos para ingresar en OpB Virtual.</Text>
 
       <View style={styles.formContainer}>
         <Text style={styles.label}>Nombre y Apellido</Text>
@@ -120,7 +120,7 @@ export default function RegistroScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5', justifyContent: 'center', padding: 20 },
   title: { fontSize: 28, fontWeight: 'bold', color: '#0F4A32', textAlign: 'center', marginBottom: 8 },
-  subtitle: { fontSize: 16, color: '#4A5568', textAlign: 'center', marginBottom: 40, fontWeight: '500' },
+  subtitle: { fontSize: 15, color: '#4A5568', textAlign: 'center', marginBottom: 40, fontWeight: '500' },
   linkButton: { alignItems: 'center', marginTop: 20, minHeight: 48, justifyContent: 'center' },
   linkText: { color: '#0F4A32', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
   formContainer: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },

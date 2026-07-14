@@ -147,7 +147,7 @@ export default function HomeScreen() {
               source={require("../../assets/images/LogoRecortado.jpg")}
               style={styles.logo}
             />
-            <Text style={styles.headerText}>CVG - Odonto B</Text>
+            <Text style={styles.headerText}>OpB Virtual</Text>
           </View>
           <View style={styles.roleBadgeRow}>
             {rol === "admin" && (
@@ -167,7 +167,7 @@ export default function HomeScreen() {
             )}
           </View>
           <View style={styles.headerMetaRow}>
-            <Text style={styles.subHeaderText}>Facultad de Odontología UNLP</Text>
+            <Text style={styles.subHeaderText}>Facultad de Odontología - UNLP</Text>
             <View style={styles.headerActions}>
               {/*Boton para ir a pantalla de administracion de usuarios, solo visible para admins*/}
               {rol === "admin" && (
