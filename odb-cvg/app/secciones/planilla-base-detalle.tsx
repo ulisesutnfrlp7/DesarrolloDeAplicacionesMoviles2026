@@ -2,30 +2,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import ExportarPlanilla from "../../components/ui/ExportarPlanilla";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
-import {
-  actualizarPlanillaBase,
-  eliminarPlanillaBase,
-  obtenerPlanillaBasePorId,
-  type ColumnaPlanilla,
-  type FilaBasePlanilla,
-  type PlanillaBaseTP,
-  type TipoColumnaPlanilla,
-  type TipoPlanilla,
-} from "../../hooks/usePlanillas";
+import { actualizarPlanillaBase, eliminarPlanillaBase, obtenerPlanillaBasePorId, type ColumnaPlanilla, type FilaBasePlanilla, type PlanillaBaseTP, type TipoColumnaPlanilla, type TipoPlanilla,} from "../../hooks/usePlanillas";
 import { useUserRole } from "../../hooks/useUserRole";
 
 const TIPOS_COLUMNA: TipoColumnaPlanilla[] = ["texto", "numero", "fecha", "nota", "textarea", "boolean"];
@@ -256,6 +238,9 @@ export default function PlanillaBaseDetalleScreen() {
             editable={!soloLectura}
             placeholder="Nombre de la planilla base"
             placeholderTextColor="#9CA3AF"
+            autoCorrect={true}
+            autoCapitalize="sentences"
+            spellCheck={true}
           />
           <View style={styles.typeRow}>
             {(["diaria", "resumen"] as TipoPlanilla[]).map((tipoOption) => {
@@ -328,6 +313,9 @@ export default function PlanillaBaseDetalleScreen() {
                           editable={!soloLectura}
                           keyboardType={columna.tipo === "numero" || columna.tipo === "nota" ? "numeric" : "default"}
                           multiline={columna.tipo === "textarea"}
+                          autoCorrect={columna.tipo === "texto" || columna.tipo === "textarea"}
+                          autoCapitalize={columna.tipo === "texto" || columna.tipo === "textarea" ? "sentences" : "none"}
+                          spellCheck={columna.tipo === "texto" || columna.tipo === "textarea"}
                         />
                       ))}
                       {!soloLectura && (
@@ -369,6 +357,9 @@ export default function PlanillaBaseDetalleScreen() {
                   onChangeText={(value) => editarColumna(index, { titulo: value })}
                   placeholder="Título"
                   placeholderTextColor="#9CA3AF"
+                  autoCorrect={true}
+                  autoCapitalize="sentences"
+                  spellCheck={true}
                 />
                 <View style={styles.typeRow}>
                   {TIPOS_COLUMNA.map((tipoColumna) => {
@@ -412,6 +403,9 @@ export default function PlanillaBaseDetalleScreen() {
                 onChangeText={setNuevaColumnaTitulo}
                 placeholder="Título de columna"
                 placeholderTextColor="#9CA3AF"
+                autoCorrect={true}
+                autoCapitalize="sentences"
+                spellCheck={true}
               />
               <View style={styles.typeRow}>
                 {TIPOS_COLUMNA.map((tipoColumna) => {

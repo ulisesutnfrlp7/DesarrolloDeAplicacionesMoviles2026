@@ -207,6 +207,7 @@ export default function SeccionFormScreen() {
           maxLength={100}
           autoCorrect={true}
           autoCapitalize="sentences"
+          spellCheck={true}
         />
 
         {/* Control de acceso */}

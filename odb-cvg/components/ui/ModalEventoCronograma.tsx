@@ -2,24 +2,9 @@
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import { db } from "../../config/firebaseConfig";
-import {
-  COMISION_GLOBAL,
-  MODULO_GLOBAL,
-  type EventoCronograma,
-  type EventoCronogramaInput,
-} from "../../hooks/useCronograma";
+import { COMISION_GLOBAL, MODULO_GLOBAL, type EventoCronograma, type EventoCronogramaInput,} from "../../hooks/useCronograma";
 import { useModulos } from "../../hooks/useModulos";
 
 interface Props {
@@ -276,6 +261,9 @@ export default function ModalEventoCronograma({
               placeholder="EJ. Ateneo Clínico N°1 o Parcial de Mecánica Dental"
               placeholderTextColor="#9CA3AF"
               maxLength={120}
+              autoCorrect={true}
+              autoCapitalize="sentences"
+              spellCheck={true}
             />
 
             <Text style={styles.label}>Descripción (opcional)</Text>
@@ -288,6 +276,9 @@ export default function ModalEventoCronograma({
               multiline
               numberOfLines={3}
               maxLength={500}
+              autoCorrect={true}
+              autoCapitalize="sentences"
+              spellCheck={true}
             />
 
             <Text style={styles.label}>Fecha</Text>

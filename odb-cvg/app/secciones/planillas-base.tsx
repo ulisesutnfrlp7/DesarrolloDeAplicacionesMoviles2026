@@ -2,25 +2,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
-import {
-  crearPlanillaBase,
-  eliminarPlanillaBase,
-  obtenerPlanillasBase,
-  type PlanillaBaseTP,
-  type TipoPlanilla,
-} from "../../hooks/usePlanillas";
+import { crearPlanillaBase, eliminarPlanillaBase, obtenerPlanillasBase, type PlanillaBaseTP, type TipoPlanilla,} from "../../hooks/usePlanillas";
 import { useUserRole } from "../../hooks/useUserRole";
 
 export default function PlanillasBaseScreen() {
@@ -136,6 +122,9 @@ export default function PlanillasBaseScreen() {
             onChangeText={setNombre}
             placeholder="Nombre de la planilla base"
             placeholderTextColor="#9CA3AF"
+            autoCorrect={true}
+            autoCapitalize="sentences"
+            spellCheck={true}
           />
           <Text style={styles.sectionLabel}>Tipo</Text>
           <View style={styles.chipsRow}>

@@ -572,6 +572,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
           maxLength={100}
           autoCorrect={true}
           autoCapitalize="sentences"
+          spellCheck={true}
         />
 
         {/* Contenido para tipo texto */}
@@ -594,6 +595,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
               textAlignVertical="top"
               autoCorrect={true}
               autoCapitalize="sentences"
+              spellCheck={true}
             />
           </>
         )}
@@ -610,8 +612,6 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
                 setUrlEnlace(v);
                 setHayCambios(true);
               }}
-              autoCorrect={true}
-              autoCapitalize="sentences"
               keyboardType="url"
             />
           </>
@@ -630,6 +630,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
               textAlignVertical="top"
               autoCorrect={true}
               autoCapitalize="sentences"
+              spellCheck={true}
             />
 
             <Text style={styles.label}>Fecha límite (opcional)</Text>

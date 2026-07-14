@@ -302,7 +302,9 @@ export default function NotasScreen() {
             setNombreExamen(text.replace(/\//g, "-"));
           }}
           editable={!esEdicion}
+          autoCorrect={true}
           autoCapitalize="sentences"
+          spellCheck={true}
         />
 
         {!esEdicion &&
