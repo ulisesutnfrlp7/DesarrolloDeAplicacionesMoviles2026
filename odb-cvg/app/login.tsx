@@ -28,6 +28,10 @@ export default function LoginScreen() {
         setErrorMensaje("El correo o la contraseña son incorrectos.");
       } else if (error.code === 'auth/invalid-email') {
         setErrorMensaje("El formato del correo electrónico no es válido.");
+      } else if (error.code === 'auth/too-many-requests') {
+        setErrorMensaje("Demasiados intentos fallidos. Probá de nuevo en unos minutos.");
+      } else if (error.code === 'auth/user-disabled') {
+        setErrorMensaje("Esta cuenta fue deshabilitada. Contactá a la cátedra.");
       } else {
         setErrorMensaje("Ocurrió un error al intentar iniciar sesión.");
       }

@@ -1,18 +1,11 @@
 //app/(tabs)/perfil.tsx
 import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { useUserRole } from "../../hooks/useUserRole";
+import ModalCambiarPassword from "../../components/ui/ModalCambiarPassword";
 
 export default function PerfilScreen() {
   const { rol, loading: loadingRol } = useUserRole();
@@ -39,6 +32,8 @@ export default function PerfilScreen() {
   const [confirmarEdicion, setConfirmarEdicion] = useState(false);
 
   const [alerta, setAlerta] = useState(false);
+
+  const [modalPassword, setModalPassword] = useState(false);
 
   useEffect(() => {
     setNombre(perfil.nombre ?? "");
@@ -122,6 +117,12 @@ export default function PerfilScreen() {
         )}
       </TouchableOpacity>
 
+      <View style={styles.separador} />
+      <Text style={styles.subtituloSeccion}>Seguridad</Text>
+      <TouchableOpacity style={styles.botonSecundario} onPress={() => setModalPassword(true)}>
+        <Text style={styles.botonSecundarioTexto}>Actualizar contraseña</Text>
+      </TouchableOpacity>
+
       {esAlumno && (
         <>
           <View style={styles.separador} />
@@ -164,16 +165,6 @@ export default function PerfilScreen() {
                 value={legajoConfirmacion}
                 onChangeText={setLegajoConfirmacion}
                 placeholder="Volvé a escribirlo"
-                placeholderTextColor="#9CA3AF"
-              />
-
-              <Text style={styles.label}>DNI (opcional)</Text>
-              <TextInput
-                style={styles.input}
-                value={dni}
-                onChangeText={setDni}
-                placeholder="Ej: 30123456"
-                keyboardType="number-pad"
                 placeholderTextColor="#9CA3AF"
               />
 
@@ -239,6 +230,12 @@ export default function PerfilScreen() {
         tipo="exito"
         onClose={() => setAlerta(false)}
       />
+
+      <ModalCambiarPassword
+        visible={modalPassword}
+        onClose={() => setModalPassword(false)}
+        onSuccess={() => setAlerta(true)}
+      />
     </ScrollView>
   );
 }
@@ -271,6 +268,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 20,
   },
+  botonSecundario: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#0F4A32",
+    borderRadius: 8,
+    minHeight: 48,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  botonSecundarioTexto: { color: "#0F4A32", fontWeight: "700", fontSize: 15 },
   campoBloqueadoTexto: { fontSize: 16, color: "#6B7280" },
   separador: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 },
   avisoBox: { backgroundColor: "#FEF3C7", borderRadius: 8, padding: 10, marginBottom: 16 },

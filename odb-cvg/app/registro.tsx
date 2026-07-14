@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import ModalAlerta from '../components/ui/ModalAlerta';
 import { auth, db } from '../config/firebaseConfig';
+import { validarPassword } from '../utils/validacionPassword';
 
 export default function RegistroScreen() {
   const [nombre, setNombre] = useState('');
@@ -19,6 +20,12 @@ export default function RegistroScreen() {
 
     if (!nombre || !email || !password) {
       setErrorMensaje("Por favor, completá todos los datos solicitados.");
+      return;
+    }
+
+    const errorPassword = validarPassword(password);
+    if (errorPassword) {
+      setErrorMensaje(errorPassword);
       return;
     }
     
@@ -83,12 +90,13 @@ export default function RegistroScreen() {
         <Text style={styles.label}>Contraseña</Text>
         <TextInput 
           style={[styles.input, errorMensaje ? styles.inputError : null]} 
-          placeholder="Mínimo 6 caracteres" 
+          placeholder="Mínimo 8 caracteres" 
           value={password} 
           onChangeText={(text) => { setPassword(text); limpiarError(); }} 
           secureTextEntry 
           placeholderTextColor="#666" 
         />
+        <Text style={styles.hint}>Mínimo 8 caracteres, con mayúscula, minúscula y número.</Text>
 
         {errorMensaje ? (
           <Text style={styles.errorText}>{errorMensaje}</Text>
@@ -128,6 +136,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, minHeight: 48, marginBottom: 20, fontSize: 16, color: '#000', letterSpacing: 0 },
   inputError: { borderColor: "#DC2626", backgroundColor: "#FEF2F2" },
   errorText: { color: "#DC2626", fontSize: 13, marginBottom: 12, marginTop: -8, textAlign: "center" },
+  hint: { fontSize: 12, color: "#6B7280", marginTop: -14, marginBottom: 16 },
   primaryButton: { backgroundColor: '#25B471', borderRadius: 8, alignItems: 'center', justifyContent: 'center', minHeight: 48, marginTop: 4 },
   primaryButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
 });
