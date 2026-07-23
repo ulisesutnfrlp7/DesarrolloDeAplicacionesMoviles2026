@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import ModalAlerta from '../components/ui/ModalAlerta';
 import { auth, db } from '../config/firebaseConfig';
 import { validarPassword } from '../utils/validacionPassword';
@@ -62,7 +62,15 @@ export default function RegistroScreen() {
   const limpiarError = () => setErrorMensaje("");
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+  >
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.title}>Crear Cuenta</Text>
       <Text style={styles.subtitle}>Completa tus datos para ingresar en OpB Virtual.</Text>
 
@@ -121,12 +129,13 @@ export default function RegistroScreen() {
         tipo="exito"
         onClose={() => setModalExito(false)}
       />
-    </View>
+    </ScrollView>
+  </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5', justifyContent: 'center', padding: 20 },
+  container: { flexGrow: 1, backgroundColor: '#F5F5F5', justifyContent: 'center', padding: 20 },
   title: { fontSize: 28, fontWeight: 'bold', color: '#0F4A32', textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, color: '#4A5568', textAlign: 'center', marginBottom: 40, fontWeight: '500' },
   linkButton: { alignItems: 'center', marginTop: 20, minHeight: 48, justifyContent: 'center' },
