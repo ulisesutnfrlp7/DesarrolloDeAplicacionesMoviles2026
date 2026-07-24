@@ -2,14 +2,7 @@
 import { router } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import React, { useState } from "react";
-import {
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  View,
-} from "react-native";
+import { StyleSheet, Text, TextInput, TouchableOpacity, Image, View, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { auth } from "../config/firebaseConfig";
 
 export default function LoginScreen() {
@@ -35,6 +28,10 @@ export default function LoginScreen() {
         setErrorMensaje("El correo o la contraseña son incorrectos.");
       } else if (error.code === 'auth/invalid-email') {
         setErrorMensaje("El formato del correo electrónico no es válido.");
+      } else if (error.code === 'auth/too-many-requests') {
+        setErrorMensaje("Demasiados intentos fallidos. Probá de nuevo en unos minutos.");
+      } else if (error.code === 'auth/user-disabled') {
+        setErrorMensaje("Esta cuenta fue deshabilitada. Contactá a la cátedra.");
       } else {
         setErrorMensaje("Ocurrió un error al intentar iniciar sesión.");
       }
@@ -42,12 +39,21 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+  >
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.header}>
         <Image
           source={require("../assets/images/LogoRecortado.jpg")}
           style={styles.logo}
         />
+        <Text style={styles.title}>OpB Virtual</Text>
         <Text style={styles.title}>Operatoria Dental B</Text>
         <Text style={styles.subtitle}>Facultad de Odontología - UNLP</Text>
       </View>
@@ -104,13 +110,14 @@ export default function LoginScreen() {
           <Text style={styles.secondaryButtonText}>Crear cuenta nueva</Text>
         </TouchableOpacity>
       </View>
-    </View>
+  </ScrollView>
+  </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: "#F5F5F5",
     justifyContent: "center",
     padding: 20,
@@ -121,19 +128,19 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#0F4A32",
     textAlign: "center",
-    marginBottom: 8,
   },
   logo: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    marginBottom: 16,
+    marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
     color: "#000000",
     textAlign: "center",
     fontWeight: "500",
+    marginTop: 20,
   },
   formContainer: {
     backgroundColor: "#FFFFFF",

@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import ModalAlerta from '../components/ui/ModalAlerta';
 import { auth, db } from '../config/firebaseConfig';
 
@@ -46,7 +46,15 @@ export default function RecuperarScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+  >
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.title}>Recuperar Contraseña</Text>
       <Text style={styles.subtitle}>Te enviaremos un enlace a tu correo institucional.</Text>
 
@@ -97,12 +105,13 @@ export default function RecuperarScreen() {
           router.back();
         }}
       />
-    </View>
+    </ScrollView>
+  </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5', justifyContent: 'center', padding: 20 },
+  container: { flexGrow: 1, backgroundColor: '#F5F5F5', justifyContent: 'center', padding: 20 },
   title: { fontSize: 28, fontWeight: 'bold', color: '#0F4A32', textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#4A5568', textAlign: 'center', marginBottom: 40, fontWeight: '500', paddingHorizontal: 10 },
   formContainer: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },

@@ -463,8 +463,6 @@ const eliminarUsuario = async (usuario: Usuario) => {
             placeholder="Buscar por nombre o email..."
             value={filtroTexto}
             onChangeText={setFiltroTexto}
-            autoCorrect={true}
-            autoCapitalize="sentences"
           />
           <View style={styles.rolesContainer}>
             {["todos", "alumno", "profesor", "admin"].map((rolItem) => {
@@ -523,6 +521,7 @@ const eliminarUsuario = async (usuario: Usuario) => {
             onChangeText={setFiltroAccesos}
             autoCorrect={true}
             autoCapitalize="sentences"
+            spellCheck={true}
           />
           <View style={styles.rolesContainer}>
             {[

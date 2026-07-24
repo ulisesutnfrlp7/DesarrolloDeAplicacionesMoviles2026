@@ -24,17 +24,6 @@ export interface InscripcionConComision extends Inscripcion {
   fechaCambioComision?: any;
 }
 
-// Se lanza cuando el alumno intenta anotarse a una comisión distinta de otra
-// en la que ya está inscripto, dentro de la MISMA sección, sin haber confirmado el cambio.
-export class ComisionConflictoError extends Error {
-  comisionAnteriorTitulo: string;
-  constructor(comisionAnteriorTitulo: string) {
-    super("Ya estás inscripto en otra comisión de esta sección.");
-    this.name = "ComisionConflictoError";
-    this.comisionAnteriorTitulo = comisionAnteriorTitulo;
-  }
-}
-
 export interface ContextoInscripcionEfectivo {
   tipoAcceso: "seccion" | "subseccion";
   seccionId: string;
@@ -328,18 +317,17 @@ export async function inscribirConCodigo(
   codigoActual: string,
   uid: string,
   subseccionPath?: string,
-  confirmarCambioComision: boolean = false,
 ): Promise<void> {
   if (!codigoActual) {
     throw new Error(
-      "Esta cursada aún no tiene código configurado. Consultá a la cátedra.",
+      "Esta cursada aún no tiene código configurado. Consultá en la Asignatura.",
     );
   }
   if (
     codigoIngresado.trim().toUpperCase() !== codigoActual.trim().toUpperCase()
   ) {
     throw new Error(
-      "Código incorrecto. Verificá el código proporcionado por la cátedra.",
+      "Código incorrecto. Verificá el código proporcionado por la Asignatura.",
     );
   }
 
@@ -355,7 +343,7 @@ export async function inscribirConCodigo(
   );
   if (yaInscripto) return;
 
-  // NUEVO: Buscamos el título de la subsección actual antes de guardar
+  // Buscamos el título de la subsección actual antes de guardar
   let subseccionTitulo = "";
   if (subseccionPath) {
     subseccionTitulo = await obtenerTituloSubseccion(moduloId, seccionId, subseccionPath);
@@ -379,42 +367,11 @@ export async function inscribirConCodigo(
       const permiteMulti = await tienePermisoMultiComision(uid, seccionId);
 
       if (!permiteMulti) {
-        const tituloAnterior = await obtenerTituloSubseccion(
-          moduloId,
-          seccionId,
-          otraComisionDoc.data().subseccionPath as string,
+        // El alumno YA está en otra comisión de esta sección y no tiene permiso multi-comisión.
+        // No se le permite auto-cambiarse: debe pedirle al profesor/admin que lo mueva.
+        throw new Error(
+          "Ya estás inscripto en otra comisión de esta sección. No podés cambiarte por tu cuenta: pedile a tu profesor o administrador que te mueva de comisión.",
         );
-
-        if (!confirmarCambioComision) {
-          throw new ComisionConflictoError(tituloAnterior);
-        }
-
-        // Confirmado: se borran TODAS las otras comisiones de esta sección y se registra el cambio.
-        const batch = writeBatch(db);
-        todasSnap.docs
-          .filter((d) => {
-            const path = (d.data().subseccionPath as string | undefined) ?? "";
-            return path !== "" && path !== subseccionPath;
-          })
-          .forEach((d) => batch.delete(d.ref));
-
-        batch.set(doc(collection(db, "inscripciones")), {
-          alumnoId: uid,
-          moduloId,
-          seccionId,
-          subseccionPath,
-          subseccionIds: getSubseccionIds(subseccionPath),
-          subseccionTitulo, // NUEVO
-          tipoAcceso: "subseccion",
-          tipo: "codigo",
-          codigoUsado: codigoIngresado.trim().toUpperCase(),
-          fechaInscripcion: serverTimestamp(),
-          cambioComision: true,
-          comisionAnteriorTitulo: tituloAnterior,
-          fechaCambioComision: serverTimestamp(),
-        });
-        await batch.commit();
-        return;
       }
 
       // Tiene permiso explícito: se agrega sin borrar la anterior.
@@ -424,7 +381,7 @@ export async function inscribirConCodigo(
         seccionId,
         subseccionPath,
         subseccionIds: getSubseccionIds(subseccionPath),
-        subseccionTitulo, // NUEVO
+        subseccionTitulo,
         tipoAcceso: "subseccion",
         tipo: "codigo",
         codigoUsado: codigoIngresado.trim().toUpperCase(),
@@ -442,7 +399,7 @@ export async function inscribirConCodigo(
     seccionId,
     subseccionPath: subseccionPath ?? "",
     subseccionIds: getSubseccionIds(subseccionPath),
-    subseccionTitulo, // NUEVO
+    subseccionTitulo,
     tipoAcceso: subseccionPath ? "subseccion" : "seccion",
     tipo: "codigo",
     codigoUsado: codigoIngresado.trim().toUpperCase(),
@@ -470,7 +427,7 @@ export async function inscribirManualmente(
     throw new Error("Este alumno ya está inscripto en la cursada.");
   }
 
-  // NUEVO: Buscamos el título de la subsección actual antes de guardar
+  // Buscamos el título de la subsección actual antes de guardar
   let subseccionTitulo = "";
   if (subseccionPath) {
     subseccionTitulo = await obtenerTituloSubseccion(moduloId, seccionId, subseccionPath);
@@ -482,7 +439,7 @@ export async function inscribirManualmente(
     seccionId,
     subseccionPath: subseccionPath ?? "",
     subseccionIds: getSubseccionIds(subseccionPath),
-    subseccionTitulo, // NUEVO
+    subseccionTitulo,
     tipoAcceso: subseccionPath ? "subseccion" : "seccion",
     tipo: "manual",
     codigoUsado: null,

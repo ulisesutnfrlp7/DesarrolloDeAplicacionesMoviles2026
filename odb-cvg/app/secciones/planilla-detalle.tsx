@@ -2,37 +2,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ExportarPlanilla from "../../components/ui/ExportarPlanilla";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import { auth } from "../../config/firebaseConfig";
-import {
-  actualizarColumnasPlanilla,
-  actualizarDatosPlanilla,
-  actualizarFilaPlanilla,
-  crearFilaPlanilla,
-  eliminarPlanilla,
-  eliminarFilaPlanilla,
-  obtenerFilasPlanilla,
-  obtenerPlanillaPorId,
-  obtenerVistaAlumnoPlanilla,
-  type ColumnaPlanilla,
-  type FilaPlanilla,
-  type PlanillaTP,
-  type TipoColumnaPlanilla,
-  type VistaAlumnoPlanilla,
-} from "../../hooks/usePlanillas";
+import { actualizarColumnasPlanilla, actualizarDatosPlanilla, actualizarFilaPlanilla, crearFilaPlanilla, eliminarPlanilla, eliminarFilaPlanilla, obtenerFilasPlanilla, obtenerPlanillaPorId, obtenerVistaAlumnoPlanilla, type ColumnaPlanilla, type FilaPlanilla, type PlanillaTP, type TipoColumnaPlanilla, type VistaAlumnoPlanilla,} from "../../hooks/usePlanillas";
 import { useUserRole } from "../../hooks/useUserRole";
 
 const TIPOS_COLUMNA: TipoColumnaPlanilla[] = ["texto", "numero", "fecha", "nota", "textarea", "boolean"];
@@ -332,6 +308,9 @@ export default function PlanillaDetalleScreen() {
               onChangeText={setTituloDraft}
               placeholder="Titulo de la planilla"
               placeholderTextColor="#9CA3AF"
+              autoCorrect={true}
+              autoCapitalize="sentences"
+              spellCheck={true}
             />
             <View style={styles.titleActions}>
               <TouchableOpacity style={styles.secondaryBtnInline} onPress={guardarTitulo} disabled={guardando}>
@@ -405,6 +384,9 @@ export default function PlanillaDetalleScreen() {
                           onChangeText={(value) => actualizarCelda(fila.id, columna.id, value)}
                           keyboardType={columna.tipo === "numero" || columna.tipo === "nota" ? "numeric" : "default"}
                           multiline={columna.tipo === "textarea"}
+                          autoCorrect={columna.tipo === "texto" || columna.tipo === "textarea"}
+                          autoCapitalize={columna.tipo === "texto" || columna.tipo === "textarea" ? "sentences" : "none"}
+                          spellCheck={columna.tipo === "texto" || columna.tipo === "textarea"}
                         />
                       ))}
                       <View style={styles.rowActions}>
@@ -444,6 +426,9 @@ export default function PlanillaDetalleScreen() {
                   onChangeText={(value) => editarColumna(index, { titulo: value })}
                   placeholder="Titulo"
                   placeholderTextColor="#9CA3AF"
+                  autoCorrect={true}
+                  autoCapitalize="sentences"
+                  spellCheck={true}
                 />
                 <View style={styles.typeRow}>
                   {TIPOS_COLUMNA.map((tipoColumna) => {
@@ -487,6 +472,9 @@ export default function PlanillaDetalleScreen() {
                 onChangeText={setNuevaColumnaTitulo}
                 placeholder="Titulo de columna"
                 placeholderTextColor="#9CA3AF"
+                autoCorrect={true}
+                autoCapitalize="sentences"
+                spellCheck={true}
               />
               <View style={styles.typeRow}>
                 {TIPOS_COLUMNA.map((tipoColumna) => {

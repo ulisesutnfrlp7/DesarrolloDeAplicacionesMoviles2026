@@ -3,34 +3,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import BuscadorAlumnos from "../../components/ui/BuscadorAlumnos";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ScreenHeader from "../../components/ui/ScreenHeader";
 import { db } from "../../config/firebaseConfig";
-import {
-  useContextoInscripcionEfectivo,
-  useInscripcionesPorSeccion,
-} from "../../hooks/useInscripciones";
-import {
-  crearPlanillaDesdeBase,
-  generarVistaAlumno,
-  obtenerPlanillasBase,
-  obtenerPlanillasPorContexto,
-  type PlanillaBaseTP,
-  type PlanillaTP,
-  type TipoPlanilla,
-} from "../../hooks/usePlanillas";
+import { useContextoInscripcionEfectivo, useInscripcionesPorSeccion,} from "../../hooks/useInscripciones";
+import { crearPlanillaDesdeBase, generarVistaAlumno, obtenerPlanillasBase, obtenerPlanillasPorContexto, type PlanillaBaseTP, type PlanillaTP, type TipoPlanilla,} from "../../hooks/usePlanillas";
 import { useUserRole } from "../../hooks/useUserRole";
 
 export default function PlanillasScreen() {
@@ -378,7 +357,9 @@ export default function PlanillasScreen() {
             placeholderTextColor="#9CA3AF"
             value={titulo}
             onChangeText={setTitulo}
+            autoCorrect={true}
             autoCapitalize="sentences"
+            spellCheck={true}
           />
 
           <TouchableOpacity

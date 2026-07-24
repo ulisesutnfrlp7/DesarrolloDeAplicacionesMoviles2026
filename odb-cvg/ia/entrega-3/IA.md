@@ -1759,3 +1759,1844 @@ El header del cronograma ahora muestra `Cronograma 2026` (o el año que correspo
 2. Andá a la pestaña Cronograma → FAB → verificá que solo aparezcan los 6 módulos de Operatoria
 3. Seleccioná un módulo → verificá que el selector de comisión cargue solo las que empiecen con "Comisión"
 4. El título debe decir "Cronograma 2026"
+
+---
+
+
+
+---
+# Q&A de la sesión 2 
+---
+
+# Gestión de perfil de usuario con validación de legajo
+
+## User:
+Hola, necesito agregar abajo en la navbar una parte para la gestión del perfil de usuario, necesito que, para no romper actualmente la creación de usuarios, estos datos nuevos del usuario sean opcionales, pero que si el alumno intenta entrar a alguna sección o algo le solicite rellenar al menos el legajo, pero eso, necesito que se pida el legajo, dni y demás datos, siendo obligatorio minímamente el legajo, pero solo para cuando se intenta ingresar en una sección y que estos datos, al menos el dni se encripten en la bdd, y que solo se lo pida a los alumnos que intentan ingresar a secciones, NO a profesores ni tampoco a admins. Te paso el codigo, si falta algo pedimelo y seguimos, y por cierto, solo pasame el codigo que debo agregar/cambiar y donde, sin crear artefactos
+
+```
+
+## Assistant:
+
+Perfecto, con lo que pasaste puedo armar todo el flujo sin bloquearme en nada, pero hago dos supuestos que te aviso de entrada:
+
+1. **El "perfil" es una nueva pestaña** en la navbar (`app/(tabs)/perfil.tsx`), separada de la lógica de bloqueo por sección.
+2. **Cifrado del DNI**: como no vi ninguna Cloud Function ni backend propio, uso cifrado **del lado del cliente** con `crypto-js` (AES) antes de guardar en Firestore. Esto protege el dato si alguien mira la base/backups directamente, pero la clave viaja en el bundle de la app, así que no es inviolable ante alguien que decompile la app. Si en algún momento querés blindarlo de verdad, lo ideal es mover el cifrado a una Cloud Function (la clave nunca sale del servidor) — avisame y armamos esa versión.
+
+Instalá antes:
+```bash
+npm install crypto-js
+npm install --save-dev @types/crypto-js
+```
+Y agregá en tu `.env` (o `app.config`):
+```
+EXPO_PUBLIC_DNI_SECRET_KEY=una-clave-larga-y-random-que-solo-vos-conozcas
+```
+
+---
+
+### Nuevo: `utils/crypto.ts`
+```typescript
+import CryptoJS from "crypto-js";
+
+// ⚠️ Ver nota arriba: cifrado client-side, protege el dato "en reposo" en la BDD,
+// no contra alguien que decompile la app.
+const SECRET_KEY = process.env.EXPO_PUBLIC_DNI_SECRET_KEY ?? "cambiar-esta-clave";
+
+export function encriptarDato(valor: string): string {
+  if (!valor) return "";
+  return CryptoJS.AES.encrypt(valor, SECRET_KEY).toString();
+}
+
+export function desencriptarDato(valorEncriptado: string): string {
+  if (!valorEncriptado) return "";
+  try {
+    const bytes = CryptoJS.AES.decrypt(valorEncriptado, SECRET_KEY);
+    return bytes.toString(CryptoJS.enc.Utf8);
+  } catch {
+    return "";
+  }
+}
+```
+
+### Nuevo: `hooks/useUserProfile.ts`
+```typescript
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { auth, db } from "../config/firebaseConfig";
+import { desencriptarDato, encriptarDato } from "../utils/crypto";
+
+export interface PerfilUsuario {
+  legajo?: string;
+  dni?: string;
+  telefono?: string;
+}
+
+export function useUserProfile() {
+  const [perfil, setPerfil] = useState<PerfilUsuario>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setLoading(false);
+      return;
+    }
+    const unsubscribe = onSnapshot(doc(db, "usuarios", uid), (snap) => {
+      const data = snap.data();
+      setPerfil({
+        legajo: data?.legajo ?? "",
+        dni: data?.dniEncriptado ? desencriptarDato(data.dniEncriptado) : "",
+        telefono: data?.telefono ?? "",
+      });
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const guardarPerfil = async (datos: { legajo: string; dni?: string; telefono?: string }) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error("No hay usuario autenticado.");
+    if (!datos.legajo?.trim()) throw new Error("El legajo es obligatorio.");
+
+    await setDoc(
+      doc(db, "usuarios", uid),
+      {
+        legajo: datos.legajo.trim(),
+        ...(datos.dni ? { dniEncriptado: encriptarDato(datos.dni.trim()) } : {}),
+        ...(datos.telefono ? { telefono: datos.telefono.trim() } : {}),
+      },
+      { merge: true },
+    );
+  };
+
+  const perfilCompleto = !!perfil.legajo && perfil.legajo.trim().length > 0;
+
+  return { perfil, loading, perfilCompleto, guardarPerfil };
+}
+```
+
+### Nuevo: `components/ui/ModalCompletarPerfil.tsx`
+```typescriptreact
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useUserProfile } from "../../hooks/useUserProfile";
+
+interface Props {
+  visible: boolean;
+  onSuccess: () => void;
+  onCancelar: () => void;
+}
+
+export default function ModalCompletarPerfil({ visible, onSuccess, onCancelar }: Props) {
+  const { guardarPerfil } = useUserProfile();
+  const [legajo, setLegajo] = useState("");
+  const [dni, setDni] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const handleGuardar = async () => {
+    setError("");
+    if (!legajo.trim()) {
+      setError("El legajo es obligatorio para continuar.");
+      return;
+    }
+    setGuardando(true);
+    try {
+      await guardarPerfil({ legajo, dni, telefono });
+      onSuccess();
+    } catch (e: any) {
+      setError(e.message ?? "No se pudo guardar tu perfil.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancelar}>
+      <View style={styles.overlay}>
+        <View style={styles.card}>
+          <Text style={styles.titulo}>Completá tu perfil</Text>
+          <Text style={styles.subtitulo}>
+            Para ingresar a esta sección necesitamos al menos tu legajo.
+          </Text>
+
+          <Text style={styles.label}>Legajo *</Text>
+          <TextInput
+            style={styles.input}
+            value={legajo}
+            onChangeText={setLegajo}
+            placeholder="Ej: 12345/6"
+            placeholderTextColor="#9CA3AF"
+          />
+
+          <Text style={styles.label}>DNI (opcional)</Text>
+          <TextInput
+            style={styles.input}
+            value={dni}
+            onChangeText={setDni}
+            placeholder="Ej: 30123456"
+            keyboardType="number-pad"
+            placeholderTextColor="#9CA3AF"
+          />
+
+          <Text style={styles.label}>Teléfono (opcional)</Text>
+          <TextInput
+            style={styles.input}
+            value={telefono}
+            onChangeText={setTelefono}
+            placeholder="Ej: 221 555-5555"
+            keyboardType="phone-pad"
+            placeholderTextColor="#9CA3AF"
+          />
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <TouchableOpacity
+            style={[styles.boton, guardando && { opacity: 0.7 }]}
+            onPress={handleGuardar}
+            disabled={guardando}
+          >
+            {guardando ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.botonTexto}>Guardar y continuar</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.cancelar} onPress={onCancelar} disabled={guardando}>
+            <Text style={styles.cancelarTexto}>Volver</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 },
+  card: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 20 },
+  titulo: { fontSize: 18, fontWeight: "700", color: "#11181C", marginBottom: 4 },
+  subtitulo: { fontSize: 13, color: "#6B7280", marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 6 },
+  input: {
+    backgroundColor: "#F9F9F9",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    minHeight: 46,
+    marginBottom: 14,
+    fontSize: 15,
+    color: "#000",
+  },
+  error: { color: "#DC2626", fontSize: 13, marginBottom: 10, textAlign: "center" },
+  boton: { backgroundColor: "#25B471", borderRadius: 8, minHeight: 48, justifyContent: "center", alignItems: "center" },
+  botonTexto: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
+  cancelar: { marginTop: 12, alignItems: "center" },
+  cancelarTexto: { color: "#6B7280", fontWeight: "600", fontSize: 13 },
+});
+```
+
+### Nuevo: `app/(tabs)/perfil.tsx`
+```typescriptreact
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import ModalAlerta from "../../components/ui/ModalAlerta";
+import { useUserProfile } from "../../hooks/useUserProfile";
+import { useUserRole } from "../../hooks/useUserRole";
+
+export default function PerfilScreen() {
+  const { rol, loading: loadingRol } = useUserRole();
+  const { perfil, loading: loadingPerfil, guardarPerfil } = useUserProfile();
+
+  const [legajo, setLegajo] = useState("");
+  const [dni, setDni] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [alerta, setAlerta] = useState(false);
+
+  useEffect(() => {
+    setLegajo(perfil.legajo ?? "");
+    setDni(perfil.dni ?? "");
+    setTelefono(perfil.telefono ?? "");
+  }, [perfil]);
+
+  const esAlumno = rol === "alumno";
+
+  const handleGuardar = async () => {
+    setError("");
+    if (esAlumno && !legajo.trim()) {
+      setError("El legajo es obligatorio.");
+      return;
+    }
+    setGuardando(true);
+    try {
+      await guardarPerfil({ legajo, dni, telefono });
+      setAlerta(true);
+    } catch (e: any) {
+      setError(e.message ?? "No se pudo guardar tu perfil.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  if (loadingRol || loadingPerfil) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#25B471" />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.titulo}>Mi Perfil</Text>
+
+      {esAlumno ? (
+        <>
+          <Text style={styles.label}>Legajo *</Text>
+          <TextInput style={styles.input} value={legajo} onChangeText={setLegajo} placeholder="Ej: 12345/6" placeholderTextColor="#9CA3AF" />
+
+          <Text style={styles.label}>DNI</Text>
+          <TextInput style={styles.input} value={dni} onChangeText={setDni} placeholder="Ej: 30123456" keyboardType="number-pad" placeholderTextColor="#9CA3AF" />
+
+          <Text style={styles.label}>Teléfono</Text>
+          <TextInput style={styles.input} value={telefono} onChangeText={setTelefono} placeholder="Ej: 221 555-5555" keyboardType="phone-pad" placeholderTextColor="#9CA3AF" />
+        </>
+      ) : (
+        <Text style={styles.infoTexto}>Tu rol ({rol}) no requiere legajo ni DNI.</Text>
+      )}
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {esAlumno && (
+        <TouchableOpacity style={[styles.boton, guardando && { opacity: 0.7 }]} onPress={handleGuardar} disabled={guardando}>
+          {guardando ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.botonTexto}>Guardar cambios</Text>}
+        </TouchableOpacity>
+      )}
+
+      <ModalAlerta visible={alerta} titulo="Guardado" mensaje="Tu perfil fue actualizado correctamente." tipo="exito" onClose={() => setAlerta(false)} />
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F5F5F5" },
+  content: { padding: 20, paddingTop: 48 },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  titulo: { fontSize: 22, fontWeight: "bold", color: "#11181C", marginBottom: 20 },
+  label: { fontSize: 14, fontWeight: "700", color: "#000000", marginBottom: 8 },
+  input: { backgroundColor: "#F9F9F9", borderWidth: 1, borderColor: "#E0E0E0", borderRadius: 8, paddingHorizontal: 12, minHeight: 48, marginBottom: 20, fontSize: 16, color: "#000" },
+  infoTexto: { fontSize: 14, color: "#6B7280" },
+  error: { color: "#DC2626", fontSize: 13, marginBottom: 12, textAlign: "center" },
+  boton: { backgroundColor: "#25B471", borderRadius: 8, minHeight: 48, justifyContent: "center", alignItems: "center" },
+  botonTexto: { color: "#FFFFFF", fontWeight: "bold", fontSize: 16 },
+});
+```
+
+### Editar `app/(tabs)/_layout.tsx`
+Agregá esta pestaña después de la de `home`:
+```typescriptreact
+      <Tabs.Screen
+        name="perfil"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-circle-outline" size={size} color={color} />
+          ),
+        }}
+      />
+```
+
+### Editar `app/secciones/[id].tsx`
+Agregá los imports:
+```typescript
+import ModalCompletarPerfil from "../../components/ui/ModalCompletarPerfil";
+import { useUserProfile } from "../../hooks/useUserProfile";
+```
+
+Justo debajo de donde declarás `useUserRole`, agregá:
+```typescript
+const { perfilCompleto, loading: loadingPerfil } = useUserProfile();
+```
+
+Actualizá el loading inicial para que también espere el perfil cuando es alumno:
+```typescript
+if (loadingSeccion || loadingRol || (rol === "alumno" && loadingPerfil)) {
+```
+(reemplaza la condición `if (loadingSeccion || loadingRol) {` existente)
+
+Y agregá este bloque de gating **después** del `if (!seccion) {...}` y **antes** del bloque `if (seccion.esRestringida && ...)`:
+```typescript
+if (rol === "alumno" && !perfilCompleto) {
+  return (
+    <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+      <ScreenHeader titulo={seccion.titulo} mostrarHome />
+      <ModalCompletarPerfil
+        visible={true}
+        onSuccess={() => {}}
+        onCancelar={() => router.back()}
+      />
+    </View>
+  );
+}
+```
+(No necesita hacer nada en `onSuccess`: al guardar, el `onSnapshot` de `useUserProfile` actualiza `perfilCompleto` solo y este bloque deja de renderizarse, mostrando la sección.)
+
+---
+
+### Dos cosas que te dejo marcadas, no las toqué para no meterme donde no me pediste:
+
+1. **`firestore.rules`**: no hace falta tocar nada para que esto funcione — la regla `allow write: if request.auth.uid == userId` en `/usuarios/{userId}` ya permite que el alumno agregue `legajo`/`dniEncriptado` a su propio doc. Pero ojo: esa misma regla también le permite a cualquier usuario autenticado cambiarse a sí mismo el campo `rol` a `'admin'`. Es un tema preexistente, no de esta feature, pero ya que estamos tocando permisos te lo marco por si querés que lo blindemos después (se arregla fácil con `request.resource.data.rol == resource.data.rol` en la regla de update).
+2. Si en algún momento migrás el cifrado a una Cloud Function, avisame y te paso esa versión (la función recibiría el DNI en texto plano por HTTPS callable y devolvería el valor cifrado, sin exponer la clave nunca al cliente).
+
+## User:
+
+todo lo que dice AES me da error en el archivo crypto:
+Namespace '"c:/Users/Marti/appsmoviles/DesarrolloDeAplicacionesMoviles2026/odb-cvg/node_modules/expo-crypto/build/Crypto"' has no exported member 'AESEncryptionKey'.
+type Crypto.AESEncryptionKey = /*unresolved*/ any
+
+llegue a esta esa parte, lo demas no segui cambiandolo
+
+## Assistant:
+
+Tenés razón en el error — me equivoqué. Las funciones AES que te pasé (`AESEncryptionKey`, `aesEncryptAsync`, etc.) están en la documentación "unversioned" de Expo, que describe una API que **todavía no está en la versión de `expo-crypto` que corresponde a tu SDK 54** — es una función que se documentó antes de publicarse. Mi error, perdón por el ida y vuelta. Volvamos a `crypto-js`, que es una librería probada y estable, y esta vez vamos a diagnosticar bien por qué no tomaba el polyfill.
+
+### Revertir instalación
+```bash
+npm uninstall expo-crypto
+npm install crypto-js
+npm install --save-dev @types/crypto-js
+npx expo install react-native-get-random-values
+```
+
+### Reemplazar `utils/crypto.ts`
+```typescript
+import CryptoJS from "crypto-js";
+
+// Cifrado reversible AES. La clave vive en el bundle de la app (sin backend
+// propio no hay forma de evitarlo), así que protege el DNI ante una fuga de
+// la base de datos, pero no ante alguien que decompile la app.
+const SECRET_KEY = process.env.EXPO_PUBLIC_DNI_SECRET_KEY ?? "cambiar-esta-clave";
+
+export function encriptarDato(valor: string): string {
+  if (!valor) return "";
+  return CryptoJS.AES.encrypt(valor.trim(), SECRET_KEY).toString();
+}
+
+export function desencriptarDato(valorEncriptado: string): string {
+  if (!valorEncriptado) return "";
+  try {
+    const bytes = CryptoJS.AES.decrypt(valorEncriptado, SECRET_KEY);
+    return bytes.toString(CryptoJS.enc.Utf8);
+  } catch {
+    return "";
+  }
+}
+```
+(Ojo: ahora son funciones **síncronas** de nuevo, no `async`. Si en `hooks/useUserProfile.ts` habías puesto la versión con `await desencriptarDato(...)` del mensaje anterior, sacá los `await` de esas dos llamadas y el `(async () => {...})()` que envolvía el `onSnapshot` — volvés a la versión síncrona simple que armamos al principio.)
+
+### `app/_layout.tsx`
+Volvé a poner como primerísima línea:
+```typescript
+import "react-native-get-random-values";
+```
+
+### Antes de probar de nuevo, tres cosas para verificar (para no repetir el mismo síntoma):
+
+1. **¿El archivo se llama realmente `_layout.tsx` (con guión bajo) o `layout.tsx`?** Es clave: Expo Router solo reconoce `_layout.tsx` como layout raíz. Si el archivo real no tiene el guión bajo, el `import` que agregamos ahí nunca se ejecuta antes que el resto de la app, porque ese archivo ni siquiera se está usando como root layout. Fijate en tu carpeta `app/` cuál es el nombre exacto.
+
+2. **Reiniciá la app completa, no solo el JS.** Un módulo nativo como este necesita que cierres la app de Expo Go (o tu dev build) del todo y la vuelvas a abrir — un simple "reload" no alcanza.
+```bash
+npx expo start -c
+```
+y desde el teléfono, cerrar Expo Go completamente (no solo minimizar) y volver a escanear el QR.
+
+3. **¿En qué estás probando?** ¿Android, iOS o web? Si es web, `react-native-get-random-values` no debería ni hacer falta (el navegador ya tiene `crypto.getRandomValues` nativo), así que si el error aparece ahí, el problema es otra cosa.
+
+Contame el nombre real del archivo y en qué plataforma estás probando, y seguimos desde ahí.
+
+---
+## User:
+
+Perfecto, ahora si funciona y se guarda en forma de hash y el alumno lo puede ver perfectamente, pero hagamos algo, quiero que el legajo se pida 2 veces, osea legajo y repetir legajo y que este no se pueda editar, por lo tanto poner carteles claros de que se ponga bien porque no se puede cambiar luego, y despues que este se pueda ver, pero no editar, lo mismo el dni. Pero tambien necesito que se pueda ver el nombre y apellido y editar, pero estos datos ya de por si se piden en el registro, y que cada vez que alguien quiera editar los campos que si se pueden editar como el telefono, nombre o apellido pregunte si esta seguro que desea hacerlo, ya que el nombre y apellido en realidad actua como un nombre de usuario:
+
+## Assistant:
+
+Buena estructura. Vamos a separar los datos en dos grupos: **fijos** (legajo + DNI, se cargan una sola vez y quedan bloqueados) y **editables** (nombre y teléfono, con confirmación cada vez). También hay que reforzar el bloqueo en las reglas de Firestore, porque si solo lo validás en el cliente, cualquiera con las devtools podría mandar un `update` directo saltándose el modal.
+
+### Editar `firestore.rules`
+Reemplazá el bloque de `usuarios` (el que ya tenía la protección de `rol`) por:
+```
+    match /usuarios/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.rol == resource.data.rol
+        && (!('legajo' in resource.data) || request.resource.data.legajo == resource.data.legajo)
+        && (!('dniEncriptado' in resource.data) || request.resource.data.dniEncriptado == resource.data.dniEncriptado);
+      allow read, update, delete: if isAdmin();
+    }
+```
+Así, una vez que `legajo` o `dniEncriptado` ya existen en el documento, cualquier `update` que intente cambiarlos (sin ser admin) es rechazado por el servidor, sin importar qué mande el cliente.
+
+### Reemplazar `hooks/useUserProfile.ts`
+```typescript
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { auth, db } from "../config/firebaseConfig";
+import { desencriptarDato, encriptarDato } from "../utils/crypto";
+
+export interface PerfilUsuario {
+  nombre?: string;
+  legajo?: string;
+  dni?: string;
+  telefono?: string;
+  legajoBloqueado?: boolean;
+  dniBloqueado?: boolean;
+}
+
+export function useUserProfile() {
+  const [perfil, setPerfil] = useState<PerfilUsuario>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setLoading(false);
+      return;
+    }
+    const unsubscribe = onSnapshot(doc(db, "usuarios", uid), (snap) => {
+      const data = snap.data();
+      setPerfil({
+        nombre: data?.nombre ?? "",
+        legajo: data?.legajo ?? "",
+        dni: data?.dniEncriptado ? desencriptarDato(data.dniEncriptado) : "",
+        telefono: data?.telefono ?? "",
+        legajoBloqueado: !!data?.legajo,
+        dniBloqueado: !!data?.dniEncriptado,
+      });
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Se usa UNA sola vez para fijar legajo (y opcionalmente DNI) de forma permanente.
+  const completarDatosFijos = async (datos: { legajo: string; dni?: string }) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error("No hay usuario autenticado.");
+    if (!datos.legajo?.trim()) throw new Error("El legajo es obligatorio.");
+
+    await setDoc(
+      doc(db, "usuarios", uid),
+      {
+        legajo: datos.legajo.trim(),
+        ...(datos.dni ? { dniEncriptado: encriptarDato(datos.dni) } : {}),
+      },
+      { merge: true },
+    );
+  };
+
+  // Se puede usar las veces que haga falta: nombre y teléfono.
+  const actualizarDatosEditables = async (datos: { nombre?: string; telefono?: string }) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error("No hay usuario autenticado.");
+
+    await setDoc(
+      doc(db, "usuarios", uid),
+      {
+        ...(datos.nombre !== undefined ? { nombre: datos.nombre.trim() } : {}),
+        ...(datos.telefono !== undefined ? { telefono: datos.telefono.trim() } : {}),
+      },
+      { merge: true },
+    );
+  };
+
+  const perfilCompleto = !!perfil.legajo && perfil.legajo.trim().length > 0;
+
+  return {
+    perfil,
+    loading,
+    perfilCompleto,
+    completarDatosFijos,
+    actualizarDatosEditables,
+  };
+}
+```
+(`guardarPerfil` se dividió en dos funciones — hay que actualizar los dos lugares que lo usaban.)
+
+### Reemplazar `components/ui/ModalCompletarPerfil.tsx`
+```tsx
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useUserProfile } from "../../hooks/useUserProfile";
+
+interface Props {
+  visible: boolean;
+  onSuccess: () => void;
+  onCancelar: () => void;
+}
+
+export default function ModalCompletarPerfil({ visible, onSuccess, onCancelar }: Props) {
+  const { completarDatosFijos } = useUserProfile();
+  const [legajo, setLegajo] = useState("");
+  const [legajoConfirmacion, setLegajoConfirmacion] = useState("");
+  const [dni, setDni] = useState("");
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const handleGuardar = async () => {
+    setError("");
+    if (!legajo.trim()) {
+      setError("El legajo es obligatorio para continuar.");
+      return;
+    }
+    if (legajo.trim() !== legajoConfirmacion.trim()) {
+      setError("Los dos legajos ingresados no coinciden.");
+      return;
+    }
+    setGuardando(true);
+    try {
+      await completarDatosFijos({ legajo, dni });
+      onSuccess();
+    } catch (e: any) {
+      setError(e.message ?? "No se pudo guardar tu perfil.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancelar}>
+      <View style={styles.overlay}>
+        <View style={styles.card}>
+          <Text style={styles.titulo}>Completá tu perfil</Text>
+          <Text style={styles.subtitulo}>
+            Para ingresar a esta sección necesitamos al menos tu legajo.
+          </Text>
+
+          <View style={styles.avisoBox}>
+            <Text style={styles.avisoTexto}>
+              ⚠️ El legajo (y el DNI, si lo cargás) no se podrán modificar después. Revisá bien antes de guardar.
+            </Text>
+          </View>
+
+          <Text style={styles.label}>Legajo *</Text>
+          <TextInput
+            style={styles.input}
+            value={legajo}
+            onChangeText={setLegajo}
+            placeholder="Ej: 12345/6"
+            placeholderTextColor="#9CA3AF"
+          />
+
+          <Text style={styles.label}>Repetir legajo *</Text>
+          <TextInput
+            style={styles.input}
+            value={legajoConfirmacion}
+            onChangeText={setLegajoConfirmacion}
+            placeholder="Volvé a escribirlo"
+            placeholderTextColor="#9CA3AF"
+          />
+
+          <Text style={styles.label}>DNI (opcional)</Text>
+          <TextInput
+            style={styles.input}
+            value={dni}
+            onChangeText={setDni}
+            placeholder="Ej: 30123456"
+            keyboardType="number-pad"
+            placeholderTextColor="#9CA3AF"
+          />
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <TouchableOpacity
+            style={[styles.boton, guardando && { opacity: 0.7 }]}
+            onPress={handleGuardar}
+            disabled={guardando}
+          >
+            {guardando ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.botonTexto}>Guardar y continuar</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.cancelar} onPress={onCancelar} disabled={guardando}>
+            <Text style={styles.cancelarTexto}>Volver</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 },
+  card: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 20 },
+  titulo: { fontSize: 18, fontWeight: "700", color: "#11181C", marginBottom: 4 },
+  subtitulo: { fontSize: 13, color: "#6B7280", marginBottom: 16 },
+  avisoBox: { backgroundColor: "#FEF3C7", borderRadius: 8, padding: 10, marginBottom: 14 },
+  avisoTexto: { fontSize: 12, color: "#92400E", lineHeight: 17 },
+  label: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 6 },
+  input: {
+    backgroundColor: "#F9F9F9",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    minHeight: 46,
+    marginBottom: 14,
+    fontSize: 15,
+    color: "#000",
+  },
+  error: { color: "#DC2626", fontSize: 13, marginBottom: 10, textAlign: "center" },
+  boton: { backgroundColor: "#25B471", borderRadius: 8, minHeight: 48, justifyContent: "center", alignItems: "center" },
+  botonTexto: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
+  cancelar: { marginTop: 12, alignItems: "center" },
+  cancelarTexto: { color: "#6B7280", fontWeight: "600", fontSize: 13 },
+});
+```
+
+### Reemplazar `app/(tabs)/perfil.tsx`
+```tsx
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import ModalAlerta from "../../components/ui/ModalAlerta";
+import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
+import { useUserProfile } from "../../hooks/useUserProfile";
+import { useUserRole } from "../../hooks/useUserRole";
+
+export default function PerfilScreen() {
+  const { rol, loading: loadingRol } = useUserRole();
+  const {
+    perfil,
+    loading: loadingPerfil,
+    completarDatosFijos,
+    actualizarDatosEditables,
+  } = useUserProfile();
+
+  // Datos fijos (legajo/DNI) — solo se usan si todavía no están cargados
+  const [legajo, setLegajo] = useState("");
+  const [legajoConfirmacion, setLegajoConfirmacion] = useState("");
+  const [dni, setDni] = useState("");
+  const [errorFijos, setErrorFijos] = useState("");
+  const [guardandoFijos, setGuardandoFijos] = useState(false);
+
+  // Datos editables (nombre/teléfono)
+  const [nombre, setNombre] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [errorEditables, setErrorEditables] = useState("");
+  const [guardandoEditables, setGuardandoEditables] = useState(false);
+  const [confirmarEdicion, setConfirmarEdicion] = useState(false);
+
+  const [alerta, setAlerta] = useState(false);
+
+  useEffect(() => {
+    setNombre(perfil.nombre ?? "");
+    setTelefono(perfil.telefono ?? "");
+  }, [perfil]);
+
+  const esAlumno = rol === "alumno";
+
+  const handleGuardarFijos = async () => {
+    setErrorFijos("");
+    if (!legajo.trim()) {
+      setErrorFijos("El legajo es obligatorio.");
+      return;
+    }
+    if (legajo.trim() !== legajoConfirmacion.trim()) {
+      setErrorFijos("Los dos legajos ingresados no coinciden.");
+      return;
+    }
+    setGuardandoFijos(true);
+    try {
+      await completarDatosFijos({ legajo, dni });
+      setAlerta(true);
+    } catch (e: any) {
+      setErrorFijos(e.message ?? "No se pudo guardar el legajo.");
+    } finally {
+      setGuardandoFijos(false);
+    }
+  };
+
+  const handleGuardarEditables = async () => {
+    setErrorEditables("");
+    if (!nombre.trim()) {
+      setErrorEditables("El nombre y apellido no puede quedar vacío.");
+      return;
+    }
+    setGuardandoEditables(true);
+    try {
+      await actualizarDatosEditables({ nombre, telefono });
+      setAlerta(true);
+    } catch (e: any) {
+      setErrorEditables(e.message ?? "No se pudo guardar los cambios.");
+    } finally {
+      setGuardandoEditables(false);
+    }
+  };
+
+  if (loadingRol || loadingPerfil) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#25B471" />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.titulo}>Mi Perfil</Text>
+
+      <Text style={styles.label}>Nombre y Apellido</Text>
+      <TextInput
+        style={styles.input}
+        value={nombre}
+        onChangeText={setNombre}
+        placeholder="Ej: Juan Pérez"
+        placeholderTextColor="#9CA3AF"
+      />
+
+      <Text style={styles.label}>Teléfono</Text>
+      <TextInput
+        style={styles.input}
+        value={telefono}
+        onChangeText={setTelefono}
+        placeholder="Ej: 221 555-5555"
+        keyboardType="phone-pad"
+        placeholderTextColor="#9CA3AF"
+      />
+
+      {errorEditables ? <Text style={styles.error}>{errorEditables}</Text> : null}
+
+      <TouchableOpacity
+        style={[styles.boton, guardandoEditables && { opacity: 0.7 }]}
+        onPress={() => setConfirmarEdicion(true)}
+        disabled={guardandoEditables}
+      >
+        {guardandoEditables ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={styles.botonTexto}>Guardar cambios</Text>
+        )}
+      </TouchableOpacity>
+
+      {esAlumno && (
+        <>
+          <View style={styles.separador} />
+          <Text style={styles.subtituloSeccion}>Datos académicos</Text>
+
+          {perfil.legajoBloqueado ? (
+            <>
+              <Text style={styles.label}>Legajo</Text>
+              <View style={styles.campoBloqueado}>
+                <Text style={styles.campoBloqueadoTexto}>{perfil.legajo}</Text>
+              </View>
+
+              <Text style={styles.label}>DNI</Text>
+              <View style={styles.campoBloqueado}>
+                <Text style={styles.campoBloqueadoTexto}>
+                  {perfil.dniBloqueado ? perfil.dni : "No cargado"}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.avisoBox}>
+                <Text style={styles.avisoTexto}>
+                  ⚠️ Una vez guardados, el legajo y el DNI no se pueden modificar. Revisá bien antes de continuar.
+                </Text>
+              </View>
+
+              <Text style={styles.label}>Legajo *</Text>
+              <TextInput
+                style={styles.input}
+                value={legajo}
+                onChangeText={setLegajo}
+                placeholder="Ej: 12345/6"
+                placeholderTextColor="#9CA3AF"
+              />
+
+              <Text style={styles.label}>Repetir legajo *</Text>
+              <TextInput
+                style={styles.input}
+                value={legajoConfirmacion}
+                onChangeText={setLegajoConfirmacion}
+                placeholder="Volvé a escribirlo"
+                placeholderTextColor="#9CA3AF"
+              />
+
+              <Text style={styles.label}>DNI (opcional)</Text>
+              <TextInput
+                style={styles.input}
+                value={dni}
+                onChangeText={setDni}
+                placeholder="Ej: 30123456"
+                keyboardType="number-pad"
+                placeholderTextColor="#9CA3AF"
+              />
+
+              {errorFijos ? <Text style={styles.error}>{errorFijos}</Text> : null}
+
+              <TouchableOpacity
+                style={[styles.boton, guardandoFijos && { opacity: 0.7 }]}
+                onPress={handleGuardarFijos}
+                disabled={guardandoFijos}
+              >
+                {guardandoFijos ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.botonTexto}>Guardar legajo</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+        </>
+      )}
+
+      <ModalConfirmacion
+        visible={confirmarEdicion}
+        titulo="Confirmar cambios"
+        mensaje="Tu nombre y apellido funcionan como tu identificación dentro del sistema. ¿Estás seguro de que querés guardar estos cambios?"
+        textoConfirmar="Sí, guardar"
+        textoCancelar="Cancelar"
+        onConfirm={() => {
+          setConfirmarEdicion(false);
+          handleGuardarEditables();
+        }}
+        onCancel={() => setConfirmarEdicion(false)}
+      />
+
+      <ModalAlerta
+        visible={alerta}
+        titulo="Guardado"
+        mensaje="Tus datos fueron actualizados correctamente."
+        tipo="exito"
+        onClose={() => setAlerta(false)}
+      />
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F5F5F5" },
+  content: { padding: 20, paddingTop: 48 },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  titulo: { fontSize: 22, fontWeight: "bold", color: "#11181C", marginBottom: 20 },
+  subtituloSeccion: { fontSize: 15, fontWeight: "700", color: "#374151", marginBottom: 14 },
+  label: { fontSize: 14, fontWeight: "700", color: "#000000", marginBottom: 8 },
+  input: {
+    backgroundColor: "#F9F9F9",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    minHeight: 48,
+    marginBottom: 20,
+    fontSize: 16,
+    color: "#000",
+  },
+  campoBloqueado: {
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    minHeight: 48,
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  campoBloqueadoTexto: { fontSize: 16, color: "#6B7280" },
+  separador: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 12 },
+  avisoBox: { backgroundColor: "#FEF3C7", borderRadius: 8, padding: 10, marginBottom: 16 },
+  avisoTexto: { fontSize: 12, color: "#92400E", lineHeight: 17 },
+  error: { color: "#DC2626", fontSize: 13, marginBottom: 12, textAlign: "center" },
+  boton: { backgroundColor: "#25B471", borderRadius: 8, minHeight: 48, justifyContent: "center", alignItems: "center" },
+  botonTexto: { color: "#FFFFFF", fontWeight: "bold", fontSize: 16 },
+});
+```
+
+Un par de cosas que quedan a tu criterio, avisame si querés que las ajustemos:
+- Dejé "Nombre y Apellido" arriba de todo y editable para **cualquier rol** (admin/profesor/alumno), ya que actúa como nombre de usuario para todos, no solo para alumnos. Si el profesor/admin no debería poder tocarlo, decime y lo restringimos.
+- Si un alumno nunca entra a una sección restringida, ahora igual puede cargar su legajo/DNI directamente desde la pestaña Perfil (no solo forzado por el modal). Me pareció más prolijo que forzar a pasar por una sección primero — avisame si preferís que solo se pueda cargar desde el modal.
+
+## User:
+
+y algo más, el legajo no debe poder repetirse entre cuentas y el DNI al ser un dato que no se puede modificar también deberíamos pedirlo 2 veces
+
+## Assistant:
+
+Dos cosas distintas a resolver: la duplicación de legajo necesita validarse **en el servidor** (reglas de Firestore), porque si solo lo chequeás en el cliente cualquiera podría saltárselo. Vamos con el patrón estándar de Firestore para "reservar" un valor único sin backend propio: una colección aparte donde el ID del documento *es* el legajo, así Firestore rechaza automáticamente el segundo intento de crearlo.
+
+### Editar `firestore.rules`
+Agregá esta colección nueva (podés ponerla al lado de `usuarios`):
+```
+    // Índice de legajos únicos: el ID del documento ES el legajo (normalizado).
+    // Si ya existe, el intento de "crearlo" pasa a evaluarse como update y se rechaza.
+    match /legajos_index/{legajoId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+```
+Esto no reemplaza nada de lo que ya tenías, se suma.
+
+### Reemplazar `hooks/useUserProfile.ts`
+```typescript
+import { doc, onSnapshot, setDoc, writeBatch } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { auth, db } from "../config/firebaseConfig";
+import { desencriptarDato, encriptarDato } from "../utils/crypto";
+
+export interface PerfilUsuario {
+  nombre?: string;
+  legajo?: string;
+  dni?: string;
+  telefono?: string;
+  legajoBloqueado?: boolean;
+  dniBloqueado?: boolean;
+}
+
+function normalizarLegajo(legajo: string): string {
+  return legajo.trim().toUpperCase();
+}
+
+export function useUserProfile() {
+  const [perfil, setPerfil] = useState<PerfilUsuario>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setLoading(false);
+      return;
+    }
+    const unsubscribe = onSnapshot(doc(db, "usuarios", uid), (snap) => {
+      const data = snap.data();
+      setPerfil({
+        nombre: data?.nombre ?? "",
+        legajo: data?.legajo ?? "",
+        dni: data?.dniEncriptado ? desencriptarDato(data.dniEncriptado) : "",
+        telefono: data?.telefono ?? "",
+        legajoBloqueado: !!data?.legajo,
+        dniBloqueado: !!data?.dniEncriptado,
+      });
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Se usa UNA sola vez: fija legajo (único entre todas las cuentas) y DNI de forma permanente.
+  const completarDatosFijos = async (datos: {
+    legajo: string;
+    legajoConfirmacion: string;
+    dni?: string;
+    dniConfirmacion?: string;
+  }) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error("No hay usuario autenticado.");
+
+    if (!datos.legajo?.trim()) {
+      throw new Error("El legajo es obligatorio.");
+    }
+    if (datos.legajo.trim() !== datos.legajoConfirmacion.trim()) {
+      throw new Error("Los dos legajos ingresados no coinciden.");
+    }
+    if (datos.dni && datos.dni.trim() !== (datos.dniConfirmacion ?? "").trim()) {
+      throw new Error("Los dos DNI ingresados no coinciden.");
+    }
+
+    const legajoNormalizado = normalizarLegajo(datos.legajo);
+    const legajoDocId = encodeURIComponent(legajoNormalizado);
+
+    const batch = writeBatch(db);
+    batch.set(doc(db, "legajos_index", legajoDocId), {
+      uid,
+      creadoEn: new Date(),
+    });
+    batch.set(
+      doc(db, "usuarios", uid),
+      {
+        legajo: datos.legajo.trim(),
+        ...(datos.dni ? { dniEncriptado: encriptarDato(datos.dni) } : {}),
+      },
+      { merge: true },
+    );
+
+    try {
+      await batch.commit();
+    } catch (e: any) {
+      if (e.code === "permission-denied") {
+        throw new Error("Ese legajo ya está registrado en otra cuenta.");
+      }
+      throw e;
+    }
+  };
+
+  // Se puede usar las veces que haga falta: nombre y teléfono.
+  const actualizarDatosEditables = async (datos: { nombre?: string; telefono?: string }) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error("No hay usuario autenticado.");
+
+    await setDoc(
+      doc(db, "usuarios", uid),
+      {
+        ...(datos.nombre !== undefined ? { nombre: datos.nombre.trim() } : {}),
+        ...(datos.telefono !== undefined ? { telefono: datos.telefono.trim() } : {}),
+      },
+      { merge: true },
+    );
+  };
+
+  const perfilCompleto = !!perfil.legajo && perfil.legajo.trim().length > 0;
+
+  return {
+    perfil,
+    loading,
+    perfilCompleto,
+    completarDatosFijos,
+    actualizarDatosEditables,
+  };
+}
+```
+
+Ojo con un detalle: el `legajoDocId` usa `encodeURIComponent` porque un ID de documento de Firestore no puede contener `/` literal, y tus ejemplos de legajo tienen formato `12345/6`. `encodeURIComponent` lo convierte a `12345%2F6`, que sí es válido como ID.
+
+### Editar `components/ui/ModalCompletarPerfil.tsx`
+Agregá el estado de confirmación de DNI:
+```typescript
+  const [dni, setDni] = useState("");
+  const [dniConfirmacion, setDniConfirmacion] = useState("");
+```
+Reemplazá el `handleGuardar`:
+```typescript
+  const handleGuardar = async () => {
+    setError("");
+    setGuardando(true);
+    try {
+      await completarDatosFijos({ legajo, legajoConfirmacion, dni, dniConfirmacion });
+      onSuccess();
+    } catch (e: any) {
+      setError(e.message ?? "No se pudo guardar tu perfil.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+```
+(las validaciones de coincidencia ahora las hace el hook, así que sacamos las que estaban acá para no duplicar mensajes)
+
+Y agregá el campo de confirmación de DNI justo debajo del campo de DNI:
+```tsx
+          <Text style={styles.label}>DNI (opcional)</Text>
+          <TextInput
+            style={styles.input}
+            value={dni}
+            onChangeText={setDni}
+            placeholder="Ej: 30123456"
+            keyboardType="number-pad"
+            placeholderTextColor="#9CA3AF"
+          />
+
+          {dni ? (
+            <>
+              <Text style={styles.label}>Repetir DNI</Text>
+              <TextInput
+                style={styles.input}
+                value={dniConfirmacion}
+                onChangeText={setDniConfirmacion}
+                placeholder="Volvé a escribirlo"
+                keyboardType="number-pad"
+                placeholderTextColor="#9CA3AF"
+              />
+            </>
+          ) : null}
+```
+
+### Editar `app/(tabs)/perfil.tsx`
+Agregá el estado:
+```typescript
+  const [dniConfirmacion, setDniConfirmacion] = useState("");
+```
+Reemplazá `handleGuardarFijos`:
+```typescript
+  const handleGuardarFijos = async () => {
+    setErrorFijos("");
+    setGuardandoFijos(true);
+    try {
+      await completarDatosFijos({ legajo, legajoConfirmacion, dni, dniConfirmacion });
+      setAlerta(true);
+    } catch (e: any) {
+      setErrorFijos(e.message ?? "No se pudo guardar el legajo.");
+    } finally {
+      setGuardandoFijos(false);
+    }
+  };
+```
+Y en el bloque donde está el input de DNI (dentro de la rama `!perfil.legajoBloqueado`), agregá la confirmación igual que en el modal:
+```tsx
+              <Text style={styles.label}>DNI (opcional)</Text>
+              <TextInput
+                style={styles.input}
+                value={dni}
+                onChangeText={setDni}
+                placeholder="Ej: 30123456"
+                keyboardType="number-pad"
+                placeholderTextColor="#9CA3AF"
+              />
+
+              {dni ? (
+                <>
+                  <Text style={styles.label}>Repetir DNI</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={dniConfirmacion}
+                    onChangeText={setDniConfirmacion}
+                    placeholder="Volvé a escribirlo"
+                    keyboardType="number-pad"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </>
+              ) : null}
+```
+
+Con esto: legajo único garantizado por el servidor (no por confianza en el cliente), y tanto legajo como DNI se piden dos veces antes de guardarse de forma permanente.
+
+## User:
+
+Ahora necesito incluir en los pdf y excels de forma prolija el logo de la catedra, el cual está en la carpeta: assets/images/LogoRecortado.jpg y estos son los estilos del logo en el login:
+
+```
+logo: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 10,
+```
+
+pero necesito agregar el logo en los pdf y excels de las notas y planillas y que quede bien.
+
+## Assistant:
+
+Para el PDF es directo: `expo-print` genera HTML, así que podemos incrustar el logo como imagen en base64 y va a salir nítido. Para el Excel hay una limitación real que te aviso de entrada: la librería `xlsx` (SheetJS, community) que ya usás **no soporta insertar imágenes** — solo texto, números y estilos de celda básicos. No hay forma de meter el logo como imagen ahí sin cambiar de librería (por ejemplo a `exceljs`, que sí soporta imágenes pero es un cambio más grande, con otra API completamente distinta a la que ya tenés armada). Te dejo el PDF con el logo real, y en el Excel un encabezado prolijo con el nombre de la facultad en texto grande y en negrita, a modo de placeholder — si en algún momento querés migrar a `exceljs` para tener el logo también ahí, avisame y lo armamos aparte.
+
+Antes de nada, instalá (si no lo tenés ya, viene con Expo pero por las dudas):
+```bash
+npx expo install expo-asset
+```
+
+## Nuevo: `utils/logoBase64.ts`
+```typescript
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system/legacy";
+
+// Cachea el logo como data URI base64 para no releerlo del disco en cada export.
+let cache: string | null = null;
+
+export async function obtenerLogoBase64(): Promise<string> {
+  if (cache) return cache;
+  const asset = Asset.fromModule(require("../assets/images/LogoRecortado.jpg"));
+  await asset.downloadAsync();
+  const base64 = await FileSystem.readAsStringAsync(asset.localUri!, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  cache = `data:image/jpeg;base64,${base64}`;
+  return cache;
+}
+```
+
+---
+
+## Editar `components/ui/ExportarNotas.tsx`
+
+Agregá el import:
+```typescript
+import { obtenerLogoBase64 } from "../../utils/logoBase64";
+```
+
+Reemplazá la firma y el header dentro de `generarHTML`:
+```typescript
+  const generarHTML = async (): Promise<string> => {
+    const logoDataUri = await obtenerLogoBase64();
+    const filas = notas
+```
+(la única diferencia es `async` + `await obtenerLogoBase64()` al principio)
+
+Reemplazá el bloque de estilos `.header` y su contenido:
+```css
+          .header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #0F4A32;
+          }
+          .header img.logo {
+            width: 56px;
+            height: 56px;
+            border-radius: 28px;
+            object-fit: cover;
+            flex-shrink: 0;
+          }
+          .header .header-texto h1 {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #0F4A32;
+            margin-bottom: 4px;
+          }
+          .header .header-texto h2 {
+            font-size: 12pt;
+            font-weight: normal;
+            color: #444;
+          }
+```
+(sacá el viejo `.header h1` y `.header h2` sueltos, ahora están anidados dentro de `.header-texto`)
+
+Y el `<div class="header">` del body:
+```html
+        <div class="header">
+          <img src="${logoDataUri}" class="logo" />
+          <div class="header-texto">
+            <h1>Universidad Nacional de La Plata - Facultad de Odontología</h1>
+            <h2>Cátedra de Operatoria Dental B</h2>
+          </div>
+        </div>
+```
+
+Por último, en `handleExportarPDF`, agregá el `await`:
+```typescript
+      const html = await generarHTML();
+```
+
+### Excel prolijo (sin imagen, con encabezado en texto)
+Reemplazá `handleExportarXLSX` completo:
+```typescript
+  const handleExportarXLSX = async () => {
+    if (notas.length === 0) return;
+    setExportandoXLSX(true);
+    try {
+      const encabezado = [
+        ["Universidad Nacional de La Plata - Facultad de Odontología"],
+        ["Cátedra de Operatoria Dental B"],
+        [`Exámen: ${nombreExamen}`],
+        [`Año Lectivo: ${anioLectivo}`],
+        [],
+        ["#", "Alumno", "Nota"],
+      ];
+
+      const filasDatos = notas.map((n, i) => [i + 1, n.nombre, formatearValorNota(n.nota)]);
+
+      const ws = XLSX.utils.aoa_to_sheet([...encabezado, ...filasDatos]);
+
+      ws["!cols"] = [{ wch: 6 }, { wch: 40 }, { wch: 10 }];
+      ws["!merges"] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 2 } },
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 2 } },
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, nombreExamen.slice(0, 31));
+
+      const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+      const nombreArchivo = `Notas_${nombreExamen.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
+      const uri = `${FileSystem.cacheDirectory}${nombreArchivo}`;
+
+      await FileSystem.writeAsStringAsync(uri, wbout, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          dialogTitle: `Compartir Excel - ${nombreExamen}`,
+          UTI: "org.openxmlformats.spreadsheetml.sheet",
+        });
+      }
+    } catch (error) {
+      console.error("Error exportando XLSX:", error);
+    } finally {
+      setExportandoXLSX(false);
+    }
+  };
+```
+
+---
+
+## Editar `components/ui/ExportarPlanilla.tsx`
+
+Import:
+```typescript
+import { obtenerLogoBase64 } from "../../utils/logoBase64";
+```
+
+`generarHTML` async:
+```typescript
+  const generarHTML = async () => {
+    const logoDataUri = await obtenerLogoBase64();
+    const headers = columnasOrdenadas.map((col) => `<th>${escapeHtml(col.titulo)}</th>`).join("");
+```
+
+Reemplazá el bloque `.header` de los estilos:
+```css
+          .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 2px solid #0F4A32;
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+          }
+          .header img.logo {
+            width: 46px;
+            height: 46px;
+            border-radius: 23px;
+            object-fit: cover;
+            flex-shrink: 0;
+          }
+          .header .header-texto h1 { color: #0F4A32; font-size: 16pt; margin: 0 0 6px 0; }
+          .header .header-texto p { margin: 2px 0; }
+```
+(sacá los `h1 { ... }` y `p { margin: 2px 0; }` sueltos que estaban antes, ahora anidados)
+
+Y el div del body:
+```html
+        <div class="header">
+          <img src="${logoDataUri}" class="logo" />
+          <div class="header-texto">
+            <h1>${escapeHtml(titulo)}</h1>
+            <p><strong>Alumno:</strong> ${escapeHtml(alumno || "-")}</p>
+            <p><strong>Tipo:</strong> ${tipo === "diaria" ? "Diaria" : "Final"}</p>
+            <p><strong>Fecha de exportación:</strong> ${fechaActual}</p>
+          </div>
+        </div>
+```
+
+En `exportarPDF`, agregá `await`:
+```typescript
+      const { uri } = await Print.printToFileAsync({ html: await generarHTML() });
+```
+
+Y en `exportarXLSX`, mismo criterio que en notas — reemplazá la generación de la hoja:
+```typescript
+  const exportarXLSX = async () => {
+    if (columnasOrdenadas.length === 0) return;
+    setExportandoXLSX(true);
+    try {
+      const encabezado = [
+        ["Universidad Nacional de La Plata - Facultad de Odontología"],
+        [`${titulo}${alumno ? ` — ${alumno}` : ""}`],
+        [`Tipo: ${tipo === "diaria" ? "Diaria" : "Final"} · Exportado: ${fechaActual}`],
+        [],
+        columnasOrdenadas.map((col) => col.titulo),
+      ];
+
+      const filasDatos = filasOrdenadas.map((fila) =>
+        columnasOrdenadas.map((col) => formatValue(fila.celdas?.[col.id])),
+      );
+
+      const ws = XLSX.utils.aoa_to_sheet([...encabezado, ...filasDatos]);
+      ws["!cols"] = columnasOrdenadas.map((col) => ({ wch: col.tipo === "textarea" ? 34 : 18 }));
+      const ultimaColumna = columnasOrdenadas.length - 1;
+      ws["!merges"] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: ultimaColumna } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: ultimaColumna } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: ultimaColumna } },
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Planilla");
+      const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+      const uri = `${FileSystem.cacheDirectory}${safeFileName(titulo)}.xlsx`;
+      await FileSystem.writeAsStringAsync(uri, wbout, { encoding: FileSystem.EncodingType.Base64 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          dialogTitle: `Compartir Excel - ${titulo}`,
+          UTI: "org.openxmlformats.spreadsheetml.sheet",
+        });
+      }
+    } finally {
+      setExportandoXLSX(false);
+    }
+  };
+```
+
+---
+
+Con esto los PDF de notas y planillas van a mostrar el logo redondo junto al encabezado, prolijo, y los Excel van a tener un encabezado institucional bien formateado (fusionado y centrado) aunque sin la imagen en sí.
+
+---
+
+⚠️ Aparte de lo que pediste, noté algo al leer `mis-notas.tsx` y `notas.tsx` que me pasaste: ambos archivos ya usan `comisionesInfo[alumnoId].comisionActualTitulo` y `.comisionesActuales` (un array), pero el hook `useComisionesPorSeccion` que te di solo devuelve `cambioComision`, `comisionAnteriorTitulo` y `multiComision` — esos dos campos no existen en el objeto que devuelve, así que hoy esas líneas van a mostrar `undefined`. ¿Querés que te pase la versión ampliada del hook para que calcen con lo que ya escribiste ahí?
+
+## User:
+
+Bien ahora quiero que hagamos una cosa, agreguemos seguridad al login, registro y todo eso. Y además agregemos una opción en el apartado de perfil para modificar tanto el email como la contraseña, el email no estoy seguro si puede modificarse, si no se puede facilmente ni nos molestemos, pero la contraseña si, en un apartado al que se accede tocando actualizar contraseña pidamos la contraseña actual y si coincide le permitimos modicicarla poniendo 2 veces la contraseña nueva, pero ahora quiero que en el registro se pida al menos 1 mayuscula, 1 minuscula y 1 numero. Y obviamente en esto de actualizar contraseña lo mismo y que la longitud mínima sea de 8 caracteres. Osea usemos estandares:
+
+## Assistant:
+
+Vamos con esto. Antes de nada, una aclaración sobre el email: como bien sospechabas, cambiar el email en Firebase Auth ya no es tan directo. Los proyectos nuevos de Firebase tienen "protección contra enumeración de emails" activada por defecto, así que el método viejo (`updateEmail`) está en desuso y Firebase pide usar `verifyBeforeUpdateEmail`, que le manda un link de verificación a la casilla **nueva** y el cambio solo se efectiviza cuando el usuario lo confirma ahí — es decir, no es instantáneo, necesita un flujo de confirmación por correo aparte. Tal como me dijiste, si no es directo mejor no complicarlo ahora; nos concentramos en la contraseña, que sí es un cambio simple y seguro. Si en algún momento querés el de email con el flujo de verificación, avisame y lo armamos aparte.
+
+## Nuevo: `utils/validacionPassword.ts`
+```typescript
+export function validarPassword(password: string): string | null {
+  if (password.length < 8) return "La contraseña debe tener al menos 8 caracteres.";
+  if (!/[A-Z]/.test(password)) return "La contraseña debe incluir al menos una letra mayúscula.";
+  if (!/[a-z]/.test(password)) return "La contraseña debe incluir al menos una letra minúscula.";
+  if (!/[0-9]/.test(password)) return "La contraseña debe incluir al menos un número.";
+  return null;
+}
+```
+
+---
+
+## Editar `app/registro.tsx`
+
+Import:
+```typescript
+import { validarPassword } from '../utils/validacionPassword';
+```
+
+Reemplazá el chequeo inicial de `handleRegistro`:
+```typescript
+    if (!nombre || !email || !password) {
+      setErrorMensaje("Por favor, completá todos los datos solicitados.");
+      return;
+    }
+```
+por:
+```typescript
+    if (!nombre || !email || !password) {
+      setErrorMensaje("Por favor, completá todos los datos solicitados.");
+      return;
+    }
+
+    const errorPassword = validarPassword(password);
+    if (errorPassword) {
+      setErrorMensaje(errorPassword);
+      return;
+    }
+```
+
+Agregá un texto de ayuda debajo del input de contraseña (justo antes del cierre del `TextInput` de contraseña):
+```tsx
+        <TextInput 
+          style={[styles.input, errorMensaje ? styles.inputError : null]} 
+          placeholder="Mínimo 6 caracteres" 
+          value={password} 
+          onChangeText={(text) => { setPassword(text); limpiarError(); }} 
+          secureTextEntry 
+          placeholderTextColor="#666" 
+        />
+        <Text style={styles.hint}>Mínimo 8 caracteres, con mayúscula, minúscula y número.</Text>
+```
+(cambié también el placeholder de `"Mínimo 6 caracteres"` a algo más preciso si querés, pero no es obligatorio)
+
+Agregá el estilo:
+```typescript
+  hint: { fontSize: 12, color: "#6B7280", marginTop: -14, marginBottom: 16 },
+```
+
+---
+
+## Editar `app/login.tsx`
+
+En el `catch` de `handleLogin`, agregá el manejo del bloqueo por intentos fallidos (Firebase ya aplica rate-limiting del lado del servidor tras varios intentos incorrectos, solo hay que mostrar bien el mensaje):
+```typescript
+      if (error.code === 'auth/invalid-credential') {
+        setErrorMensaje("El correo o la contraseña son incorrectos.");
+      } else if (error.code === 'auth/invalid-email') {
+        setErrorMensaje("El formato del correo electrónico no es válido.");
+      } else if (error.code === 'auth/too-many-requests') {
+        setErrorMensaje("Demasiados intentos fallidos. Probá de nuevo en unos minutos.");
+      } else if (error.code === 'auth/user-disabled') {
+        setErrorMensaje("Esta cuenta fue deshabilitada. Contactá a la cátedra.");
+      } else {
+        setErrorMensaje("Ocurrió un error al intentar iniciar sesión.");
+      }
+```
+
+---
+
+## Nuevo: `components/ui/ModalCambiarPassword.tsx`
+```tsx
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
+} from "firebase/auth";
+import { auth } from "../../config/firebaseConfig";
+import { validarPassword } from "../../utils/validacionPassword";
+
+interface Props {
+  visible: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export default function ModalCambiarPassword({ visible, onClose, onSuccess }: Props) {
+  const [actual, setActual] = useState("");
+  const [nueva, setNueva] = useState("");
+  const [nuevaConfirmacion, setNuevaConfirmacion] = useState("");
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const limpiarYCerrar = () => {
+    setActual("");
+    setNueva("");
+    setNuevaConfirmacion("");
+    setError("");
+    onClose();
+  };
+
+  const handleGuardar = async () => {
+    setError("");
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      setError("No se pudo identificar tu cuenta. Volvé a iniciar sesión.");
+      return;
+    }
+    if (!actual) {
+      setError("Ingresá tu contraseña actual.");
+      return;
+    }
+    const errorFormato = validarPassword(nueva);
+    if (errorFormato) {
+      setError(errorFormato);
+      return;
+    }
+    if (nueva !== nuevaConfirmacion) {
+      setError("Las dos contraseñas nuevas no coinciden.");
+      return;
+    }
+    if (nueva === actual) {
+      setError("La nueva contraseña debe ser distinta de la actual.");
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      const credencial = EmailAuthProvider.credential(user.email, actual);
+      await reauthenticateWithCredential(user, credencial);
+      await updatePassword(user, nueva);
+      limpiarYCerrar();
+      onSuccess();
+    } catch (e: any) {
+      if (e.code === "auth/invalid-credential" || e.code === "auth/wrong-password") {
+        setError("La contraseña actual es incorrecta.");
+      } else if (e.code === "auth/too-many-requests") {
+        setError("Demasiados intentos. Probá de nuevo en unos minutos.");
+      } else {
+        setError("No se pudo actualizar la contraseña. Intentá nuevamente.");
+      }
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={limpiarYCerrar}>
+      <View style={styles.overlay}>
+        <View style={styles.card}>
+          <Text style={styles.titulo}>Actualizar contraseña</Text>
+
+          <Text style={styles.label}>Contraseña actual</Text>
+          <TextInput
+            style={styles.input}
+            value={actual}
+            onChangeText={setActual}
+            placeholder="Tu contraseña actual"
+            placeholderTextColor="#9CA3AF"
+            secureTextEntry
+          />
+
+          <Text style={styles.label}>Nueva contraseña</Text>
+          <TextInput
+            style={styles.input}
+            value={nueva}
+            onChangeText={setNueva}
+            placeholder="Mínimo 8 caracteres"
+            placeholderTextColor="#9CA3AF"
+            secureTextEntry
+          />
+          <Text style={styles.hint}>Debe incluir mayúscula, minúscula y número.</Text>
+
+          <Text style={styles.label}>Repetir nueva contraseña</Text>
+          <TextInput
+            style={styles.input}
+            value={nuevaConfirmacion}
+            onChangeText={setNuevaConfirmacion}
+            placeholder="Volvé a escribirla"
+            placeholderTextColor="#9CA3AF"
+            secureTextEntry
+          />
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <TouchableOpacity
+            style={[styles.boton, guardando && { opacity: 0.7 }]}
+            onPress={handleGuardar}
+            disabled={guardando}
+          >
+            {guardando ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.botonTexto}>Guardar nueva contraseña</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.cancelar} onPress={limpiarYCerrar} disabled={guardando}>
+            <Text style={styles.cancelarTexto}>Cancelar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 },
+  card: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 20 },
+  titulo: { fontSize: 18, fontWeight: "700", color: "#11181C", marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 6 },
+  input: {
+    backgroundColor: "#F9F9F9",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    minHeight: 46,
+    marginBottom: 6,
+    fontSize: 15,
+    color: "#000",
+  },
+  hint: { fontSize: 11, color: "#9CA3AF", marginBottom: 14 },
+  error: { color: "#DC2626", fontSize: 13, marginBottom: 10, textAlign: "center" },
+  boton: { backgroundColor: "#25B471", borderRadius: 8, minHeight: 48, justifyContent: "center", alignItems: "center" },
+  botonTexto: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
+  cancelar: { marginTop: 12, alignItems: "center" },
+  cancelarTexto: { color: "#6B7280", fontWeight: "600", fontSize: 13 },
+});
+```
+
+---
+
+## Editar `app/(tabs)/perfil.tsx`
+
+Import:
+```typescript
+import ModalCambiarPassword from "../../components/ui/ModalCambiarPassword";
+```
+
+Agregá el estado, junto a `alerta`:
+```typescript
+  const [modalPassword, setModalPassword] = useState(false);
+```
+
+Agregá la sección de "Seguridad", justo después del botón "Guardar cambios" de los datos editables y antes del bloque de `esAlumno &&`:
+```tsx
+      <View style={styles.separador} />
+      <Text style={styles.subtituloSeccion}>Seguridad</Text>
+      <TouchableOpacity style={styles.botonSecundario} onPress={() => setModalPassword(true)}>
+        <Text style={styles.botonSecundarioTexto}>Actualizar contraseña</Text>
+      </TouchableOpacity>
+```
+
+Agregá el modal junto a los otros, al final antes de cerrar el `ScrollView`:
+```tsx
+      <ModalCambiarPassword
+        visible={modalPassword}
+        onClose={() => setModalPassword(false)}
+        onSuccess={() => setAlerta(true)}
+      />
+```
+
+Agregá el estilo:
+```typescript
+  botonSecundario: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#0F4A32",
+    borderRadius: 8,
+    minHeight: 48,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  botonSecundarioTexto: { color: "#0F4A32", fontWeight: "700", fontSize: 15 },
+```
+
+🐛 De paso encontré un bug en el archivo que pegaste: tenés el bloque de **"DNI (opcional)" duplicado dos veces seguidas** (con los mismos `value={dni}` y `onChangeText={setDni}`). Es inofensivo porque ambos apuntan al mismo estado, pero se ve raro en pantalla (dos campos de DNI idénticos). Borrá uno de los dos bloques:
+```tsx
+              <Text style={styles.label}>DNI (opcional)</Text>
+              <TextInput
+                style={styles.input}
+                value={dni}
+                onChangeText={setDni}
+                placeholder="Ej: 30123456"
+                keyboardType="number-pad"
+                placeholderTextColor="#9CA3AF"
+              />
+```
+(dejá solo uno de los dos, están pegados exactamente iguales uno debajo del otro)
+
+---
+
+Con esto: `registro.tsx` exige mayúscula+minúscula+número+8 caracteres al crear cuenta, `login.tsx` da mensajes más claros ante bloqueos por intentos fallidos (que Firebase ya aplica del lado del servidor automáticamente, no hace falta programar nada extra ahí), y en Perfil cualquier usuario (alumno/profesor/admin) puede tocar "Actualizar contraseña", confirmar la actual, y poner la nueva dos veces con los mismos estándares.
+
+---
+
+
+
+---
+# Q&A de la sesión 3
+---
+

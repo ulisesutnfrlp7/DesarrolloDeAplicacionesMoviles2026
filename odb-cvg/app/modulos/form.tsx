@@ -226,6 +226,7 @@ export default function ModuloFormScreen() {
           maxLength={80}
           autoCorrect={true}
           autoCapitalize="sentences"
+          spellCheck={true}
         />
 
         <Text style={styles.label}>
@@ -243,6 +244,7 @@ export default function ModuloFormScreen() {
           maxLength={150}
           autoCorrect={true}
           autoCapitalize="sentences"
+          spellCheck={true}
         />
 
         <Text style={styles.label}>Ícono</Text>

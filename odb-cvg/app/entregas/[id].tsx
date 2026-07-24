@@ -405,6 +405,9 @@ export default function EntregaDetalleScreen() {
                     onChangeText={(v) => { setContenido(v); setHayCambiosEntrega(true); }}
                     multiline
                     textAlignVertical="top"
+                    autoCorrect={true}
+                    autoCapitalize="sentences"
+                    spellCheck={true}
                   />
                 ) : archivo ? (
                   <View style={styles.archivoSeleccionadoWrapper}>
@@ -751,6 +754,9 @@ function DocenteVista({ entregas, loading, seccionId, fechaLimite, actualizarCal
                     value={retroInput}
                     onChangeText={setRetroInput}
                     multiline
+                    autoCorrect={true}
+                    autoCapitalize="sentences"
+                    spellCheck={true}
                   />
 
                   <TouchableOpacity

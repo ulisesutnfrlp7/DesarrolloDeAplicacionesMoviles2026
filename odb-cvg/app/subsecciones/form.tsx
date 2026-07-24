@@ -218,6 +218,7 @@ export default function SubseccionFormScreen() {
           maxLength={100}
           autoCorrect={true}
           autoCapitalize="sentences"
+          spellCheck={true}
         />
 
         <View style={styles.profesorSection}>
