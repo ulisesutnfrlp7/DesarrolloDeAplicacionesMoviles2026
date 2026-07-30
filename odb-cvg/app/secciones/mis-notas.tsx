@@ -33,8 +33,8 @@ export default function MisNotasScreen() {
 
   const { rol, loading: loadingRol } = useUserRole();
   const uid = auth.currentUser?.uid ?? null;
-  const esAlumnoRol = rol !== "admin" && rol !== "profesor";
-  const comisionesInfo = useComisionesPorSeccion(!loadingRol && !esAlumnoRol ? (seccionId ?? null) : null);
+  const esAlumnoParaComisiones = rol !== "admin" && rol !== "profesor";
+  const comisionesInfo = useComisionesPorSeccion(seccionId ?? null, !loadingRol && !esAlumnoParaComisiones);
 
   const [grupos, setGrupos] = useState<GrupoExamen[]>([]);
   const [loading, setLoading] = useState(true);
