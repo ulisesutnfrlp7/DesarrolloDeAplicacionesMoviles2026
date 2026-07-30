@@ -1,5 +1,6 @@
+//components/ui/ModalCambiarPassword.tsx
 import React, { useState } from "react";
-import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword,} from "firebase/auth";
 import { auth } from "../../config/firebaseConfig";
 import { validarPassword } from "../../utils/validacionPassword";
@@ -72,8 +73,12 @@ export default function ModalCambiarPassword({ visible, onClose, onSuccess }: Pr
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={limpiarYCerrar}>
-      <View style={styles.overlay}>
-        <View style={styles.card}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.card}>
           <Text style={styles.titulo}>Actualizar contraseña</Text>
 
           <Text style={styles.label}>Contraseña actual</Text>
@@ -125,13 +130,15 @@ export default function ModalCambiarPassword({ visible, onClose, onSuccess }: Pr
             <Text style={styles.cancelarTexto}>Cancelar</Text>
           </TouchableOpacity>
         </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  scrollContent: { flexGrow: 1, justifyContent: "center", padding: 24 },
   card: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 20 },
   titulo: { fontSize: 18, fontWeight: "700", color: "#11181C", marginBottom: 16 },
   label: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 6 },

@@ -24,7 +24,10 @@ export default function NotasScreen() {
 
   const { rol, loading: loadingRol } = useUserRole();
   const contextoSubseccion = subseccionPath ?? "";
-  const comisionesInfo = useComisionesPorSeccion(seccionId ?? null);
+  const comisionesInfo = useComisionesPorSeccion(
+    seccionId ?? null,
+    !loadingRol && (rol === "admin" || rol === "profesor"),
+  );
   const {
     contexto: contextoInscripcion,
     loading: loadingContextoInscripcion,
