@@ -158,7 +158,7 @@ export default function MisNotasScreen() {
 
   const esAdmin = rol === "admin";
   const puedeEditar = rol === "admin";
-  const esAlumno = rol !== "admin" && rol !== "profesor";
+  const esAlumno = esAlumnoParaComisiones;
 
   const handleEliminarExamen = async () => {
     if (!examenAEliminar || !seccionId) return;

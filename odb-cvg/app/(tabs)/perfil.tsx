@@ -1,6 +1,6 @@
 //app/(tabs)/perfil.tsx
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { useUserProfile } from "../../hooks/useUserProfile";
@@ -11,11 +11,12 @@ import { getPushDiagnostics, getPushPreference, registerCurrentDeviceForPush, se
 export default function PerfilScreen() {
   const { rol, loading: loadingRol } = useUserRole();
   const {
-    perfil,
-    loading: loadingPerfil,
-    completarDatosFijos,
-    actualizarDatosEditables,
-  } = useUserProfile();
+  perfil,
+  loading: loadingPerfil,
+  completarDatosFijos,
+  completarDNI,
+  actualizarDatosEditables,
+} = useUserProfile();
 
   // Datos fijos (legajo/DNI) — solo se usan si todavía no están cargados
   const [legajo, setLegajo] = useState("");
@@ -24,6 +25,13 @@ export default function PerfilScreen() {
   const [dniConfirmacion, setDniConfirmacion] = useState("");
   const [errorFijos, setErrorFijos] = useState("");
   const [guardandoFijos, setGuardandoFijos] = useState(false);
+
+  // Datos para cargar el DNI después, cuando el legajo ya está guardado
+  const [dniPosterior, setDniPosterior] = useState("");
+  const [dniPosteriorConfirmacion, setDniPosteriorConfirmacion] = useState("");
+  const [errorDniPosterior, setErrorDniPosterior] = useState("");
+  const [guardandoDniPosterior, setGuardandoDniPosterior] = useState(false);
+  const [confirmarDni, setConfirmarDni] = useState(false);
 
   // Datos editables (nombre/teléfono)
   const [nombre, setNombre] = useState("");
@@ -73,6 +81,21 @@ export default function PerfilScreen() {
     }
   };
 
+  const handleGuardarDNI = async () => {
+    setErrorDniPosterior("");
+    setGuardandoDniPosterior(true);
+    try {
+      await completarDNI(dniPosterior, dniPosteriorConfirmacion);
+      setDniPosterior("");
+      setDniPosteriorConfirmacion("");
+      setAlerta(true);
+    } catch (e: any) {
+      setErrorDniPosterior(e.message ?? "No se pudo guardar el DNI.");
+    } finally {
+      setGuardandoDniPosterior(false);
+    }
+  };
+
   const handleGuardarEditables = async () => {
     setErrorEditables("");
     if (!nombre.trim()) {
@@ -117,8 +140,17 @@ export default function PerfilScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.titulo}>Mi Perfil</Text>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+    >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.titulo}>Mi Perfil</Text>
 
       <Text style={styles.label}>Nombre y Apellido</Text>
       <TextInput
@@ -204,11 +236,52 @@ export default function PerfilScreen() {
               </View>
 
               <Text style={styles.label}>DNI</Text>
-              <View style={styles.campoBloqueado}>
-                <Text style={styles.campoBloqueadoTexto}>
-                  {perfil.dniBloqueado ? perfil.dni : "No cargado"}
-                </Text>
-              </View>
+              {perfil.dniBloqueado ? (
+                <View style={styles.campoBloqueado}>
+                  <Text style={styles.campoBloqueadoTexto}>{perfil.dni}</Text>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.avisoBox}>
+                    <Text style={styles.avisoTexto}>
+                      ⚠️ Una vez guardado, el DNI no se puede modificar. Revisá bien antes de continuar.
+                    </Text>
+                  </View>
+
+                  <TextInput
+                    style={styles.input}
+                    value={dniPosterior}
+                    onChangeText={setDniPosterior}
+                    placeholder="Ej: 30123456"
+                    keyboardType="number-pad"
+                    placeholderTextColor="#9CA3AF"
+                  />
+
+                  <Text style={styles.label}>Repetir DNI</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={dniPosteriorConfirmacion}
+                    onChangeText={setDniPosteriorConfirmacion}
+                    placeholder="Volvé a escribirlo"
+                    keyboardType="number-pad"
+                    placeholderTextColor="#9CA3AF"
+                  />
+
+                  {errorDniPosterior ? <Text style={styles.error}>{errorDniPosterior}</Text> : null}
+
+                  <TouchableOpacity
+                    style={[styles.boton, guardandoDniPosterior && { opacity: 0.7 }]}
+                    onPress={() => setConfirmarDni(true)}
+                    disabled={guardandoDniPosterior}
+                  >
+                    {guardandoDniPosterior ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.botonTexto}>Guardar DNI</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -291,6 +364,19 @@ export default function PerfilScreen() {
         onCancel={() => setConfirmarEdicion(false)}
       />
 
+      <ModalConfirmacion
+        visible={confirmarDni}
+        titulo="Confirmar DNI"
+        mensaje="Una vez guardado, el DNI no se podrá modificar. ¿Estás seguro de que querés guardarlo?"
+        textoConfirmar="Sí, guardar"
+        textoCancelar="Cancelar"
+        onConfirm={() => {
+          setConfirmarDni(false);
+          handleGuardarDNI();
+        }}
+        onCancel={() => setConfirmarDni(false)}
+      />
+
       <ModalAlerta
         visible={alerta}
         titulo="Guardado"
@@ -305,6 +391,7 @@ export default function PerfilScreen() {
         onSuccess={() => setAlerta(true)}
       />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
