@@ -2,10 +2,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { router, Stack, useFocusEffect, useLocalSearchParams,} from "expo-router";
-import { doc, getDoc } from "firebase/firestore";
+import { router, useFocusEffect, useLocalSearchParams,} from "expo-router";
+import { doc, getDoc, Timestamp } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Linking} from "react-native";
+import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Linking} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { db } from "../../config/firebaseConfig";
@@ -16,6 +16,18 @@ import ScreenHeader from "../../components/ui/ScreenHeader";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { enqueueNotificationJob, itemSourcePath } from "../../services/notificationJobs";
+import {
+  computeNextNotificationAt,
+  DEFAULT_NOTIFICATION_SCHEDULE,
+  normalizeReminder,
+  reminderLabel,
+  sortReminders,
+  validateReminders,
+  type NotificationReminder,
+  type NotificationSchedule,
+  type ReminderUnit,
+} from "../../types/notifications";
 
 const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "texto", label: "Texto", icono: "document-text-outline" },
@@ -26,6 +38,9 @@ const TIPOS: { key: ItemTipo; label: string; icono: string }[] = [
   { key: "documento", label: "Doc.", icono: "attach-outline" },
   { key: "entrega", label: "Entrega", icono: "cloud-upload-outline" },
 ];
+
+const SCHEDULE_TOLERANCE_MS = 8 * 60 * 1000;
+const DEFAULT_DEADLINE_TIME = "23:59";
 
 const formatearFecha = (iso: string) => {
   const [y, m, d] = iso.split("-");
@@ -69,6 +84,16 @@ export default function ItemFormScreen() {
   } | null>(null);
 
   const [mostrarDatePicker, setMostrarDatePicker] = useState(false);
+  const [mostrarTimePicker, setMostrarTimePicker] = useState(false);
+  const [pendingTime, setPendingTime] = useState<Date | null>(null);
+  const [fechaLimiteHora, setFechaLimiteHora] = useState(DEFAULT_DEADLINE_TIME);
+  const [avisosEnabled, setAvisosEnabled] = useState(false);
+  const [reminders, setReminders] = useState<NotificationReminder[]>([]);
+  const [reminderAmount, setReminderAmount] = useState("");
+  const [reminderUnit, setReminderUnit] = useState<ReminderUnit>("days");
+  const [sameMoment, setSameMoment] = useState(false);
+  const [scheduleVersion, setScheduleVersion] = useState(0);
+  const [originalRelevantHash, setOriginalRelevantHash] = useState("");
 
   const [permiteCargaProfesor, setPermiteCargaProfesor] = useState(false);
   const [cargandoPermiso, setCargandoPermiso] = useState(true);
@@ -153,7 +178,13 @@ export default function ItemFormScreen() {
             setUrlEnlace(data.url ?? "");
           }
           if (data.tipo === "entrega") {
-            setUrlEnlace(data.fechaLimite ?? "");
+            const deadline = deliveryDeadlineParts(data.fechaLimiteAt, data.fechaLimite, data.fechaLimiteHora);
+            setUrlEnlace(deadline.date);
+            setFechaLimiteHora(deadline.time);
+            const schedule = data.notificationSchedule ?? DEFAULT_NOTIFICATION_SCHEDULE;
+            setAvisosEnabled(schedule.enabled);
+            setReminders(sortReminders(schedule.reminders ?? []));
+            setScheduleVersion(schedule.version ?? 1);
             if (data.archivoConsignaUrl) {
               setArchivoExistente({
                 nombre: data.archivoConsignaNombre ?? "",
@@ -162,6 +193,14 @@ export default function ItemFormScreen() {
               });
             }
           }
+          setOriginalRelevantHash(itemRelevantHash({
+            tipo: data.tipo ?? "texto",
+            titulo: data.titulo ?? "",
+            contenido: data.tipo === "entrega" ? (data.descripcionEntrega ?? data.contenido ?? "") : (data.contenido ?? ""),
+            url: data.tipo === "entrega" ? `${data.fechaLimite ?? ""} ${data.fechaLimiteHora ?? DEFAULT_DEADLINE_TIME}` : (data.url ?? ""),
+            nombreArchivo: data.tipo === "entrega" ? (data.archivoConsignaNombre ?? "") : (data.nombreArchivo ?? ""),
+            schedule: data.notificationSchedule,
+          }));
         }
       } catch (error) {
         console.error("Error al cargar item:", error);
@@ -360,15 +399,55 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
       setAlerta({ visible: true, titulo: "Sin archivo", mensaje: "Por favor seleccioná un archivo.", tipo: "error", cerrarAlSalir: false });
       return;
     }
+    if (tipo === "entrega" && avisosEnabled) {
+      if (!urlEnlace.trim()) {
+        setAlerta({ visible: true, titulo: "Fecha requerida", mensaje: "Para enviar recordatorios, la entrega necesita fecha limite.", tipo: "error", cerrarAlSalir: false });
+        return;
+      }
+      const validation = validateReminders(reminders, getDeadlineDate(urlEnlace, fechaLimiteHora));
+      if (validation) {
+        setAlerta({ visible: true, titulo: "Recordatorios invalidos", mensaje: validation, tipo: "error", cerrarAlSalir: false });
+        return;
+      }
+    }
 
     setSubiendo(true);
     try {
+      const enqueueItemJob = async (type: "new_content" | "content_updated" | "delivery_space_created" | "delivery_space_updated", savedItemId: string) => {
+        await enqueueNotificationJob({
+          type,
+          sourceId: savedItemId,
+          sourcePath: itemSourcePath({ moduloId, seccionId, itemId: savedItemId, subseccionPath: currentSubseccionPath }),
+          courseId: moduloId,
+          sectionId: seccionId,
+        });
+      };
+      const currentRelevantHash = () => itemRelevantHash({
+        tipo,
+        titulo: titulo.trim(),
+        contenido: contenido.trim(),
+        url: tipo === "entrega" ? deadlineHashPart(urlEnlace, fechaLimiteHora) : tipo === "enlace" ? urlEnlace.trim() : (archivoExistente?.url ?? ""),
+        nombreArchivo: archivo?.nombre ?? archivoExistente?.nombre ?? "",
+        schedule: tipo === "entrega" ? {
+          enabled: avisosEnabled,
+          version: scheduleVersion + 1,
+          reminders,
+          nextNotificationAt: null,
+          processed: {},
+        } : undefined,
+      });
       if (modoEdicion && itemId) {
   // ── EDICIÓN ──
   if (tipo === "texto") {
     await actualizarItem(itemId, { titulo: titulo.trim() || "Texto", contenido: contenido.trim() });
+    if (currentRelevantHash() !== originalRelevantHash) {
+      await enqueueItemJob("content_updated", itemId);
+    }
   } else if (tipo === "enlace") {
     await actualizarItem(itemId, { titulo: titulo.trim() || "Enlace", url: urlEnlace.trim() });
+    if (currentRelevantHash() !== originalRelevantHash) {
+      await enqueueItemJob("content_updated", itemId);
+    }
   } else if (tipo === "entrega") {
   let extra: Record<string, any> = {};
   if (archivo) {
@@ -386,8 +465,19 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
     contenido: contenido.trim(),
     descripcionEntrega: contenido.trim(),
     fechaLimite: urlEnlace.trim() || null,
+    fechaLimiteHora: urlEnlace.trim() ? fechaLimiteHora : null,
+    fechaLimiteAt: urlEnlace.trim() ? Timestamp.fromDate(getDeadlineDate(urlEnlace, fechaLimiteHora)) : null,
+    notificationSchedule: buildDeliverySchedule(urlEnlace, fechaLimiteHora, {
+      enabled: avisosEnabled,
+      version: scheduleVersion + 1,
+      reminders,
+      nextNotificationAt: null,
+    }),
     ...extra,
   });
+  if (currentRelevantHash() !== originalRelevantHash) {
+    await enqueueItemJob("delivery_space_updated", itemId);
+  }
   } else if (archivo) {
     const cloudRes = await uploadToCloudinary(archivo.uri, tipo, archivo.nombre);
     await actualizarItem(itemId, {
@@ -396,16 +486,24 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
       storageRef: cloudRes.publicId,
       nombreArchivo: archivo.nombre,
     });
+    if (currentRelevantHash() !== originalRelevantHash) {
+      await enqueueItemJob("content_updated", itemId);
+    }
   } else {
     await actualizarItem(itemId, { titulo: titulo.trim() || archivoExistente?.nombre || "" });
+    if (currentRelevantHash() !== originalRelevantHash) {
+      await enqueueItemJob("content_updated", itemId);
+    }
   }
   setAlerta({ visible: true, titulo: "Actualizado", mensaje: "El elemento fue actualizado correctamente.", tipo: "exito", cerrarAlSalir: true });
 } else {
   // ── CREACIÓN ──
   if (tipo === "texto") {
-    await crearItem({ tipo: "texto", titulo: titulo.trim() || "Texto", contenido: contenido.trim(), url: "", storageRef: "", nombreArchivo: "" });
+    const newId = await crearItem({ tipo: "texto", titulo: titulo.trim() || "Texto", contenido: contenido.trim(), url: "", storageRef: "", nombreArchivo: "" });
+    await enqueueItemJob("new_content", newId);
   } else if (tipo === "enlace") {
-    await crearItem({ tipo: "enlace", titulo: titulo.trim() || "Enlace", contenido: "", url: urlEnlace.trim(), storageRef: "", nombreArchivo: "" });
+    const newId = await crearItem({ tipo: "enlace", titulo: titulo.trim() || "Enlace", contenido: "", url: urlEnlace.trim(), storageRef: "", nombreArchivo: "" });
+    await enqueueItemJob("new_content", newId);
   } else if (tipo === "entrega") {
   let extra: Record<string, any> = {};
   if (archivo) {
@@ -418,7 +516,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
       archivoConsignaTipo: tipoArchivo,
     };
   }
-  await crearItem({
+  const newId = await crearItem({
     tipo: "entrega",
     titulo: titulo.trim() || "Entrega",
     contenido: contenido.trim(),
@@ -427,11 +525,20 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
     nombreArchivo: "",
     descripcionEntrega: contenido.trim(),
     fechaLimite: urlEnlace.trim() || null,
+    fechaLimiteHora: urlEnlace.trim() ? fechaLimiteHora : null,
+    fechaLimiteAt: urlEnlace.trim() ? Timestamp.fromDate(getDeadlineDate(urlEnlace, fechaLimiteHora)) : null,
+    notificationSchedule: buildDeliverySchedule(urlEnlace, fechaLimiteHora, {
+      enabled: avisosEnabled,
+      version: scheduleVersion + 1,
+      reminders,
+      nextNotificationAt: null,
+    }),
     ...extra,
   });
+  await enqueueItemJob("delivery_space_created", newId);
   } else {
     const cloudRes = await uploadToCloudinary(archivo!.uri, tipo, archivo!.nombre);
-    await crearItem({
+    const newId = await crearItem({
       tipo,
       titulo: titulo.trim() || archivo!.nombre,
       contenido: "",
@@ -439,6 +546,7 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
       storageRef: cloudRes.publicId,
       nombreArchivo: archivo!.nombre,
     });
+    await enqueueItemJob("new_content", newId);
   }
   setAlerta({ visible: true, titulo: "Guardado", mensaje: "El elemento fue agregado correctamente.", tipo: "exito", cerrarAlSalir: true });
 }
@@ -448,6 +556,51 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
     } finally {
       setSubiendo(false);
     }
+  };
+
+  const agregarRecordatorio = () => {
+    const parsedAmount = sameMoment ? 0 : Number(reminderAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0 || (!sameMoment && parsedAmount <= 0)) {
+      setAlerta({ visible: true, titulo: "Recordatorio invalido", mensaje: "Ingresá una cantidad mayor a cero, o elegí el mismo momento.", tipo: "error", cerrarAlSalir: false });
+      return;
+    }
+    if (!urlEnlace.trim()) {
+      setAlerta({ visible: true, titulo: "Fecha requerida", mensaje: "Elegí una fecha límite antes de agregar recordatorios.", tipo: "error", cerrarAlSalir: false });
+      return;
+    }
+    const reminder = normalizeReminder({
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      amount: parsedAmount,
+      unit: sameMoment ? "minutes" : reminderUnit,
+    });
+    const validation = validateReminders([...reminders, reminder], getDeadlineDate(urlEnlace, fechaLimiteHora));
+    if (validation) {
+      setAlerta({ visible: true, titulo: "Recordatorio invalido", mensaje: validation, tipo: "error", cerrarAlSalir: false });
+      return;
+    }
+    setReminders((prev) => sortReminders([...prev, reminder]));
+    setReminderAmount("");
+    setSameMoment(false);
+    setHayCambios(true);
+  };
+
+  const abrirTimePicker = () => {
+    setPendingTime(urlEnlace ? getDeadlineDate(urlEnlace, fechaLimiteHora) : new Date());
+    setMostrarTimePicker(true);
+  };
+
+  const cancelarTimePicker = () => {
+    setMostrarTimePicker(false);
+    setPendingTime(null);
+  };
+
+  const confirmarTimePicker = () => {
+    if (pendingTime) {
+      setFechaLimiteHora(timeInputFromLocalDate(pendingTime));
+      setHayCambios(true);
+    }
+    setMostrarTimePicker(false);
+    setPendingTime(null);
   };
 
   const handleCerrarAlerta = () => {
@@ -643,8 +796,19 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
               </View>
             </TouchableOpacity>
             {urlEnlace ? (
+              <>
+                <Text style={styles.label}>Hora limite</Text>
+                <TouchableOpacity style={styles.input} onPress={abrirTimePicker}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontSize: 15, color: "#11181C" }}>{fechaLimiteHora} h</Text>
+                    <Ionicons name="time-outline" size={20} color="#6B7280" />
+                  </View>
+                </TouchableOpacity>
+              </>
+            ) : null}
+            {urlEnlace ? (
               <TouchableOpacity
-                onPress={() => { setUrlEnlace(""); setHayCambios(true); }}
+                onPress={() => { setUrlEnlace(""); setFechaLimiteHora(DEFAULT_DEADLINE_TIME); setHayCambios(true); }}
                 style={{ alignSelf: "flex-start", marginTop: 8 }}
               >
                 <Text style={{ color: "#DC2626", fontSize: 13, fontWeight: "600" }}>Quitar fecha límite</Text>
@@ -653,19 +817,126 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
 
             {mostrarDatePicker && (
               <DateTimePicker
-                value={urlEnlace ? new Date(`${urlEnlace}T00:00:00`) : new Date()}
+                value={urlEnlace ? getDeadlineDate(urlEnlace, fechaLimiteHora) : new Date()}
                 mode="date"
                 minimumDate={new Date()}
                 onChange={(_event, selectedDate) => {
                   setMostrarDatePicker(false);
                   if (selectedDate) {
-                    const iso = selectedDate.toISOString().split("T")[0];
-                    setUrlEnlace(iso);
+                    setUrlEnlace(dateInputFromLocalDate(selectedDate));
                     setHayCambios(true);
                   }
                 }}
               />
             )}
+            {mostrarTimePicker && Platform.OS !== "ios" && (
+              <DateTimePicker
+                value={urlEnlace ? getDeadlineDate(urlEnlace, fechaLimiteHora) : new Date()}
+                mode="time"
+                is24Hour
+                onChange={(event, selectedDate) => {
+                  setMostrarTimePicker(false);
+                  setPendingTime(null);
+                  if (event.type !== "dismissed" && selectedDate) {
+                    setFechaLimiteHora(timeInputFromLocalDate(selectedDate));
+                    setHayCambios(true);
+                  }
+                }}
+              />
+            )}
+            {Platform.OS === "ios" && (
+              <Modal visible={mostrarTimePicker} transparent animationType="fade" onRequestClose={cancelarTimePicker}>
+                <View style={styles.timePickerOverlay}>
+                  <View style={styles.timePickerCard}>
+                    <View style={styles.timePickerActions}>
+                      <TouchableOpacity onPress={cancelarTimePicker} style={styles.timePickerActionBtn}>
+                        <Text style={styles.timePickerCancelText}>Cancelar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={confirmarTimePicker} style={styles.timePickerActionBtn}>
+                        <Text style={styles.timePickerDoneText}>Listo</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <DateTimePicker
+                      value={pendingTime ?? (urlEnlace ? getDeadlineDate(urlEnlace, fechaLimiteHora) : new Date())}
+                      mode="time"
+                      display="spinner"
+                      is24Hour
+                      onChange={(_event, selectedDate) => {
+                        if (selectedDate) setPendingTime(selectedDate);
+                      }}
+                    />
+                  </View>
+                </View>
+              </Modal>
+            )}
+
+            <View style={styles.recordatoriosBox}>
+              <View style={styles.recordatoriosHeader}>
+                <View>
+                  <Text style={styles.recordatoriosTitle}>Recordatorios</Text>
+                  <Text style={styles.recordatoriosSubtitle}>Avisos para alumnos de esta entrega</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.switch, avisosEnabled && styles.switchOn]}
+                  onPress={() => { setAvisosEnabled((v) => !v); setHayCambios(true); }}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.switchKnob, avisosEnabled && styles.switchKnobOn]} />
+                </TouchableOpacity>
+              </View>
+
+              {avisosEnabled && (
+                <>
+                  <TouchableOpacity style={styles.sameMomentRow} onPress={() => setSameMoment((v) => !v)}>
+                    <Text style={styles.sameMomentIcon}>{sameMoment ? "[x]" : "[ ]"}</Text>
+                    <Text style={styles.sameMomentText}>El mismo momento</Text>
+                  </TouchableOpacity>
+
+                  {!sameMoment && (
+                    <View style={styles.reminderInputRow}>
+                      <TextInput
+                        style={[styles.input, styles.reminderAmountInput]}
+                        value={reminderAmount}
+                        onChangeText={(value) => setReminderAmount(value.replace(/[^0-9]/g, ""))}
+                        placeholder="Cantidad"
+                        keyboardType="number-pad"
+                        placeholderTextColor="#9CA3AF"
+                      />
+                      {(["minutes", "hours", "days"] as ReminderUnit[]).map((unit) => (
+                        <TouchableOpacity
+                          key={unit}
+                          style={[styles.unitBtn, reminderUnit === unit && styles.unitBtnActive]}
+                          onPress={() => setReminderUnit(unit)}
+                        >
+                          <Text style={[styles.unitBtnText, reminderUnit === unit && styles.unitBtnTextActive]}>
+                            {unit === "minutes" ? "min" : unit === "hours" ? "hs" : "dias"}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  <TouchableOpacity style={styles.addReminderBtn} onPress={agregarRecordatorio}>
+                    <Text style={styles.addReminderText}>Agregar recordatorio</Text>
+                  </TouchableOpacity>
+
+                  {reminders.length > 0 ? (
+                    <View style={styles.remindersList}>
+                      {sortReminders(reminders).map((reminder) => (
+                        <View key={reminder.id} style={styles.reminderChip}>
+                          <Text style={styles.reminderChipText}>{reminderLabel(reminder)}</Text>
+                          <TouchableOpacity onPress={() => { setReminders((prev) => prev.filter((item) => item.id !== reminder.id)); setHayCambios(true); }}>
+                            <Text style={styles.reminderDelete}>Eliminar</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.noReminders}>Todavia no agregaste recordatorios.</Text>
+                  )}
+                </>
+              )}
+            </View>
           </>
         )}
 
@@ -806,6 +1077,144 @@ const uploadToCloudinary = async (uri: string, tipo: string, nombre: string) => 
       />
     </KeyboardAvoidingView>
   );
+}
+
+function normalizeDeadlineTime(value?: string | null): string {
+  const raw = String(value ?? "").trim();
+  if (/^\d{2}:\d{2}$/.test(raw)) {
+    const [h, m] = raw.split(":").map(Number);
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) return raw;
+  }
+  return DEFAULT_DEADLINE_TIME;
+}
+
+function getDeadlineDate(fechaLimite: string, hora = DEFAULT_DEADLINE_TIME): Date {
+  return new Date(`${fechaLimite}T${normalizeDeadlineTime(hora)}:00-03:00`);
+}
+
+function dateInputFromLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function timeInputFromLocalDate(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function toDateLike(value: any): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null;
+  if (typeof value?.toDate === "function") {
+    const parsed = value.toDate();
+    return parsed instanceof Date && Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+  if (typeof value === "object") {
+    const seconds = typeof value.seconds === "number"
+      ? value.seconds
+      : typeof value._seconds === "number"
+        ? value._seconds
+        : null;
+    if (seconds !== null) {
+      const nanos = typeof value.nanoseconds === "number"
+        ? value.nanoseconds
+        : typeof value._nanoseconds === "number"
+          ? value._nanoseconds
+          : 0;
+      return new Date(seconds * 1000 + Math.floor(nanos / 1_000_000));
+    }
+  }
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+  return null;
+}
+
+function dateInArgentina(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(date);
+}
+
+function timeInArgentina(date: Date): string {
+  const parts = new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "23";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "59";
+  return normalizeDeadlineTime(`${hour}:${minute}`);
+}
+
+function deliveryDeadlineParts(fechaLimiteAt: any, legacyDate?: string | null, legacyTime?: string | null) {
+  const canonical = toDateLike(fechaLimiteAt);
+  if (canonical) return { date: dateInArgentina(canonical), time: timeInArgentina(canonical) };
+  if (legacyDate) return { date: legacyDate, time: normalizeDeadlineTime(legacyTime ?? DEFAULT_DEADLINE_TIME) };
+  return { date: "", time: DEFAULT_DEADLINE_TIME };
+}
+
+function deadlineHashPart(fechaLimite: string, hora: string): string {
+  return fechaLimite ? `${fechaLimite} ${normalizeDeadlineTime(hora)}` : "";
+}
+
+function buildDeliverySchedule(
+  fechaLimite: string,
+  hora: string,
+  schedule: NotificationSchedule,
+): NotificationSchedule {
+  if (!fechaLimite || !schedule.enabled) {
+    return {
+      enabled: !!schedule.enabled,
+      version: schedule.version,
+      reminders: sortReminders(schedule.reminders ?? []),
+      nextNotificationAt: null,
+      processed: {},
+    };
+  }
+  const deadline = getDeadlineDate(fechaLimite, hora);
+  const reminders = sortReminders(schedule.reminders ?? []);
+  const next = computeNextNotificationAt(deadline, reminders, {}, new Date(), SCHEDULE_TOLERANCE_MS);
+  return {
+    enabled: true,
+    version: schedule.version,
+    reminders,
+    nextNotificationAt: next ? Timestamp.fromDate(next) : null,
+    processed: {},
+  };
+}
+
+function itemRelevantHash(data: {
+  tipo: unknown;
+  titulo: unknown;
+  contenido: unknown;
+  url: unknown;
+  nombreArchivo: unknown;
+  schedule?: unknown;
+}) {
+  return JSON.stringify({
+    tipo: data.tipo ?? "",
+    titulo: String(data.titulo ?? "").trim(),
+    contenido: String(data.contenido ?? "").trim(),
+    url: String(data.url ?? "").trim(),
+    nombreArchivo: String(data.nombreArchivo ?? "").trim(),
+    schedule: normalizeScheduleForHash(data.schedule),
+  });
+}
+
+function normalizeScheduleForHash(schedule: any) {
+  if (!schedule) return null;
+  return {
+    enabled: !!schedule.enabled,
+    reminders: sortReminders(schedule.reminders ?? []).map((reminder) => ({
+      amount: reminder.amount,
+      unit: reminder.unit,
+      offsetMinutes: reminder.offsetMinutes,
+    })),
+  };
 }
 
 const styles = StyleSheet.create({
@@ -1056,4 +1465,100 @@ const styles = StyleSheet.create({
     color: "#92400E",
     lineHeight: 18,
   },
+  recordatoriosBox: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+  },
+  recordatoriosHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  recordatoriosTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  recordatoriosSubtitle: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  switch: {
+    width: 46,
+    height: 28,
+    borderRadius: 14,
+    padding: 3,
+    justifyContent: "center",
+    backgroundColor: "#CBD5E0",
+  },
+  switchOn: { backgroundColor: "#25B471" },
+  switchKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#FFFFFF",
+  },
+  switchKnobOn: { alignSelf: "flex-end" },
+  sameMomentRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14 },
+  sameMomentIcon: { color: "#0F4A32", fontWeight: "700" },
+  sameMomentText: { fontSize: 13, color: "#374151", fontWeight: "600" },
+  reminderInputRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
+  reminderAmountInput: { flex: 1, marginTop: 0 },
+  unitBtn: {
+    minWidth: 48,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  unitBtnActive: { backgroundColor: "#0F4A32", borderColor: "#0F4A32" },
+  unitBtnText: { color: "#374151", fontSize: 12, fontWeight: "700" },
+  unitBtnTextActive: { color: "#FFFFFF" },
+  addReminderBtn: {
+    marginTop: 12,
+    borderRadius: 8,
+    backgroundColor: "#E8F5E9",
+    alignItems: "center",
+    paddingVertical: 11,
+  },
+  addReminderText: { color: "#0F4A32", fontSize: 13, fontWeight: "700" },
+  remindersList: { marginTop: 12, gap: 8 },
+  reminderChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  reminderChipText: { flex: 1, fontSize: 13, color: "#374151", fontWeight: "600" },
+  reminderDelete: { fontSize: 12, color: "#DC2626", fontWeight: "700" },
+  noReminders: { marginTop: 10, fontSize: 12, color: "#9CA3AF" },
+  timePickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-end",
+  },
+  timePickerCard: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 24,
+  },
+  timePickerActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  timePickerActionBtn: { paddingVertical: 8, paddingHorizontal: 6 },
+  timePickerCancelText: { color: "#6B7280", fontSize: 15, fontWeight: "700" },
+  timePickerDoneText: { color: "#0F4A32", fontSize: 15, fontWeight: "800" },
 });

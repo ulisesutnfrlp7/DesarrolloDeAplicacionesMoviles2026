@@ -6,6 +6,7 @@ import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { useUserRole } from "../../hooks/useUserRole";
 import ModalCambiarPassword from "../../components/ui/ModalCambiarPassword";
+import { getPushDiagnostics, getPushPreference, registerCurrentDeviceForPush, setPushEnabled, type PushDiagnostics } from "../../hooks/usePushNotifications";
 
 export default function PerfilScreen() {
   const { rol, loading: loadingRol } = useUserRole();
@@ -42,11 +43,28 @@ export default function PerfilScreen() {
   const [alerta, setAlerta] = useState(false);
 
   const [modalPassword, setModalPassword] = useState(false);
+  const [pushEnabled, setPushEnabledState] = useState(true);
+  const [guardandoPush, setGuardandoPush] = useState(false);
+  const [pushError, setPushError] = useState("");
+  const [pushDiagnostics, setPushDiagnostics] = useState<PushDiagnostics | null>(null);
 
   useEffect(() => {
     setNombre(perfil.nombre ?? "");
     setTelefono(perfil.telefono ?? "");
   }, [perfil]);
+
+  useEffect(() => {
+    getPushPreference().then((pref) => {
+      setPushEnabledState(pref.enabled);
+      if (pref.error) setPushError(pref.error);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (rol === "admin") {
+      getPushDiagnostics().then(setPushDiagnostics).catch(() => setPushDiagnostics(null));
+    }
+  }, [rol]);
 
   const esAlumno = rol === "alumno";
 
@@ -92,6 +110,24 @@ export default function PerfilScreen() {
       setErrorEditables(e.message ?? "No se pudo guardar los cambios.");
     } finally {
       setGuardandoEditables(false);
+    }
+  };
+
+  const handleTogglePush = async () => {
+    setPushError("");
+    setGuardandoPush(true);
+    try {
+      if (pushEnabled) {
+        await setPushEnabled(false);
+        setPushEnabledState(false);
+      } else {
+        await registerCurrentDeviceForPush();
+        setPushEnabledState(true);
+      }
+    } catch (e: any) {
+      setPushError(e.message ?? "No se pudo actualizar la configuracion de push.");
+    } finally {
+      setGuardandoPush(false);
     }
   };
 
@@ -154,6 +190,38 @@ export default function PerfilScreen() {
       <TouchableOpacity style={styles.botonSecundario} onPress={() => setModalPassword(true)}>
         <Text style={styles.botonSecundarioTexto}>Actualizar contraseña</Text>
       </TouchableOpacity>
+
+      <View style={styles.separador} />
+      <Text style={styles.subtituloSeccion}>Notificaciones</Text>
+      <View style={styles.pushBox}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.pushTitle}>Push del dispositivo</Text>
+          <Text style={styles.pushText}>
+            {pushEnabled
+              ? "Activadas para avisos remotos. Las internas siguen disponibles siempre."
+              : "Desactivadas. Vas a seguir viendo las notificaciones dentro de la app."}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.pushSwitch, pushEnabled && styles.pushSwitchOn, guardandoPush && { opacity: 0.6 }]}
+          onPress={handleTogglePush}
+          disabled={guardandoPush}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.pushKnob, pushEnabled && styles.pushKnobOn]} />
+        </TouchableOpacity>
+      </View>
+      {pushError ? <Text style={styles.error}>{pushError}</Text> : null}
+
+      {rol === "admin" && pushDiagnostics ? (
+        <View style={styles.diagnosticsBox}>
+          <Text style={styles.pushTitle}>Diagnostico push</Text>
+          <Text style={styles.pushText}>Permiso local: {pushDiagnostics.permissionStatus}</Text>
+          <Text style={styles.pushText}>ExpoPushToken: {pushDiagnostics.hasExpoPushToken ? `configurado (*${pushDiagnostics.tokenSuffix})` : "no disponible"}</Text>
+          <Text style={styles.pushText}>Guardado en Firestore: {pushDiagnostics.storedInFirestore ? "si" : "no"}</Text>
+          <Text style={styles.pushText}>Preferencia push: {pushDiagnostics.pushEnabled ? "habilitada" : "deshabilitada"}</Text>
+        </View>
+      ) : null}
 
       {esAlumno && (
         <>
@@ -373,4 +441,41 @@ const styles = StyleSheet.create({
   error: { color: "#DC2626", fontSize: 13, marginBottom: 12, textAlign: "center" },
   boton: { backgroundColor: "#25B471", borderRadius: 8, minHeight: 48, justifyContent: "center", alignItems: "center" },
   botonTexto: { color: "#FFFFFF", fontWeight: "bold", fontSize: 16 },
+  pushBox: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  pushTitle: { fontSize: 14, fontWeight: "700", color: "#11181C", marginBottom: 3 },
+  pushText: { fontSize: 12, color: "#6B7280", lineHeight: 17 },
+  pushSwitch: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    padding: 3,
+    backgroundColor: "#CBD5E0",
+    justifyContent: "center",
+  },
+  pushSwitchOn: { backgroundColor: "#25B471" },
+  pushKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#FFFFFF",
+  },
+  pushKnobOn: { alignSelf: "flex-end" },
+  diagnosticsBox: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D1FAE5",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+  },
 });

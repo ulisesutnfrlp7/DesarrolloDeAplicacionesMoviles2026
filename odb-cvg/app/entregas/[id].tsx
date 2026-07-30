@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 // app/entregas/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -27,9 +28,13 @@ const formatearFecha = (iso: string) => {
   return `${d}/${m}/${y}`;
 };
 
-const calcularAtraso = (fechaEntrega: any, fechaLimite?: string | null): string | null => {
-  if (!fechaLimite || !fechaEntrega?.toDate) return null;
-  const finDePlazo = new Date(`${fechaLimite}T23:59:59`);
+const DEFAULT_DEADLINE_TIME = "23:59";
+
+const calcularAtraso = (fechaEntrega: any, fechaLimiteAt?: any, fechaLimite?: string | null, fechaLimiteHora?: string | null): string | null => {
+  if (!fechaEntrega?.toDate) return null;
+  const deadline = deliveryDeadlineParts(fechaLimiteAt, fechaLimite, fechaLimiteHora);
+  if (!deadline) return null;
+  const finDePlazo = getDeadlineDate(deadline.date, deadline.time);
   const entregado = fechaEntrega.toDate();
   const diffMs = entregado.getTime() - finDePlazo.getTime();
   if (diffMs <= 0) return null;
@@ -43,6 +48,84 @@ const calcularAtraso = (fechaEntrega: any, fechaLimite?: string | null): string 
   if (minutos >= 1) return `${minutos} minuto${minutos === 1 ? "" : "s"}`;
   return "menos de un minuto";
 };
+
+function normalizeDeadlineTime(value?: string | null): string {
+  const raw = String(value ?? "").trim();
+  if (/^\d{2}:\d{2}$/.test(raw)) {
+    const [h, m] = raw.split(":").map(Number);
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) return raw;
+  }
+  return DEFAULT_DEADLINE_TIME;
+}
+
+function getDeadlineDate(fechaLimite: string, hora = DEFAULT_DEADLINE_TIME): Date {
+  return new Date(`${fechaLimite}T${normalizeDeadlineTime(hora)}:00-03:00`);
+}
+
+function toDateLike(value: any): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null;
+  if (typeof value?.toDate === "function") {
+    const parsed = value.toDate();
+    return parsed instanceof Date && Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+  if (typeof value === "object") {
+    const seconds = typeof value.seconds === "number"
+      ? value.seconds
+      : typeof value._seconds === "number"
+        ? value._seconds
+        : null;
+    if (seconds !== null) {
+      const nanos = typeof value.nanoseconds === "number"
+        ? value.nanoseconds
+        : typeof value._nanoseconds === "number"
+          ? value._nanoseconds
+          : 0;
+      return new Date(seconds * 1000 + Math.floor(nanos / 1_000_000));
+    }
+  }
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+  return null;
+}
+
+function dateInArgentina(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(date);
+}
+
+function timeInArgentina(date: Date): string {
+  const parts = new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "23";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "59";
+  return normalizeDeadlineTime(`${hour}:${minute}`);
+}
+
+function deliveryDeadlineParts(fechaLimiteAt?: any, legacyDate?: string | null, legacyTime?: string | null) {
+  const canonical = toDateLike(fechaLimiteAt);
+  if (canonical) return { date: dateInArgentina(canonical), time: timeInArgentina(canonical) };
+  if (legacyDate) return { date: legacyDate, time: normalizeDeadlineTime(legacyTime ?? DEFAULT_DEADLINE_TIME) };
+  return null;
+}
+
+function isAvailableItem(data: any): boolean {
+  return data?.eliminado !== true &&
+    data?.deleted !== true &&
+    data?.archivado !== true &&
+    data?.archived !== true &&
+    data?.deshabilitado !== true &&
+    data?.disabled !== true &&
+    data?.oculto !== true &&
+    data?.hidden !== true &&
+    data?.publicado !== false &&
+    data?.activo !== false;
+}
 
 export default function EntregaDetalleScreen() {
   const { id, moduloId, seccionId, subseccionPath } = useLocalSearchParams<{
@@ -95,7 +178,7 @@ export default function EntregaDetalleScreen() {
 
     getDoc(doc(db, "modulos", moduloId, "secciones", seccionId, ...subseccionSegments, "items", id))
       .then((snap) => {
-        setItem(snap.exists() ? ({ id: snap.id, ...snap.data() } as Item) : null);
+        setItem(snap.exists() && isAvailableItem(snap.data()) ? ({ id: snap.id, ...snap.data() } as Item) : null);
         setLoadingItem(false);
       })
       .catch(() => setLoadingItem(false));
@@ -188,6 +271,10 @@ export default function EntregaDetalleScreen() {
   };
 
   const handleEnviar = async () => {
+    if (!item) {
+      setAlerta({ visible: true, titulo: "No disponible", mensaje: "La entrega ya no está disponible.", tipo: "error" });
+      return;
+    }
     if (tipoEnvio === "texto" && !contenido.trim()) {
       setAlerta({ visible: true, titulo: "Campo vacío", mensaje: "Escribí algo antes de entregar.", tipo: "error" });
       return;
@@ -266,6 +353,22 @@ export default function EntregaDetalleScreen() {
     );
   }
 
+  if (!item) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+        <ScreenHeader titulo="Entrega" onBack={() => router.back()} mostrarHome />
+        <View style={styles.centered}>
+          <Ionicons name="warning-outline" size={46} color="#CBD5E0" />
+          <Text style={styles.noDisponibleTitulo}>No disponible</Text>
+          <Text style={styles.noDisponibleTexto}>La entrega ya no está disponible.</Text>
+          <TouchableOpacity style={styles.entendidoBtn} onPress={() => router.back()} activeOpacity={0.85}>
+            <Text style={styles.entendidoBtnText}>Entendido</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: "#F5F5F5" }}
@@ -275,7 +378,7 @@ export default function EntregaDetalleScreen() {
       <ScreenHeader titulo={item?.titulo ?? "Entrega"} onBack={handleAtras} mostrarHome />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
-        {(item?.descripcionEntrega || item?.archivoConsignaUrl || item?.fechaLimite !== undefined) ? (
+        {(item?.descripcionEntrega || item?.archivoConsignaUrl || item?.fechaLimite !== undefined || item?.fechaLimiteAt) ? (
           <View style={styles.consignaCard}>
             <Text style={styles.consignaTitulo}>Consigna</Text>
             {item?.descripcionEntrega ? (
@@ -294,9 +397,17 @@ export default function EntregaDetalleScreen() {
               </TouchableOpacity>
             ) : null}
 
-            <Text style={styles.fechaLimite}>
-              ⏰ {item?.fechaLimite ? `Fecha límite: ${formatearFecha(item.fechaLimite)}` : "Sin fecha límite de entrega"}
-            </Text>
+            {(() => {
+              const deadline = deliveryDeadlineParts(item?.fechaLimiteAt, item?.fechaLimite, item?.fechaLimiteHora);
+              return deadline ? (
+                <>
+                  <Text style={styles.fechaLimite}>Fecha limite: {formatearFecha(deadline.date)}</Text>
+                  <Text style={styles.fechaLimite}>Hora limite: {deadline.time} h</Text>
+                </>
+              ) : (
+                <Text style={styles.fechaLimite}>Sin fecha limite de entrega</Text>
+              );
+            })()}
           </View>
         ) : null}
 
@@ -305,7 +416,9 @@ export default function EntregaDetalleScreen() {
             entregas={entregas}
             seccionId={seccionId}
             loading={loadingEntregas}
+            fechaLimiteAt={item?.fechaLimiteAt}
             fechaLimite={item?.fechaLimite}
+            fechaLimiteHora={item?.fechaLimiteHora}
             actualizarCalificacion={actualizarCalificacion}
             setAlerta={setAlerta}
             setHayCambiosDocente={setHayCambiosDocente}
@@ -341,7 +454,7 @@ export default function EntregaDetalleScreen() {
                 )}
 
                 {(() => {
-                  const atraso = calcularAtraso(miEntrega.fechaEntrega, item?.fechaLimite);
+                  const atraso = calcularAtraso(miEntrega.fechaEntrega, item?.fechaLimiteAt, item?.fechaLimite, item?.fechaLimiteHora);
                   return atraso ? (
                     <View style={styles.tardeBadge}>
                       <Ionicons name="time-outline" size={14} color="#B45309" />
@@ -527,14 +640,16 @@ interface DocenteVistaProps {
   entregas: EntregaAlumno[];
   loading: boolean;
   seccionId: string;
+  fechaLimiteAt?: any;
   fechaLimite?: string | null;
+  fechaLimiteHora?: string | null;
   actualizarCalificacion: (entregaId: string, data: { nota: number | null; retroalimentacion: string; requiereReentrega: boolean }) => Promise<void>;
   setAlerta: (a: { visible: boolean; titulo: string; mensaje: string; tipo: "error" | "exito" }) => void;
   setHayCambiosDocente: (cambios: boolean) => void;
   setModalDocente: (modal: any) => void;
 }
 
-function DocenteVista({ entregas, loading, seccionId, fechaLimite, actualizarCalificacion, setAlerta, setHayCambiosDocente, setModalDocente }: DocenteVistaProps) {
+function DocenteVista({ entregas, loading, seccionId, fechaLimiteAt, fechaLimite, fechaLimiteHora, actualizarCalificacion, setAlerta, setHayCambiosDocente, setModalDocente }: DocenteVistaProps) {
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
 
   const comisionesInfo = useComisionesPorSeccion(seccionId ?? null);
@@ -704,7 +819,7 @@ function DocenteVista({ entregas, loading, seccionId, fechaLimite, actualizarCal
                   </Text>
                   
                   {(() => {
-                    const atraso = calcularAtraso(e.fechaEntrega, fechaLimite);
+                    const atraso = calcularAtraso(e.fechaEntrega, fechaLimiteAt, fechaLimite, fechaLimiteHora);
                     return atraso ? (
                       <Text style={styles.entregaTardeText}>⏰ Fuera de fecha (atraso: {atraso})</Text>
                     ) : null;
@@ -792,7 +907,17 @@ function DocenteVista({ entregas, loading, seccionId, fechaLimite, actualizarCal
 
 const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 120 },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 28 },
+  noDisponibleTitulo: { fontSize: 18, fontWeight: "700", color: "#6B7280", marginTop: 12 },
+  noDisponibleTexto: { fontSize: 14, color: "#9CA3AF", textAlign: "center", marginTop: 6, lineHeight: 20 },
+  entendidoBtn: {
+    marginTop: 18,
+    backgroundColor: "#0F4A32",
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+  },
+  entendidoBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
   consignaCard: {
     backgroundColor: "#FEF3C7", borderRadius: 12, padding: 16,
     marginBottom: 20, borderLeftWidth: 4, borderLeftColor: "#F59E0B",

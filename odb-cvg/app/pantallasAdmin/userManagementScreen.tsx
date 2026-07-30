@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 //app/pantallasAdmin/userManagementScreen.tsx
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from 'react-native';

@@ -10,6 +10,7 @@ import ScreenHeader from "../../components/ui/ScreenHeader";
 import { db } from "../../config/firebaseConfig";
 import { useContextoInscripcionEfectivo, useInscripcionesPorSeccion,} from "../../hooks/useInscripciones";
 import { crearPlanillaDesdeBase, generarVistaAlumno, obtenerPlanillasBase, obtenerPlanillasPorContexto, type PlanillaBaseTP, type PlanillaTP, type TipoPlanilla,} from "../../hooks/usePlanillas";
+import { enqueueNotificationJob } from "../../services/notificationJobs";
 import { useUserRole } from "../../hooks/useUserRole";
 
 export default function PlanillasScreen() {
@@ -191,7 +192,7 @@ export default function PlanillasScreen() {
       const baseSeleccionada = planillasBase.find((base) => base.id === planillaBaseId);
       if (!baseSeleccionada) throw new Error("Planilla base no encontrada");
 
-      await crearPlanillaDesdeBase({
+      const planillaId = await crearPlanillaDesdeBase({
         alumnoId: alumnoSeleccionado,
         alumnoNombre: nombresAlumnos[alumnoSeleccionado] ?? alumnoSeleccionado,
         moduloId,
@@ -200,6 +201,14 @@ export default function PlanillasScreen() {
         tipo: baseSeleccionada.tipo,
         titulo: titulo.trim(),
         base: baseSeleccionada,
+      });
+      await enqueueNotificationJob({
+        type: "tp_sheet_created",
+        sourceId: planillaId,
+        sourcePath: `planillas_tp/${planillaId}`,
+        courseId: moduloId,
+        sectionId: seccionId,
+        targetUserId: alumnoSeleccionado,
       });
       setAlerta({
         visible: true,

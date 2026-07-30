@@ -3,6 +3,7 @@ import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query
 import { useEffect, useState } from "react";
 import { auth, db } from "../config/firebaseConfig";
 import CryptoJS from 'crypto-js';
+import type { NotificationSchedule } from "../types/notifications";
 
 export type ItemTipo = "texto" | "pdf" | "imagen" | "documento" | "video" | "enlace" | "entrega";
 
@@ -19,10 +20,13 @@ export interface Item {
   fechaActualizacion: any;
   descripcionEntrega?: string;
   fechaLimite?: string | null;
+  fechaLimiteHora?: string | null;
+  fechaLimiteAt?: any;
   archivoConsignaUrl?: string;
   archivoConsignaNombre?: string;
   archivoConsignaStorageRef?: string;
   archivoConsignaTipo?: ItemTipo;
+  notificationSchedule?: NotificationSchedule;
 }
 
 export type ItemInput = Omit<Item, "id" | "creadoPor" | "fechaCreacion" | "fechaActualizacion">;
@@ -110,15 +114,16 @@ export function useItems(moduloId: string, seccionId: string, subseccionPath?: s
     return () => unsubscribe();
   }, [moduloId, seccionId, subseccionPath]);
 
-  const crearItem = async (data: ItemInput) => {
+  const crearItem = async (data: ItemInput): Promise<string> => {
     const user = auth.currentUser;
     if (!user) throw new Error("No autenticado");
-    await addDoc(getItemsCollection(moduloId, seccionId, subseccionPath), {
+    const ref = await addDoc(getItemsCollection(moduloId, seccionId, subseccionPath), {
       ...data,
       creadoPor: user.uid,
       fechaCreacion: serverTimestamp(),
       fechaActualizacion: serverTimestamp(),
     });
+    return ref.id;
   };
 
   const actualizarItem = async (itemId: string, data: Partial<ItemInput>) => {

@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { Platform } from "react-native";
 import * as NavigationBar from 'expo-navigation-bar';
+import { configurePushNotificationRouting } from "../services/pushNotificationRouting";
 
 export default function RootLayout() {
   useEffect(() => {
@@ -19,6 +20,7 @@ export default function RootLayout() {
       }
     };
     hideNavigationBar();
+    configurePushNotificationRouting();
   }, []);
 
   return (
@@ -52,6 +54,7 @@ export default function RootLayout() {
         <Stack.Screen name="pantallasAdmin/userManagementScreen" options={{ headerShown: false }} />
         <Stack.Screen name="items/form" options={{ headerShown: true }} />
         <Stack.Screen name="entregas/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="notificaciones/[id]" options={{ headerShown: false }} />
       </Stack>
     </>
   );

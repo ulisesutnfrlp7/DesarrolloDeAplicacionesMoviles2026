@@ -29,7 +29,94 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "seccionId", "order": "ASCENDING" },
+        { "fieldPath": "nombreExamen", "order": "ASCENDING" },
+        { "fieldPath": "subseccionPath", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "moduloId", "order": "ASCENDING" },
+        { "fieldPath": "seccionId", "order": "ASCENDING" },
+        { "fieldPath": "nombreExamen", "order": "ASCENDING" },
+        { "fieldPath": "notificationBatchId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "moduloId", "order": "ASCENDING" },
+        { "fieldPath": "seccionId", "order": "ASCENDING" },
+        { "fieldPath": "nombreExamen", "order": "ASCENDING" },
+        { "fieldPath": "notificationBatchId", "order": "ASCENDING" },
+        { "fieldPath": "subseccionPath", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "seccionId", "order": "ASCENDING" },
         { "fieldPath": "alumnoId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "seccionId", "order": "ASCENDING" },
+        { "fieldPath": "alumnoUid", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isRead", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "eventos_cronograma",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "notificationSchedule.enabled", "order": "ASCENDING" },
+        { "fieldPath": "notificationSchedule.nextNotificationAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipo", "order": "ASCENDING" },
+        { "fieldPath": "fechaLimite", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "items",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "tipo", "order": "ASCENDING" },
+        { "fieldPath": "notificationSchedule.enabled", "order": "ASCENDING" },
+        { "fieldPath": "notificationSchedule.nextNotificationAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notification_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "nextAttemptAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notification_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "leaseExpiresAt", "order": "ASCENDING" }
       ]
     }
   ],
@@ -38,6 +125,24 @@
       "collectionGroup": "items",
       "fieldPath": "tipo",
       "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inscripciones",
+      "fieldPath": "alumnoId",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
         {
           "order": "ASCENDING",
           "queryScope": "COLLECTION_GROUP"

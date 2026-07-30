@@ -1,7 +1,8 @@
+/* eslint-disable react/no-unescaped-entities */
 // app/secciones/mis-notas.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { collection, doc, getDoc, onSnapshot, query, where,} from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, where, type QueryConstraint,} from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View,} from "react-native";
 import BuscadorAlumnos from "../../components/ui/BuscadorAlumnos";
@@ -32,8 +33,8 @@ export default function MisNotasScreen() {
 
   const { rol, loading: loadingRol } = useUserRole();
   const uid = auth.currentUser?.uid ?? null;
-  const esAlumnoParaComisiones = rol !== "admin" && rol !== "profesor";
-  const comisionesInfo = useComisionesPorSeccion(seccionId ?? null, !loadingRol && !esAlumnoParaComisiones);
+  const esAlumnoRol = rol !== "admin" && rol !== "profesor";
+  const comisionesInfo = useComisionesPorSeccion(!loadingRol && !esAlumnoRol ? (seccionId ?? null) : null);
 
   const [grupos, setGrupos] = useState<GrupoExamen[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,55 +53,104 @@ export default function MisNotasScreen() {
 
     const esAlumno = rol !== "admin" && rol !== "profesor";
 
-    const constraints = [where("seccionId", "==", seccionId)];
+    const procesarNotas = async (notasRaw: Nota[]) => {
+      // Resolver nombres de alumnos para admin/profesor
+      const notasConNombre: NotaConNombre[] = await Promise.all(
+        notasRaw.map(async (nota) => {
+          if (esAlumno) return nota;
+          try {
+            const snap = await getDoc(doc(db, "usuarios", nota.alumnoUid ?? nota.alumnoId));
+            return {
+              ...nota,
+              nombreAlumno: snap.exists()
+                ? (snap.data().nombre as string)
+                : nota.alumnoId,
+            };
+          } catch {
+            return { ...nota, nombreAlumno: nota.alumnoId };
+          }
+        }),
+      );
+
+      // Agrupar por nombreExamen
+      const mapaGrupos = new Map<string, NotaConNombre[]>();
+      notasConNombre.forEach((nota) => {
+        const grupo = mapaGrupos.get(nota.nombreExamen) ?? [];
+        grupo.push(nota);
+        mapaGrupos.set(nota.nombreExamen, grupo);
+      });
+
+      const gruposOrdenados: GrupoExamen[] = Array.from(mapaGrupos.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([nombreExamen, notas]) => ({ nombreExamen, notas }));
+
+      setGrupos(gruposOrdenados);
+      setLoading(false);
+    };
+
     if (esAlumno) {
-      constraints.push(where("alumnoId", "==", uid));
-    } else {
+      const baseConstraints: QueryConstraint[] = [where("seccionId", "==", seccionId)];
+      const byAlumnoId: Nota[] = [];
+      const byAlumnoUid: Nota[] = [];
+      let loadedAlumnoId = false;
+      let loadedAlumnoUid = false;
+
+      const flush = () => {
+        if (!loadedAlumnoId || !loadedAlumnoUid) return;
+        const byId = new Map<string, Nota>();
+        [...byAlumnoId, ...byAlumnoUid].forEach((nota) => byId.set(nota.id, nota));
+        procesarNotas(Array.from(byId.values()));
+      };
+
+      const unsubAlumnoId = onSnapshot(
+        query(collection(db, "notas"), ...baseConstraints, where("alumnoId", "==", uid)),
+        (snapshot) => {
+          byAlumnoId.splice(0, byAlumnoId.length, ...snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Nota)));
+          loadedAlumnoId = true;
+          flush();
+        },
+        (error) => {
+          console.warn("mis-notas alumnoId listener error:", error.code);
+          loadedAlumnoId = true;
+          flush();
+        },
+      );
+
+      const unsubAlumnoUid = onSnapshot(
+        query(collection(db, "notas"), ...baseConstraints, where("alumnoUid", "==", uid)),
+        (snapshot) => {
+          byAlumnoUid.splice(0, byAlumnoUid.length, ...snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Nota)));
+          loadedAlumnoUid = true;
+          flush();
+        },
+        (error) => {
+          console.warn("mis-notas alumnoUid listener error:", error.code);
+          loadedAlumnoUid = true;
+          flush();
+        },
+      );
+
+      return () => {
+        unsubAlumnoId();
+        unsubAlumnoUid();
+      };
+    }
+
+    const constraints: QueryConstraint[] = [where("seccionId", "==", seccionId)];
+    if (!esAlumno) {
       constraints.push(where("subseccionPath", "==", contextoSubseccion));
     }
 
     const q = query(collection(db, "notas"), ...constraints);
     const unsubscribe = onSnapshot(
       q,
-      async (snapshot) => {
-        const notasRaw = snapshot.docs.map(
-          (d) => ({ id: d.id, ...d.data() } as Nota),
-        );
-
-        // Resolver nombres de alumnos para admin/profesor
-        const notasConNombre: NotaConNombre[] = await Promise.all(
-          notasRaw.map(async (nota) => {
-            if (esAlumno) return nota;
-            try {
-              const snap = await getDoc(doc(db, "usuarios", nota.alumnoId));
-              return {
-                ...nota,
-                nombreAlumno: snap.exists()
-                  ? (snap.data().nombre as string)
-                  : nota.alumnoId,
-              };
-            } catch {
-              return { ...nota, nombreAlumno: nota.alumnoId };
-            }
-          }),
-        );
-
-        // Agrupar por nombreExamen
-        const mapaGrupos = new Map<string, NotaConNombre[]>();
-        notasConNombre.forEach((nota) => {
-          const grupo = mapaGrupos.get(nota.nombreExamen) ?? [];
-          grupo.push(nota);
-          mapaGrupos.set(nota.nombreExamen, grupo);
-        });
-
-        const gruposOrdenados: GrupoExamen[] = Array.from(mapaGrupos.entries())
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([nombreExamen, notas]) => ({ nombreExamen, notas }));
-
-        setGrupos(gruposOrdenados);
+      (snapshot) => {
+        procesarNotas(snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Nota)));
+      },
+      (error) => {
+        console.warn("mis-notas docente listener error:", error.code);
         setLoading(false);
       },
-      () => setLoading(false),
     );
 
     return () => unsubscribe();
