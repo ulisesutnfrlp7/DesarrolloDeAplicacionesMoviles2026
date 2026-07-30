@@ -11,20 +11,30 @@ Aplicación móvil educativa para la **Facultad de Odontología de la UNLP**, de
 - [Instalación](#instalación)
 - [Configuración del entorno](#configuración-del-entorno)
 - [Comandos de ejecución](#comandos-de-ejecución)
+- [Arquitectura](#arquitectura)
+- [Estado del proyecto](#estado-del-proyecto)
 
 ---
 
 ## Introducción
 
-**CVG - Odonto B** es una aplicación multiplataforma (Android, iOS y Web) que centraliza el material educativo de la cátedra. Sus funcionalidades principales son:
+**CVG - Odonto B** es una aplicación multiplataforma (**Android**, **iOS** y **Web**) desarrollada para centralizar la gestión académica de la cátedra Operatoria Dental B de la Facultad de Odontología de la UNLP.
 
+Entre sus principales funcionalidades se encuentran:
+
+- Gestión de usuarios y autenticación.
 - Navegación por módulos, secciones, subsecciones e ítems de contenido.
-- Sistema de autenticación y registro de usuarios mediante Firebase Auth.
-- Control de acceso basado en roles: `admin`, `profesor` y `alumno`.
-- Panel de administración para gestión de usuarios.
-- Soporte para carga de imágenes, videos y documentos a través de **Cloudinary** (CDN y almacenamiento de archivos).
+- Gestión y administración de material académico.
+- Gestión de planillas de trabajos prácticos.
+- Gestión de calificaciones e instancias evaluativas.
+- Gestión de entregas de trabajos teóricos.
+- Administración de accesos mediante códigos.
+- Gestión del cronograma académico.
+- Sistema de notificaciones.
+- Panel de administración con control de acceso basado en roles (`admin`, `profesor` y `alumno`).
+- Carga y administración de imágenes, videos y documentos mediante **Cloudinary**.
 
-El stack tecnológico utilizado es:
+### Stack tecnológico
 
 | Capa              | Tecnología                                                   |
 | ----------------- | ------------------------------------------------------------ |
@@ -33,6 +43,7 @@ El stack tecnológico utilizado es:
 | Lenguaje          | TypeScript 5.9                                               |
 | Backend / BaaS    | Firebase (Auth, Firestore, Analytics) + Cloudinary (Storage) |
 | Gestión de estado | React Hooks + custom hooks                                   |
+| Notificaciones | Expo Notifications |
 
 ---
 
@@ -53,7 +64,7 @@ Para correr la app en un dispositivo físico:
 - **Android emulado**: Android Studio con un AVD configurado.
 - **iOS simulado**: Xcode (solo en macOS).
 
-> Adicionalmente, necesitás acceso a un proyecto de **Firebase** con Authentication y Firestore habilitados, y a una cuenta de **Cloudinary** para el almacenamiento de archivos. Pedile las credenciales al responsable del proyecto si no las tenés.
+> **Importante:** También necesitás acceso a un proyecto de **Firebase** con Authentication y Cloud Firestore habilitados, y a una cuenta de **Cloudinary** para el almacenamiento de archivos. Solicitá las credenciales al responsable del proyecto.
 
 ---
 
@@ -131,16 +142,41 @@ Todos los comandos se ejecutan desde la raíz del proyecto.
 | `npm run web`     | Abre la app en el navegador                                        |
 | `npm run lint`    | Ejecuta ESLint sobre el código fuente                              |
 
-**Flujo de desarrollo típico:**
+### Flujo de desarrollo típico
 
 ```bash
-# 1. Iniciar el servidor
+# Iniciar el servidor de desarrollo
 npm start
 
-# 2. Escanear el QR con Expo Go (Android/iOS)
-#    o presionar 'a' para Android / 'i' para iOS / 'w' para Web en la terminal
+# Luego:
+# - Escanear el QR con Expo Go
+# - Presionar "a" para Android
+# - Presionar "i" para iOS
+# - Presionar "w" para Web
 ```
 
-> **Tip:** Si encontrás errores de módulos no resueltos al iniciar, probá limpiar la caché con `npx expo start --clear`.
+> **Tip:** Si aparecen errores relacionados con módulos no encontrados, limpiá la caché ejecutando:
+
+```bash
+npx expo start --clear
+```
 
 ---
+
+## Arquitectura
+
+La aplicación implementa una arquitectura **cliente-servidor** basada en **Firebase** como Backend as a Service (BaaS).
+
+- **Firebase Authentication** gestiona el registro e inicio de sesión de los usuarios.
+- **Cloud Firestore** almacena la información académica y los datos de la aplicación.
+- **Cloudinary** administra el almacenamiento de imágenes, documentos y archivos multimedia.
+- **Expo Router** organiza la navegación mediante un sistema basado en archivos.
+- La lógica de negocio se implementa mediante componentes reutilizables y **Custom Hooks**, diferenciando las funcionalidades disponibles según el rol del usuario (`admin`, `profesor` y `alumno`).
+
+---
+
+## Estado del proyecto
+
+Este repositorio corresponde a la **versión final** desarrollada para la asignatura **Desarrollo de Aplicaciones Móviles 2026**.
+
+La aplicación incorpora todas las funcionalidades definidas para el producto final y representa la versión entregable correspondiente a la **Entrega 3** del proyecto.

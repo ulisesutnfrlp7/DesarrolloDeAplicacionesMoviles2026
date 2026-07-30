@@ -1,5 +1,9 @@
 # Desarrollo de Aplicaciones Móviles 2026 - Grupo 8
 
+Repositorio correspondiente al proyecto **ODB-CVG**, una aplicación móvil desarrollada para la cátedra Operatoria Dental B de la Facultad de Odontología de la Universidad Nacional de La Plata (UNLP).
+
+El proyecto fue desarrollado utilizando React Native + Expo y evolucionó a lo largo de tres entregas, incorporando progresivamente nuevas funcionalidades hasta completar el producto final.
+
 ## Integrantes del Grupo
 
 | Apellido   | Nombre          | Legajo |
@@ -9,6 +13,121 @@
 | Bucchino   | Ulises Mateo    | 33326  |
 | Caceres    | Juan Cruz       | 33168  |
 | La Gioiosa | Bernardita      | 33289  |
+
+---
+
+# Producto Final
+
+La versión final del proyecto integra todas las funcionalidades desarrolladas durante las tres etapas del proyecto, incluyendo la gestión de usuarios, contenidos académicos, planillas de trabajos prácticos, calificaciones, entregas de trabajos teóricos, cronograma, notificaciones, perfiles de usuario y administración de accesos por comisiones.
+
+El producto final consolida la evolución del proyecto desarrollada a lo largo de las tres entregas (Entrega 1, Entrega 2 y Entrega 3), incorporando todas las funcionalidades planificadas durante el cursado.
+
+---
+
+## Rama de entrega
+
+La versión final del proyecto se encuentra en la rama:
+
+`entrega-3`
+
+Esta rama fue creada a partir de la rama `dev`, donde se integraron y probaron los cambios desarrollados por los integrantes del grupo durante esta etapa.
+
+---
+
+## Funcionalidades incorporadas
+
+**La versión final del proyecto incorpora los siguientes módulos funcionales:**
+
+- Gestión de usuarios y autenticación.
+- Gestión de módulos, secciones y contenido.
+- Gestión de planillas de trabajos prácticos.
+- Gestión de calificaciones.
+- Gestión de entregas de trabajos teóricos.
+- Gestión de accesos mediante códigos.
+- Cronograma académico.
+- Sistema de notificaciones.
+- Gestión del perfil del usuario.
+
+---
+
+## Tag de entrega
+
+La versión correspondiente a esta entrega se identifica con el siguiente tag:
+
+`e3`
+
+Este tag permite ubicar el commit exacto asociado a la versión final del proyecto.
+
+---
+
+## Flujo de trabajo utilizado
+
+Durante el desarrollo de la Entrega 3 se mantuvo la misma organización de ramas utilizada en las entregas anteriores:
+
+- Cada integrante desarrolló sus cambios en una rama individual.
+- Los cambios fueron integrados progresivamente en la rama `dev`.
+- La rama `dev` fue utilizada como entorno de integración y prueba.
+- Una vez validado el funcionamiento, se creó la rama `entrega-3` para congelar el estado correspondiente al producto final.
+
+---
+
+## Documentación de la entrega
+
+La documentación solicitada por la guía fue organizada y entregada en los espacios correspondientes indicados por la cátedra.
+
+La Entrega 3 incluye:
+
+- Documento de alcance final.
+- Diseño UX/UI actualizado.
+- Documentación técnica final.
+- Video demo del producto final.
+- Archivo `.md` con las conversaciones IA utilizadas durante todo el proyecto (E1 + E2 + E3).
+- Índice de temas consultados.
+- Código fuente funcional del producto final.
+
+---
+
+## Ubicación de documentación y demo
+
+La documentación técnica, el documento de alcance, el diseño UX/UI y el video demo se encuentran en el Google Drive compartido del grupo, según lo solicitado por la guía de entrega.
+
+Dentro del repositorio, la evidencia relacionada con el uso de IA se encuentra en:
+
+`/ia/entrega-3/`
+
+Esa carpeta contiene el archivo `.md` acumulado (E1 + E2 + E3) y el índice de temas consultados durante el desarrollo del proyecto.
+
+---
+
+## Organización del repositorio
+
+El código fuente de la aplicación se encuentra dentro de la carpeta:
+
+`/odb-cvg`
+
+Las instrucciones para instalar dependencias y ejecutar el proyecto se encuentran en:
+
+`/odb-cvg/README.md`
+
+Este README de la raíz funciona como punto de entrada general del repositorio, mientras que el README ubicado dentro de `/odb-cvg` contiene las instrucciones técnicas específicas para ejecutar la aplicación.
+
+---
+
+## Ejecución del proyecto
+
+Para ejecutar la aplicación, ingresar a la carpeta del proyecto:
+
+```bash
+cd odb-cvg
+```
+
+Luego seguir las instrucciones detalladas en el README técnico ubicado en:
+
+```
+odb-cvg/README.md
+```
+
+Allí se indican los pasos necesarios para instalar dependencias y ejecutar la aplicación.
 
 ---
 
