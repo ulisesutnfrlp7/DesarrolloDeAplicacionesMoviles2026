@@ -1,5 +1,6 @@
+//components/ui/ModalCompletarPerfil.tsx
 import React, { useState } from "react";
-import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import { useUserProfile } from "../../hooks/useUserProfile";
 
 interface Props {
@@ -32,8 +33,12 @@ export default function ModalCompletarPerfil({ visible, onSuccess, onCancelar }:
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancelar}>
-      <View style={styles.overlay}>
-        <View style={styles.card}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.card}>
           <Text style={styles.titulo}>Completá tu perfil</Text>
           <Text style={styles.subtitulo}>
             Para ingresar a esta sección necesitamos al menos tu legajo.
@@ -60,16 +65,6 @@ export default function ModalCompletarPerfil({ visible, onSuccess, onCancelar }:
             value={legajoConfirmacion}
             onChangeText={setLegajoConfirmacion}
             placeholder="Volvé a escribirlo"
-            placeholderTextColor="#9CA3AF"
-          />
-
-          <Text style={styles.label}>DNI (opcional)</Text>
-          <TextInput
-            style={styles.input}
-            value={dni}
-            onChangeText={setDni}
-            placeholder="Ej: 30123456"
-            keyboardType="number-pad"
             placeholderTextColor="#9CA3AF"
           />
 
@@ -115,13 +110,15 @@ export default function ModalCompletarPerfil({ visible, onSuccess, onCancelar }:
             <Text style={styles.cancelarTexto}>Volver</Text>
           </TouchableOpacity>
         </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  scrollContent: { flexGrow: 1, justifyContent: "center", padding: 24 },
   card: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 20 },
   titulo: { fontSize: 18, fontWeight: "700", color: "#11181C", marginBottom: 4 },
   subtitulo: { fontSize: 13, color: "#6B7280", marginBottom: 16 },

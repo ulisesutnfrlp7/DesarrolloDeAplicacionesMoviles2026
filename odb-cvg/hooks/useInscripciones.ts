@@ -448,7 +448,7 @@ export async function inscribirManualmente(
 }
 
 // Devuelve, por alumnoId, el historial de comisiones de forma enriquecida
-export function useComisionesPorSeccion(seccionId: string | null) {
+export function useComisionesPorSeccion(seccionId: string | null, habilitado: boolean = true) {
   const [porAlumno, setPorAlumno] = useState<
     Record<string, { 
       cambioComision: boolean; 
@@ -460,7 +460,7 @@ export function useComisionesPorSeccion(seccionId: string | null) {
   >({});
 
   useEffect(() => {
-    if (!seccionId) {
+    if (!seccionId || !habilitado) {
       setPorAlumno({});
       return;
     }
@@ -504,7 +504,7 @@ export function useComisionesPorSeccion(seccionId: string | null) {
       setPorAlumno(resultado);
     });
     return () => unsubscribe();
-  }, [seccionId]);
+  }, [seccionId, habilitado]);
 
   return porAlumno;
 }

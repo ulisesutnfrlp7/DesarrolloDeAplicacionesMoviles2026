@@ -29,10 +29,11 @@ export default function MisNotasScreen() {
     subseccionPath?: string;
   }>();
   const contextoSubseccion = subseccionPath ?? "";
-  const comisionesInfo = useComisionesPorSeccion(seccionId ?? null);
 
   const { rol, loading: loadingRol } = useUserRole();
   const uid = auth.currentUser?.uid ?? null;
+  const esAlumnoParaComisiones = rol !== "admin" && rol !== "profesor";
+  const comisionesInfo = useComisionesPorSeccion(seccionId ?? null, !loadingRol && !esAlumnoParaComisiones);
 
   const [grupos, setGrupos] = useState<GrupoExamen[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,7 +108,7 @@ export default function MisNotasScreen() {
 
   const esAdmin = rol === "admin";
   const puedeEditar = rol === "admin";
-  const esAlumno = rol !== "admin" && rol !== "profesor";
+  const esAlumno = esAlumnoParaComisiones;
 
   const handleEliminarExamen = async () => {
     if (!examenAEliminar || !seccionId) return;

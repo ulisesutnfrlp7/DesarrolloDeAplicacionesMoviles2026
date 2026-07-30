@@ -1,3 +1,4 @@
+// hooks/useUserProfile.ts
 import { doc, onSnapshot, setDoc, writeBatch } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { auth, db } from "../config/firebaseConfig";
@@ -88,6 +89,25 @@ export function useUserProfile() {
     }
   };
 
+  // Se usa cuando el legajo ya está cargado y falta solo el DNI.
+  const completarDNI = async (dni: string, dniConfirmacion: string) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error("No hay usuario autenticado.");
+
+    if (!dni?.trim()) {
+      throw new Error("El DNI es obligatorio.");
+    }
+    if (dni.trim() !== dniConfirmacion.trim()) {
+      throw new Error("Los dos DNI ingresados no coinciden.");
+    }
+
+    await setDoc(
+      doc(db, "usuarios", uid),
+      { dniEncriptado: encriptarDato(dni.trim()) },
+      { merge: true },
+    );
+  };
+
   // Se puede usar las veces que haga falta: nombre y teléfono.
   const actualizarDatosEditables = async (datos: { nombre?: string; telefono?: string }) => {
     const uid = auth.currentUser?.uid;
@@ -110,6 +130,7 @@ export function useUserProfile() {
     loading,
     perfilCompleto,
     completarDatosFijos,
+    completarDNI,
     actualizarDatosEditables,
   };
 }

@@ -1,5 +1,11 @@
 # Desarrollo de Aplicaciones Móviles 2026 - Grupo 8
 
+Repositorio correspondiente al proyecto **ODB-CVG**, una aplicación móvil desarrollada para la cátedra Operatoria Dental B de la Facultad de Odontología de la Universidad Nacional de La Plata (UNLP).
+
+**ODB-CVG** centraliza la gestión académica de la cátedra, resolviendo la dispersión de información al proporcionar a docentes y alumnos un acceso rápido, organizado y seguro a los materiales de estudio, gestión de trabajos prácticos, entregas, calificaciones y cronograma general.
+
+El proyecto fue desarrollado utilizando React Native + Expo y evolucionó a lo largo de tres entregas, incorporando progresivamente nuevas funcionalidades hasta completar el producto final.
+
 ## Integrantes del Grupo
 
 | Apellido   | Nombre          | Legajo |
@@ -9,6 +15,84 @@
 | Bucchino   | Ulises Mateo    | 33326  |
 | Caceres    | Juan Cruz       | 33168  |
 | La Gioiosa | Bernardita      | 33289  |
+
+---
+
+## Organización del Repositorio y Ejecución
+
+El código fuente de la aplicación se encuentra dentro de la carpeta raíz `/odb-cvg`. Este archivo funciona como punto de entrada general del repositorio, mientras que las instrucciones técnicas específicas residen dentro de la carpeta del proyecto.
+
+Para ejecutar la aplicación, ingresá a la carpeta del proyecto:
+
+```bash
+cd odb-cvg
+```
+
+Luego, seguí las instrucciones detalladas en su respectivo `README.md` técnico (`/odb-cvg/README.md`). Allí se indican los pasos necesarios para instalar dependencias y levantar el entorno de desarrollo.
+
+---
+
+## Flujo de Trabajo y Estrategia de Ramas
+
+Durante todo el ciclo lectivo y en cada una de las tres entregas, se mantuvo la siguiente organización de trabajo:
+
+- Cada integrante desarrolló sus cambios en una rama individual.
+- Los cambios fueron integrados progresivamente mediante pull requests en la rama `dev`.
+- La rama `dev` fue utilizada como entorno de integración y prueba.
+- Una vez validado el funcionamiento de cada etapa, se creó una rama específica (`entrega-1`, `entrega-2`, `entrega-3`) para congelar el estado correspondiente a evaluar.
+
+---
+
+# Producto Final (Entrega 3)
+
+La versión final del proyecto integra todas las funcionalidades desarrolladas durante las tres etapas del proyecto, incluyendo la gestión de usuarios, contenidos académicos, planillas de trabajos prácticos, calificaciones, entregas de trabajos teóricos, cronograma, notificaciones, perfiles de usuario y administración de accesos por comisiones.
+
+El producto final consolida la evolución del proyecto desarrollada a lo largo de las tres entregas (Entrega 1, Entrega 2 y Entrega 3), incorporando todas las funcionalidades planificadas durante el cursado.
+
+---
+
+## Rama de entrega
+
+La versión final del proyecto se encuentra en la rama:
+
+`entrega-3`
+
+Esta rama fue creada a partir de la rama `dev`, donde se integraron y probaron los cambios desarrollados por los integrantes del grupo durante esta etapa.
+
+---
+
+## Funcionalidades incorporadas
+
+**La versión final del proyecto incorpora los siguientes módulos funcionales:**
+
+- Gestión de usuarios y autenticación.
+- Gestión de módulos, secciones y contenido.
+- Gestión de planillas de trabajos prácticos.
+- Gestión de calificaciones.
+- Gestión de entregas de trabajos teóricos.
+- Gestión de accesos mediante códigos.
+- Cronograma académico.
+- Sistema de notificaciones.
+- Gestión del perfil del usuario.
+
+---
+
+## Tag de entrega
+
+La versión correspondiente a esta entrega se identifica con el siguiente tag:
+
+`e3`
+
+Este tag permite ubicar el commit exacto asociado a la versión final del proyecto.
+
+---
+
+### Documentación de la entrega
+La documentación técnica final, el documento de alcance definitivo, el diseño UX/UI actualizado y el video demo se encuentran en el **Google Drive compartido** del grupo, según lo solicitado por la cátedra.
+
+Dentro del repositorio, la evidencia relacionada con el uso de IA se ubica en:
+`/ia/entrega-3/`
+*(Esta carpeta contiene el archivo `.md` con las conversaciones acumuladas E1 + E2 + E3 y el índice de temas consultados).*
 
 ---
 
@@ -33,31 +117,6 @@ Esta rama fue creada a partir de la rama `dev`, donde se integraron y probaron l
 El historial de cambios entre entregas se encuentra documentado en:
 
 `CHANGELOG.md`
-
----
-
-## Organización del repositorio
-
-El código fuente de la aplicación se encuentra dentro de la carpeta:
-
-`/odb-cvg`
-
-Las instrucciones para instalar dependencias y ejecutar el proyecto se encuentran en:
-
-`/odb-cvg/README.md`
-
-Este README de la raíz funciona como punto de entrada general del repositorio, mientras que el README ubicado dentro de `/odb-cvg` contiene las instrucciones técnicas específicas para correr la aplicación.
-
----
-
-## Flujo de trabajo utilizado
-
-Durante el desarrollo de la Entrega 2 se mantuvo la misma organización de ramas que en la Entrega 1:
-
-- Cada integrante desarrolló sus cambios en una rama individual.
-- Los cambios fueron integrados progresivamente en la rama `dev`.
-- La rama `dev` fue utilizada como entorno de integración y prueba.
-- Una vez validado el funcionamiento, se creó la rama `entrega-2` para congelar el estado correspondiente a esta entrega.
 
 ---
 
@@ -89,24 +148,6 @@ Esa carpeta contiene el archivo `.md` acumulado (E1 + E2) y el índice de temas 
 
 ---
 
-## Ejecución del proyecto
-
-Para ejecutar la aplicación, ingresar a la carpeta del proyecto:
-
-```bash
-cd odb-cvg
-```
-
-Luego seguir las instrucciones detalladas en el README técnico ubicado en:
-
-```
-odb-cvg/README.md
-```
-
-Allí se indican los pasos necesarios para instalar dependencias y ejecutar la aplicación.
-
----
-
 ## Tag de entrega
 
 La versión correspondiente a esta entrega se identifica con el siguiente tag:
@@ -114,8 +155,6 @@ La versión correspondiente a esta entrega se identifica con el siguiente tag:
 `e2`
 
 Este tag permite ubicar el commit exacto asociado a la versión final de la Entrega 2.
-
----
 
 ---
 
