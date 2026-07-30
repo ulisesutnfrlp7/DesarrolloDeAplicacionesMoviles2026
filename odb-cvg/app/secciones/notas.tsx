@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 // app/secciones/notas.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -8,10 +9,11 @@ import BuscadorAlumnos from "../../components/ui/BuscadorAlumnos";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import ScreenHeader from "../../components/ui/ScreenHeader";
-import { db } from "../../config/firebaseConfig";
+import { auth, db } from "../../config/firebaseConfig";
 import { useComisionesPorSeccion, useContextoInscripcionEfectivo, useInscripcionesPorSeccion,} from "../../hooks/useInscripciones";
 import { esNotaAusente, formatearValorNota, guardarNotas, reemplazarNotasPorExamen, useNotasPorSeccion, type ValorNota,} from "../../hooks/useNotas";
 import { useUserRole } from "../../hooks/useUserRole";
+import { enqueueNotificationJob } from "../../services/notificationJobs";
 
 export default function NotasScreen() {
   const { moduloId, seccionId, subseccionPath, modo, nombreExamen: nombreExamenParam } = useLocalSearchParams<{
@@ -198,10 +200,28 @@ export default function NotasScreen() {
     setGuardando(true);
     setGuardadoExitoso(true);
     try {
+      const batchId = `${Date.now()}_${auth.currentUser?.uid ?? "unknown"}`;
+      const beforeHash = notasMapHash(notasExistentes);
+      const afterHash = notasListHash(notasAGuardar);
+      const hayCambiosRelevantes = !esEdicion || beforeHash !== afterHash;
       if (esEdicion) {
-        await reemplazarNotasPorExamen(seccionId, nombreExamen.trim(), notasAGuardar, contextoSubseccion);
+        await reemplazarNotasPorExamen(seccionId, nombreExamen.trim(), notasAGuardar, contextoSubseccion, batchId);
       } else {
-        await guardarNotas(notasAGuardar);
+        await guardarNotas(notasAGuardar, batchId);
+      }
+      if (hayCambiosRelevantes) {
+        await enqueueNotificationJob({
+          type: esEdicion ? "exam_grade_updated" : "exam_grade",
+          sourceId: batchId,
+          sourcePath: `modulos/${moduloId}/secciones/${seccionId}/notas_lotes/${batchId}`,
+          courseId: moduloId,
+          sectionId: seccionId,
+          payload: {
+            subseccionPath: contextoSubseccion,
+            nombreExamen: nombreExamen.trim(),
+            batchId,
+          },
+        });
       }
       setVolverAlCerrarAlerta(true);
       setAlerta({
@@ -438,6 +458,14 @@ export default function NotasScreen() {
       />
     </KeyboardAvoidingView>
   );
+}
+
+function notasMapHash(notas: Map<string, ValorNota>) {
+  return JSON.stringify([...notas.entries()].sort(([a], [b]) => a.localeCompare(b)));
+}
+
+function notasListHash(notas: { alumnoId: string; nota: ValorNota }[]) {
+  return JSON.stringify(notas.map((nota) => [nota.alumnoId, nota.nota]).sort(([a], [b]) => String(a).localeCompare(String(b))));
 }
 
 const styles = StyleSheet.create({

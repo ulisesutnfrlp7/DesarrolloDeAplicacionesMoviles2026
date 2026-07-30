@@ -10,6 +10,7 @@ import ScreenHeader from "../../components/ui/ScreenHeader";
 import { auth } from "../../config/firebaseConfig";
 import { actualizarColumnasPlanilla, actualizarDatosPlanilla, actualizarFilaPlanilla, crearFilaPlanilla, eliminarPlanilla, eliminarFilaPlanilla, obtenerFilasPlanilla, obtenerPlanillaPorId, obtenerVistaAlumnoPlanilla, type ColumnaPlanilla, type FilaPlanilla, type PlanillaTP, type TipoColumnaPlanilla, type VistaAlumnoPlanilla,} from "../../hooks/usePlanillas";
 import { useUserRole } from "../../hooks/useUserRole";
+import { enqueueNotificationJob } from "../../services/notificationJobs";
 
 const TIPOS_COLUMNA: TipoColumnaPlanilla[] = ["texto", "numero", "fecha", "nota", "textarea", "boolean"];
 
@@ -103,6 +104,18 @@ export default function PlanillaDetalleScreen() {
   const tipo = modoAlumno ? vistaAlumno?.tipo : planilla?.tipo;
   const alumnoNombre = planilla?.alumnoNombre ?? "";
 
+  const enqueuePlanillaUpdateJob = async () => {
+    if (!planillaId || !planilla) return;
+    await enqueueNotificationJob({
+      type: "tp_sheet_updated",
+      sourceId: planillaId,
+      sourcePath: `planillas_tp/${planillaId}`,
+      courseId: planilla.moduloId,
+      sectionId: planilla.seccionId,
+      targetUserId: planilla.alumnoId,
+    });
+  };
+
   useEffect(() => {
     if (planilla?.titulo) setTituloDraft(planilla.titulo);
   }, [planilla?.titulo]);
@@ -141,6 +154,7 @@ export default function PlanillaDetalleScreen() {
           await actualizarFilaPlanilla(planillaId, fila.id, data);
         }
       }
+      await enqueuePlanillaUpdateJob();
       await cargar();
       setAlerta({ visible: true, titulo: "Filas guardadas", mensaje: "Los cambios se guardaron correctamente.", tipo: "exito" });
     } catch {
@@ -164,6 +178,7 @@ export default function PlanillaDetalleScreen() {
     setGuardando(true);
     try {
       await eliminarFilaPlanilla(planillaId, filaId);
+      await enqueuePlanillaUpdateJob();
       await cargar();
     } catch {
       setAlerta({ visible: true, titulo: "Error", mensaje: "No se pudo eliminar la fila.", tipo: "error" });
@@ -177,6 +192,7 @@ export default function PlanillaDetalleScreen() {
     setGuardando(true);
     try {
       await actualizarColumnasPlanilla(planillaId, normalizarColumnas(columnasActualizadas));
+      await enqueuePlanillaUpdateJob();
       await cargar();
       setAlerta({ visible: true, titulo: "Columnas actualizadas", mensaje: "Los cambios se guardaron.", tipo: "exito" });
     } catch {
@@ -224,6 +240,7 @@ export default function PlanillaDetalleScreen() {
     setGuardando(true);
     try {
       await actualizarDatosPlanilla(planillaId, { titulo: tituloDraft.trim() });
+      await enqueuePlanillaUpdateJob();
       await cargar();
       setAlerta({ visible: true, titulo: "Titulo actualizado", mensaje: "El nombre de la planilla se guardó correctamente.", tipo: "exito" });
     } catch {

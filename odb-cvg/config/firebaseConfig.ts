@@ -1,12 +1,13 @@
 import { getAnalytics, isSupported } from "firebase/analytics";
-import { initializeApp } from "firebase/app";
+import { getApp, getApps, initializeApp } from "firebase/app";
+import * as firebaseAuth from "firebase/auth";
+import type { Auth, Persistence } from "firebase/auth";
+import { getAuth, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { Platform } from "react-native";
 
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
-
-// @ts-ignore
-import { initializeAuth, getReactNativePersistence } from "firebase/auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_API_KEY,
@@ -18,16 +19,35 @@ const firebaseConfig = {
   measurementId: process.env.EXPO_PUBLIC_MEASUREMENT_ID,
 };
 
-// Initialize Firebase
-export const app = initializeApp(firebaseConfig);
+// Initialize Firebase once. Fast Refresh can re-evaluate this module.
+export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const analytics = isSupported().then((yes) =>
   yes ? getAnalytics(app) : null,
 );
 
-// Inicializamos Auth con la persistencia para React Native
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage),
-});
+type FirebaseAuthModule = typeof import("firebase/auth") & {
+  getReactNativePersistence?: (storage: typeof AsyncStorage) => Persistence;
+};
+
+function initializeFirebaseAuth(): Auth {
+  const authModule = firebaseAuth as FirebaseAuthModule;
+  const getPersistence = authModule.getReactNativePersistence;
+
+  if (Platform.OS === "web" || typeof getPersistence !== "function") {
+    return getAuth(app);
+  }
+
+  try {
+    return initializeAuth(app, {
+      persistence: getPersistence(AsyncStorage),
+    });
+  } catch (error: any) {
+    if (error?.code === "auth/already-initialized") return getAuth(app);
+    throw error;
+  }
+}
+
+export const auth = initializeFirebaseAuth();
 
 export const db = getFirestore(app);
 export const storage = getStorage(app);

@@ -1,0 +1,29 @@
+name = "opb-virtual-notifications"
+main = "src/index.ts"
+compatibility_date = "2026-07-28"
+
+[[queues.producers]]
+binding = "NOTIFICATION_QUEUE"
+queue = "odb-notification-jobs"
+
+[[queues.consumers]]
+queue = "odb-notification-jobs"
+max_batch_size = 5
+max_batch_timeout = 2
+max_retries = 8
+max_concurrency = 2
+
+[observability]
+enabled = true
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+FIREBASE_PROJECT_ID = "odb-cvg"
+MAX_JOB_ATTEMPTS = "5"
+
+# Configure these as Cloudflare secrets, not plain vars:
+# FIREBASE_CLIENT_EMAIL
+# FIREBASE_PRIVATE_KEY
+# EXPO_ACCESS_TOKEN (optional)

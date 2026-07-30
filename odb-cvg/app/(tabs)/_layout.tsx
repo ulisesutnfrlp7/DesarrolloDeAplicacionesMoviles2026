@@ -3,8 +3,17 @@ import "react-native-get-random-values";
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Text, View } from 'react-native';
+import { useNotifications } from '../../hooks/useNotifications';
+import { useUserRole } from '../../hooks/useUserRole';
+import { badgeLabel } from '../../types/notifications';
 
 export default function TabLayout() {
+  const { rol, loading: loadingRol } = useUserRole();
+  const notificationsEnabled = !loadingRol && rol === "alumno";
+  const { unreadCount } = useNotifications({ enabled: notificationsEnabled });
+  const badge = badgeLabel(unreadCount);
+
   return (
     <Tabs
       screenOptions={{
@@ -41,6 +50,35 @@ export default function TabLayout() {
           title: 'Cronograma',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="notificaciones"
+        options={{
+          href: notificationsEnabled ? undefined : null,
+          title: 'Notificaciones',
+          tabBarIcon: ({ color, size }) => (
+            <View>
+              <Ionicons name="notifications-outline" size={size} color={color} />
+              {badge ? (
+                <View style={{
+                  position: 'absolute',
+                  right: -10,
+                  top: -6,
+                  minWidth: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  backgroundColor: '#DC2626',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  paddingHorizontal: 4,
+                }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>{badge}</Text>
+                </View>
+              ) : null}
+            </View>
           ),
         }}
       />

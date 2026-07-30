@@ -17,6 +17,7 @@ export type ValorNota = number | "Ausente";
 export interface Nota {
   id: string;
   alumnoId: string;
+  alumnoUid?: string;
   moduloId: string;
   seccionId: string;
   subseccionPath?: string;
@@ -33,6 +34,7 @@ export interface NotaInput {
   subseccionPath?: string;
   nombreExamen: string;
   nota: ValorNota;
+  notificationBatchId?: string;
 }
 
 function construirIdNota(seccionId: string, alumnoId: string, nombreExamen: string, subseccionPath?: string) {
@@ -84,7 +86,7 @@ export function useNotasPorSeccion(
 }
 
 // Guarda (upsert) un lote de notas usando id compuesto para evitar duplicados.
-export async function guardarNotas(notas: NotaInput[]): Promise<void> {
+export async function guardarNotas(notas: NotaInput[], notificationBatchId?: string): Promise<void> {
   const user = auth.currentUser;
   if (!user) throw new Error("No autenticado");
 
@@ -95,6 +97,7 @@ export async function guardarNotas(notas: NotaInput[]): Promise<void> {
     const ref = doc(db, "notas", id);
     batch.set(ref, {
       alumnoId,
+      alumnoUid: alumnoId,
       moduloId,
       seccionId,
       subseccionPath: subseccionPath ?? "",
@@ -102,6 +105,7 @@ export async function guardarNotas(notas: NotaInput[]): Promise<void> {
       nota,
       fechaCarga: serverTimestamp(),
       cargadoPor: user.uid,
+      notificationBatchId: notificationBatchId ?? null,
     });
   });
 
@@ -113,6 +117,7 @@ export async function reemplazarNotasPorExamen(
   nombreExamen: string,
   notas: NotaInput[],
   subseccionPath?: string,
+  notificationBatchId?: string,
 ): Promise<void> {
   const user = auth.currentUser;
   if (!user) throw new Error("No autenticado");
@@ -133,6 +138,7 @@ export async function reemplazarNotasPorExamen(
     const id = construirIdNota(seccionId, alumnoId, nombreExamen, subseccionPath);
     batch.set(doc(db, "notas", id), {
       alumnoId,
+      alumnoUid: alumnoId,
       moduloId,
       seccionId,
       subseccionPath: subseccionPath ?? "",
@@ -140,6 +146,7 @@ export async function reemplazarNotasPorExamen(
       nota,
       fechaCarga: serverTimestamp(),
       cargadoPor: user.uid,
+      notificationBatchId: notificationBatchId ?? null,
     });
   });
 
