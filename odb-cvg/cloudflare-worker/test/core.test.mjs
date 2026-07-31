@@ -21,6 +21,7 @@ import { notifyStudent } from "../lib/notifications.js";
 import { resolveNotificationAudienceFromPath, resolveStudentsForCourse } from "../lib/recipients.js";
 import { dueReminders, processScheduleReminders, scheduleWindow } from "../lib/schedules.js";
 import { compactMetadata, courseMetadata } from "../lib/metadata.js";
+import { readValidExpoPushTokens, sendExpoPush } from "../lib/expo.js";
 
 test("deduplicationKey is stable", () => {
   assert.equal(deduplicationKey(["exam_grade", "notas/x"]), deduplicationKey(["exam_grade", "notas/x"]));
@@ -302,7 +303,8 @@ test("delivery schedule reminder notification metadata includes deadline and del
   }, {
     usuarios: [{ id: "a1", rol: "alumno", activo: true }],
   });
-  const result = await processJob(fakeEnv(), db, {
+  const env = fakeEnv();
+  const result = await processJob(env, db, {
     id: "job-delivery-reminder",
     type: "schedule_reminder",
     sourcePath: itemPath,
@@ -316,7 +318,10 @@ test("delivery schedule reminder notification metadata includes deadline and del
     createdBy: "schedule",
   });
   const notification = db.writes.find((write) => write.path.startsWith("usuarios/a1/notifications/") && write.merge === false);
-  assert.equal(result, "completed");
+  assert.equal(result, "pending");
+  assert.equal(db.docs["notification_jobs/job-delivery-reminder"].pushStage, "pending");
+  const completed = await processJob(env, db, db.docs["notification_jobs/job-delivery-reminder"]);
+  assert.equal(completed, "completed");
   assert.equal(notification.data.metadata.eventType, "entrega");
   assert.equal(new Date(notification.data.metadata.deadline).toISOString(), deadline.toISOString());
   assert.equal(notification.data.target.kind, "delivery");
@@ -831,7 +836,8 @@ test("grade job moves from pending to processing and completed", async () => {
       fechaCarga: "2026-07-28T10:00:00Z",
     }],
   });
-  await processJob({}, db, {
+  const env = fakeEnv();
+  await processJob(env, db, {
     id: "job1",
     type: "exam_grade",
     sourcePath: "modulos/m1/secciones/s1/notas_lotes/b1",
@@ -843,6 +849,9 @@ test("grade job moves from pending to processing and completed", async () => {
     createdBy: "p1",
   });
   assert.equal(db.writes.some((write) => write.data.status === "processing"), true);
+  assert.equal(db.docs["notification_jobs/job1"].status, "pending");
+  const completed = await processJob(env, db, db.docs["notification_jobs/job1"]);
+  assert.equal(completed, "completed");
   assert.equal(db.writes.at(-1).data.status, "completed");
   assert.equal(db.writes.at(-1).data.recipientsResolved, 1);
   assert.equal(db.writes.at(-1).data.notificationsCreated, 1);
@@ -885,7 +894,8 @@ test("delivery grade creates one internal notification for the submission owner"
     "usuarios/a1": { rol: "alumno", activo: true },
     "usuarios/a2": { rol: "alumno", activo: true },
   });
-  const result = await processJob(fakeEnv(), db, {
+  const env = fakeEnv();
+  const result = await processJob(env, db, {
     id: "job-submission-grade",
     type: "submission_grade",
     sourcePath: "modulos/m1/secciones/s1/items/i1/entregas_alumnos/e1",
@@ -898,7 +908,9 @@ test("delivery grade creates one internal notification for the submission owner"
     changeVersion: "v1",
     createdBy: "p1",
   });
-  assert.equal(result, "completed");
+  assert.equal(result, "pending");
+  const completed = await processJob(env, db, db.docs["notification_jobs/job-submission-grade"]);
+  assert.equal(completed, "completed");
   assert.equal(db.writes.at(-1).data.status, "completed");
   assert.equal(db.writes.at(-1).data.recipientsResolved, 1);
   assert.equal(db.writes.at(-1).data.notificationsCreated, 1);
@@ -918,7 +930,8 @@ test("delivery grade with numeric zero still creates a notification", async () =
     },
     "usuarios/a1": { rol: "alumno", activo: true },
   });
-  const result = await processJob(fakeEnv(), db, {
+  const env = fakeEnv();
+  const result = await processJob(env, db, {
     id: "job-submission-zero",
     type: "submission_grade",
     sourcePath: "modulos/m1/secciones/s1/items/i1/entregas_alumnos/e1",
@@ -931,8 +944,10 @@ test("delivery grade with numeric zero still creates a notification", async () =
     changeVersion: "zero",
     createdBy: "p1",
   });
-  assert.equal(result, "completed");
-  assert.equal(db.writes.at(-1).data.notificationsCreated, 1);
+  assert.equal(result, "pending");
+  assert.equal(db.docs["notification_jobs/job-submission-zero"].notificationsCreated, 1);
+  const completed = await processJob(env, db, db.docs["notification_jobs/job-submission-zero"]);
+  assert.equal(completed, "completed");
 });
 
 test("resubmission request creates one internal notification for the submission owner", async () => {
@@ -950,7 +965,8 @@ test("resubmission request creates one internal notification for the submission 
     "usuarios/a1": { rol: "alumno", activo: true },
     "usuarios/a2": { rol: "alumno", activo: true },
   });
-  const result = await processJob(fakeEnv(), db, {
+  const env = fakeEnv();
+  const result = await processJob(env, db, {
     id: "job-resubmission",
     type: "resubmission_requested",
     sourcePath: "modulos/m1/secciones/s1/items/i1/entregas_alumnos/e1",
@@ -963,7 +979,9 @@ test("resubmission request creates one internal notification for the submission 
     changeVersion: "v1",
     createdBy: "p1",
   });
-  assert.equal(result, "completed");
+  assert.equal(result, "pending");
+  const completed = await processJob(env, db, db.docs["notification_jobs/job-resubmission"]);
+  assert.equal(completed, "completed");
   assert.equal(db.writes.at(-1).data.status, "completed");
   assert.equal(db.writes.at(-1).data.recipientsResolved, 1);
   assert.equal(db.writes.some((write) => write.path.startsWith("usuarios/a1/notifications/")), true);
@@ -1111,7 +1129,8 @@ test("combined submission grade with resubmission creates one notification for t
     "usuarios/a1": { rol: "alumno", activo: true },
     "usuarios/a2": { rol: "alumno", activo: true },
   });
-  const result = await processJob(fakeEnv(), db, {
+  const env = fakeEnv();
+  const result = await processJob(env, db, {
     id: "job-combined-submission",
     type: "submission_grade_with_resubmission",
     sourcePath: "modulos/m1/secciones/s1/items/i1/entregas_alumnos/e1",
@@ -1125,7 +1144,9 @@ test("combined submission grade with resubmission creates one notification for t
     createdBy: "p1",
   });
   const notifications = db.writes.filter((write) => write.path.includes("/notifications/") && write.merge === false);
-  assert.equal(result, "completed");
+  assert.equal(result, "pending");
+  const completed = await processJob(env, db, db.docs["notification_jobs/job-combined-submission"]);
+  assert.equal(completed, "completed");
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0].path.startsWith("usuarios/a1/notifications/"), true);
   assert.equal(notifications[0].data.type, "submission_grade_with_resubmission");
@@ -1177,8 +1198,10 @@ test("new_content creates internal notifications in module without commissions",
     deduplicationKey: "k",
     createdBy: "p1",
   });
-  assert.equal(result, "completed");
-  assert.equal(db.writes.at(-1).data.notificationsCreated, 1);
+  assert.equal(result, "pending");
+  assert.equal(db.docs["notification_jobs/job-public-content"].notificationsCreated, 1);
+  const completed = await processJob(env, db, db.docs["notification_jobs/job-public-content"]);
+  assert.equal(completed, "completed");
 });
 
 test("content_updated in public recursive subsection completes with navigable target array", async () => {
@@ -1192,7 +1215,8 @@ test("content_updated in public recursive subsection completes with navigable ta
   }, {
     usuarios: [{ id: "a1", rol: "alumno", activo: true }],
   });
-  const result = await processJob(fakeEnv(), db, {
+  const env = fakeEnv();
+  const result = await processJob(env, db, {
     id: "job-public-recursive-content",
     type: "content_updated",
     sourcePath: "modulos/m1/secciones/s1/subsecciones/a/subsecciones/b/items/i1",
@@ -1204,7 +1228,9 @@ test("content_updated in public recursive subsection completes with navigable ta
     createdBy: "p1",
   });
   const notificationWrite = db.writes.find((write) => write.path.includes("/notifications/") && write.merge === false);
-  assert.equal(result, "completed");
+  assert.equal(result, "pending");
+  const completed = await processJob(env, db, db.docs["notification_jobs/job-public-recursive-content"]);
+  assert.equal(completed, "completed");
   assert.equal(db.writes.at(-1).data.status, "completed");
   assert.equal(db.writes.at(-1).data.leaseId, null);
   assert.deepEqual(notificationWrite.data.target.subsectionPath, ["a", "b"]);
@@ -1242,16 +1268,19 @@ test("notification created but completed write fails then retry completes withou
     changeVersion: "created-v1",
     createdBy: "p1",
   };
-  const first = await processJob(fakeEnv(), db, job);
+  const env = fakeEnv();
+  const first = await processJob(env, db, job);
   assert.equal(first, "pending");
   assert.equal(db.writes.filter((write) => write.path.includes("/notifications/") && write.merge === false).length, 1);
 
   db.docs["modulos/m1/secciones/s1/items/i1"].fechaActualizacion = "2026-07-29T10:00:00Z";
-  const retry = await processJob(fakeEnv(), db, { ...job, status: "pending", attempts: 1 });
-  assert.equal(retry, "completed");
+  const retry = await processJob(env, db, db.docs["notification_jobs/job-stable"]);
+  assert.equal(retry, "pending");
+  const completed = await processJob(env, db, db.docs["notification_jobs/job-stable"]);
+  assert.equal(completed, "completed");
   assert.equal(db.writes.filter((write) => write.path.includes("/notifications/") && write.merge === false).length, 1);
   assert.equal(db.writes.at(-1).data.status, "completed");
-  assert.equal(db.writes.at(-1).data.notificationsAlreadyExisted, 1);
+  assert.equal(db.writes.at(-1).data.notificationsCreated, 1);
 });
 
 test("single final completed write failure is retried before queue retry", async () => {
@@ -1272,7 +1301,8 @@ test("single final completed write failure is retried before queue retry", async
     }
     return originalSet(path, data, merge);
   };
-  const result = await processJob(fakeEnv(), db, {
+  const env = fakeEnv();
+  const first = await processJob(env, db, {
     id: "job-final-retry",
     type: "new_content",
     sourcePath: "modulos/m1/secciones/s1/items/i1",
@@ -1285,6 +1315,8 @@ test("single final completed write failure is retried before queue retry", async
     changeVersion: "created-v1",
     createdBy: "p1",
   });
+  assert.equal(first, "pending");
+  const result = await processJob(env, db, db.docs["notification_jobs/job-final-retry"]);
   assert.equal(result, "completed");
   assert.equal(db.writes.at(-1).data.status, "completed");
   assert.equal(db.writes.at(-1).data.leaseId, null);
@@ -1312,12 +1344,13 @@ test("delayed new_content retry keeps original dedupe and does not create fifth 
     changeVersion: "created-v1",
     createdBy: "p1",
   };
-  await processJob(fakeEnv(), db, job);
-  await processJob(fakeEnv(), db, { ...job, status: "pending", attempts: 1 });
+  const env = fakeEnv();
+  await processJob(env, db, job);
+  await processJob(env, db, db.docs["notification_jobs/job-late-created"]);
+  await processJob(env, db, { ...job, status: "pending", attempts: 1 });
   const notificationCreates = db.writes.filter((write) => write.path.includes("/notifications/") && write.merge === false);
   assert.equal(notificationCreates.length, 1);
-  assert.equal(db.writes.at(-1).data.status, "completed");
-  assert.equal(db.writes.at(-1).data.notificationsAlreadyExisted, 1);
+  assert.equal(db.docs["notification_jobs/job-late-created"].notificationsAlreadyExisted, 1);
 });
 
 test("content_updated never becomes new_content during processing", async () => {
@@ -1367,8 +1400,10 @@ test("delivery_space_created uses the same public audience resolver", async () =
     deduplicationKey: "k",
     createdBy: "p1",
   });
-  assert.equal(result, "completed");
-  assert.equal(db.writes.at(-1).data.notificationsCreated, 1);
+  assert.equal(result, "pending");
+  assert.equal(db.docs["notification_jobs/job-public-delivery"].notificationsCreated, 1);
+  const completed = await processJob(env, db, db.docs["notification_jobs/job-public-delivery"]);
+  assert.equal(completed, "completed");
 });
 
 test("sheet coalescing creates pending job with future nextAttemptAt", async () => {
@@ -1485,6 +1520,260 @@ test("expo error does not leave job in processing", async () => {
   assert.notEqual(db.writes.at(-1).data.status, "processing");
 });
 
+test("push token reader accepts Expo and Exponent tokens from user subcollection", async () => {
+  const listedPaths = [];
+  const db = {
+    async listCollectionPages(path) {
+      listedPaths.push(path);
+      return [
+        { id: "ExpoPushToken%5Bexpo%5D", path: "usuarios/a1/pushTokens/ExpoPushToken%5Bexpo%5D", enabled: true, platform: "android", token: "ExpoPushToken[expo]" },
+        { id: "ExponentPushToken%5Bexponent%5D", path: "usuarios/a1/pushTokens/ExponentPushToken%5Bexponent%5D", enabled: true, platform: "android", token: "ExponentPushToken[exponent]" },
+      ];
+    },
+  };
+  const tokens = await readValidExpoPushTokens(db, "a1");
+  assert.deepEqual(listedPaths, ["usuarios/a1/pushTokens"]);
+  assert.deepEqual(tokens, ["ExpoPushToken[expo]", "ExponentPushToken[exponent]"]);
+});
+
+test("push token reader rejects disabled missing and invalid tokens", async () => {
+  const db = {
+    async listCollectionPages() {
+      return [
+        { id: "disabled", enabled: false, platform: "android", token: "ExpoPushToken[disabled]" },
+        { id: "missing", enabled: true, platform: "android" },
+        { id: "invalid", enabled: true, platform: "android", token: "abc" },
+      ];
+    },
+  };
+  const tokens = await readValidExpoPushTokens(db, "a1");
+  assert.deepEqual(tokens, []);
+});
+
+test("sendExpoPush counts valid Exponent token and sends one message", async () => {
+  const listedPaths = [];
+  const db = {
+    async get(path) {
+      if (path === "usuarios/a1/notificationPreferences/push") return { enabled: true };
+      return null;
+    },
+    async listCollectionPages(path) {
+      listedPaths.push(path);
+      return [{ id: "encoded", path: "usuarios/a1/pushTokens/encoded", enabled: true, platform: "android", token: "ExponentPushToken[device]" }];
+    },
+    async set() {},
+  };
+  const fetchCalls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    fetchCalls.push(JSON.parse(init.body));
+    return { ok: true, json: async () => ({ data: [{ status: "ok" }] }) };
+  };
+  try {
+    const result = await sendExpoPush({}, db, {
+      userId: "a1",
+      type: "new_content",
+      title: "Titulo",
+      body: "Mensaje",
+      target: { kind: "content", moduloId: "m1", seccionId: "s1", itemId: "i1" },
+      deduplicationKey: "k",
+    });
+    assert.deepEqual(listedPaths, ["usuarios/a1/pushTokens"]);
+    assert.equal(result.tokensFound, 1);
+    assert.equal(result.messagesAccepted, 1);
+    assert.equal(result.messagesFailed, 0);
+    assert.equal(fetchCalls.length, 1);
+    assert.equal(fetchCalls[0][0].to, "ExponentPushToken[device]");
+    assert.equal(fetchCalls[0][0].priority, "high");
+    assert.equal(fetchCalls[0][0].channelId, "default");
+    assert.notEqual(fetchCalls[0][0].ttl, 0);
+    assert.equal(fetchCalls[0][0].title, "Titulo");
+    assert.equal(fetchCalls[0][0].body, "Mensaje");
+    assert.match(fetchCalls[0][0].data.notificationId, /^notif_sha256_[a-f0-9]{64}$/);
+    assert.equal(JSON.parse(fetchCalls[0][0].data.target).kind, "content");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("sendExpoPush omits Android-only fields for iOS token records", async () => {
+  const db = {
+    async get(path) {
+      if (path === "usuarios/a1/notificationPreferences/push") return { enabled: true };
+      return null;
+    },
+    async listCollectionPages() {
+      return [{ id: "ios", path: "usuarios/a1/pushTokens/ios", enabled: true, platform: "ios", token: "ExponentPushToken[ios]" }];
+    },
+    async set() {},
+  };
+  const fetchCalls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    fetchCalls.push(...JSON.parse(init.body));
+    return { ok: true, json: async () => ({ data: [{ status: "ok" }] }) };
+  };
+  try {
+    await sendExpoPush({}, db, {
+      userId: "a1",
+      type: "new_content",
+      title: "Titulo",
+      body: "Mensaje",
+      target: { kind: "content" },
+      deduplicationKey: "k",
+    });
+    assert.equal(fetchCalls.length, 1);
+    assert.equal(fetchCalls[0].to, "ExponentPushToken[ios]");
+    assert.equal("priority" in fetchCalls[0], false);
+    assert.equal("channelId" in fetchCalls[0], false);
+    assert.notEqual(fetchCalls[0].ttl, 0);
+    assert.equal(fetchCalls[0].sound, "default");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Android push channel uses default id with max importance and diagnostics", () => {
+  const hook = readFileSync("../hooks/usePushNotifications.ts", "utf8");
+  assert.match(hook, /getNotificationChannelAsync\?\.\("default"\)/);
+  assert.match(hook, /setNotificationChannelAsync\("default"/);
+  assert.match(hook, /name:\s*"Notificaciones"/);
+  assert.match(hook, /importance:\s*Notifications\.AndroidImportance\.MAX/);
+  assert.match(hook, /sound:\s*"default"/);
+  assert.match(hook, /enableVibrate:\s*true/);
+  assert.match(hook, /showBadge:\s*true/);
+  assert.match(hook, /channel_importance/);
+});
+
+test("push notification setup keeps presentation enabled without tap navigation coordination", () => {
+  const routing = readFileSync("../services/pushNotificationRouting.ts", "utf8");
+  const index = readFileSync("../app/index.tsx", "utf8");
+  const layout = readFileSync("../app/layout.tsx", "utf8");
+  assert.match(layout, /configurePushNotificationRouting\(\)/);
+  assert.match(routing, /setNotificationHandler/);
+  assert.match(routing, /shouldShowAlert:\s*true/);
+  assert.match(routing, /shouldShowBanner:\s*true/);
+  assert.match(routing, /shouldShowList:\s*true/);
+  assert.match(routing, /shouldSetBadge:\s*true/);
+  assert.match(routing, /push_routing_initialized/);
+  assert.equal(routing.includes("addNotificationResponseReceivedListener"), false);
+  assert.equal(routing.includes("getLastNotificationResponseAsync"), false);
+  assert.equal(routing.includes("waitForPushRoutingInitialCheck"), false);
+  assert.equal(routing.includes("isHandlingPushNavigation"), false);
+  assert.equal(routing.includes("push_initial_check_"), false);
+  assert.equal(routing.includes("push_initial_wait_"), false);
+  assert.ok(index.includes("router.replace('/(tabs)/home' as any)"));
+  assert.ok(index.includes("router.replace('/login' as any)"));
+  assert.equal(index.includes("waitForPushRoutingInitialCheck"), false);
+  assert.equal(index.includes("app_initial_redirect_skipped_due_to_push"), false);
+});
+
+test("push phase runs after internal notifications and processes seven recipients in continuations", async () => {
+  const users = Array.from({ length: 7 }, (_, index) => `a${index + 1}`);
+  const docs = {
+    "modulos/m1/secciones/s1/items/i1": { id: "i1", tipo: "texto", titulo: "Contenido", fechaCreacion: "2026-07-28T10:00:00Z" },
+    "modulos/m1": { titulo: "Modulo" },
+    "modulos/m1/secciones/s1": { titulo: "General" },
+    ...Object.fromEntries(users.map((uid) => [`usuarios/${uid}`, { rol: "alumno", activo: true }])),
+    "usuarios/a7/notificationPreferences/push": { enabled: true },
+    "usuarios/a7/pushTokens/token": { id: "token", path: "usuarios/a7/pushTokens/token", enabled: true, platform: "android", token: "ExponentPushToken[device]" },
+  };
+  const db = fakeDb(docs, {
+    usuarios: users.map((id) => ({ id, rol: "alumno", activo: true })),
+  });
+  const env = fakeEnv();
+  const fetchCalls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    fetchCalls.push(JSON.parse(init.body)[0]);
+    return { ok: true, json: async () => ({ data: [{ status: "ok" }] }) };
+  };
+  try {
+    const first = await processJob(env, db, {
+      id: "job-seven",
+      type: "new_content",
+      sourcePath: "modulos/m1/secciones/s1/items/i1",
+      sourceId: "i1",
+      status: "pending",
+      attempts: 0,
+      payload: {},
+      deduplicationKey: "new_content:seven",
+      eventType: "new_content",
+      changeVersion: "v1",
+      createdBy: "p1",
+    });
+    assert.equal(first, "pending");
+    assert.equal(db.docs["notification_jobs/job-seven"].notificationsCreated, 7);
+    assert.equal(db.docs["notification_jobs/job-seven"].pushTokensFound ?? 0, 0);
+
+    let status = "pending";
+    for (let i = 0; i < 8 && status === "pending"; i += 1) {
+      status = await processJob(env, db, db.docs["notification_jobs/job-seven"]);
+    }
+    assert.equal(status, "completed");
+    assert.equal(db.docs["notification_jobs/job-seven"].pushRecipientsProcessed, 7);
+    assert.equal(db.docs["notification_jobs/job-seven"].pushRecipientsRemaining, 0);
+    assert.equal(db.docs["notification_jobs/job-seven"].pushTokensFound, 1);
+    assert.equal(db.docs["notification_jobs/job-seven"].pushMessagesAccepted, 1);
+    assert.equal(fetchCalls.length, 1);
+    assert.equal(fetchCalls[0].to, "ExponentPushToken[device]");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("push subrequest limit is kept as pending work instead of zero tokens", async () => {
+  const db = fakeDb({
+    "modulos/m1/secciones/s1/items/i1": { id: "i1", tipo: "texto", titulo: "Contenido", fechaCreacion: "2026-07-28T10:00:00Z" },
+    "modulos/m1": { titulo: "Modulo" },
+    "modulos/m1/secciones/s1": { titulo: "General" },
+    "usuarios/a1": { rol: "alumno", activo: true },
+    "usuarios/a1/notificationPreferences/push": { enabled: true },
+    "usuarios/a1/pushTokens/token": { id: "token", path: "usuarios/a1/pushTokens/token", enabled: true, platform: "android", token: "ExponentPushToken[device]" },
+  }, {
+    usuarios: [{ id: "a1", rol: "alumno", activo: true }],
+  });
+  const env = fakeEnv();
+  const first = await processJob(env, db, {
+    id: "job-subrequests",
+    type: "new_content",
+    sourcePath: "modulos/m1/secciones/s1/items/i1",
+    sourceId: "i1",
+    status: "pending",
+    attempts: 0,
+    payload: {},
+    deduplicationKey: "new_content:subrequests",
+    eventType: "new_content",
+    changeVersion: "v1",
+    createdBy: "p1",
+  });
+  assert.equal(first, "pending");
+
+  const originalList = db.listCollectionPages.bind(db);
+  let shouldThrow = true;
+  db.listCollectionPages = async (path) => {
+    if (shouldThrow && path.endsWith("/pushTokens")) throw new Error("Too many subrequests by single Worker invocation");
+    return originalList(path);
+  };
+  const limited = await processJob(env, db, db.docs["notification_jobs/job-subrequests"]);
+  assert.equal(limited, "pending");
+  assert.equal(db.docs["notification_jobs/job-subrequests"].diagnosticCode, "push_subrequest_budget");
+  assert.equal(db.docs["notification_jobs/job-subrequests"].pushTokensFound ?? 0, 0);
+  assert.equal(db.docs["notification_jobs/job-subrequests"].pushRecipientsRemaining, 1);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ data: [{ status: "ok" }] }) });
+  try {
+    shouldThrow = false;
+    const completed = await processJob(env, db, db.docs["notification_jobs/job-subrequests"]);
+    assert.equal(completed, "completed");
+    assert.equal(db.docs["notification_jobs/job-subrequests"].pushTokensFound, 1);
+    assert.equal(db.docs["notification_jobs/job-subrequests"].pushMessagesAccepted, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("duplicate queue message for completed job is a no-op", async () => {
   const db = fakeDb({
     "notification_jobs/job-done": {
@@ -1550,6 +1839,7 @@ test("recovery completes job from existing internal metrics without rerunning re
       recipientsResolved: 8,
       notificationsCreated: 0,
       notificationsAlreadyExisted: 8,
+      pushStage: "completed",
       deduplicationKey: "new_content:stable",
       createdBy: "p1",
     },
@@ -1730,6 +2020,55 @@ test("notifications tab and listeners are only enabled for students", () => {
   assert.match(hook, /options: \{ enabled\?: boolean \} = \{\}/);
   assert.match(hook, /if \(!uid \|\| !enabled\)/);
   assert.match(hook, /if \(!uid \|\| !enabled \|\| !isSafeNotificationDocumentId/);
+});
+
+test("Android push registration stores Expo tokens where the Worker reads them", () => {
+  const pushHook = readFileSync("../hooks/usePushNotifications.ts", "utf8");
+  const profile = readFileSync("../app/(tabs)/perfil.tsx", "utf8");
+  const expo = readFileSync("../cloudflare-worker/src/expo.ts", "utf8");
+  const rules = readFileSync("../firestore.rules", "utf8");
+
+  assert.match(expo, /usuarios\/\$\{payload\.userId\}\/notificationPreferences\/push/);
+  assert.match(expo, /readValidExpoPushTokenRecords\(db, payload\.userId\)/);
+  assert.match(expo, /const path = `usuarios\/\$\{userId\}\/pushTokens`/);
+  assert.match(expo, /doc\?\.enabled === true/);
+
+  assert.match(pushHook, /import \* as Device from "expo-device"/);
+  assert.match(pushHook, /Device\.isDevice/);
+  assert.match(pushHook, /setNotificationChannelAsync\("default"/);
+  assert.match(pushHook, /AndroidImportance\.MAX/);
+  assert.match(pushHook, /Constants\.easConfig\?\.projectId[\s\S]*Constants\.expoConfig\?\.extra\?\.eas\?\.projectId/);
+  assert.match(pushHook, /getExpoPushTokenAsync\(\{ projectId \}\)/);
+  assert.match(pushHook, /isValidExpoPushToken/);
+  assert.match(pushHook, /doc\(db, "usuarios", user\.uid, "pushTokens", tokenDocId\(expoToken\)\)/);
+  assert.match(pushHook, /expo_push_token_save_started/);
+  assert.match(pushHook, /expo_push_token_saved/);
+  assert.match(pushHook, /permission_denied/);
+  assert.match(pushHook, /eas_project_id_missing/);
+
+  assert.match(profile, /if \(loadingRol \|\| rol !== "alumno"\) return;/);
+  assert.match(profile, /if \(pref\.enabled && !autoPushRegistrationAttempted\.current\)/);
+  assert.match(profile, /registerCurrentDeviceForPush\(\)/);
+  assert.match(profile, /if \(rol !== "alumno"\)/);
+  assert.match(profile, /await setPushEnabled\(true\);[\s\S]*await registerCurrentDeviceForPush\(\)/);
+
+  assert.match(rules, /match \/notificationPreferences\/\{preferenceId\} \{[\s\S]*allow read: if request\.auth != null[\s\S]*request\.auth\.uid == userId;/);
+  assert.match(rules, /allow create, update: if request\.auth != null[\s\S]*request\.resource\.data\.enabled is bool;/);
+});
+
+test("profile push settings are rendered and executed only for students", () => {
+  const profile = readFileSync("../app/(tabs)/perfil.tsx", "utf8");
+  assert.match(profile, /const esAlumno = rol === "alumno"/);
+  assert.match(profile, /if \(loadingRol \|\| rol !== "alumno"\) return;/);
+  assert.match(profile, /\{esAlumno \? \(/);
+  assert.match(profile, /<Text style=\{styles\.subtituloSeccion\}>Notificaciones<\/Text>/);
+  assert.match(profile, /Push del dispositivo/);
+  assert.match(profile, /getPushPreference\(\)\.then/);
+  assert.match(profile, /await registerCurrentDeviceForPush\(\)/);
+  assert.match(profile, /await setPushEnabled\(true\);[\s\S]*await registerCurrentDeviceForPush\(\)/);
+  assert.doesNotMatch(profile, /getPushDiagnostics/);
+  assert.doesNotMatch(profile, /PushDiagnostics/);
+  assert.doesNotMatch(profile, /Diagnostico push/);
 });
 
 test("frontend creates updated jobs for relevant edits", () => {
@@ -1993,6 +2332,12 @@ function fakeDb(docs = {}, queryRows = {}) {
     },
     async runQueryPages(collectionId) {
       return queryRows[collectionId] ?? [];
+    },
+    async listCollectionPages(path) {
+      const prefix = `${path}/`;
+      return Object.entries(docs)
+        .filter(([docPath]) => docPath.startsWith(prefix) && docPath.slice(prefix.length).split("/").length === 1)
+        .map(([, doc]) => doc);
     },
   };
 }

@@ -1,9 +1,8 @@
 import { FirestoreRest } from "./firestore.js";
-import { sendExpoPush } from "./expo.js";
 import { stableDocumentId } from "./core.js";
-import type { Env, NotificationPayload, NotifyResult, PushSendResult } from "./types.js";
+import type { Env, NotificationPayload, NotifyResult } from "./types.js";
 
-export async function notifyStudent(env: Env, db: FirestoreRest, payload: NotificationPayload): Promise<NotifyResult> {
+export async function notifyStudent(_env: Env, db: FirestoreRest, payload: NotificationPayload): Promise<NotifyResult> {
   const notificationId = await stableDocumentId("notif", payload.deduplicationKey);
   const path = `usuarios/${payload.userId}/notifications/${notificationId}`;
   const existing = await db.get(path);
@@ -28,21 +27,6 @@ export async function notifyStudent(env: Env, db: FirestoreRest, payload: Notifi
   } else {
     result.alreadyExisted = 1;
     return result;
-  }
-
-  try {
-    const push = await sendExpoPush(env, db, payload);
-    result.pushTokensFound += push.tokensFound;
-    result.pushMessagesAccepted += push.messagesAccepted;
-    result.pushMessagesFailed += push.messagesFailed;
-    await db.set(path, { pushStatus: push.status, pushUpdatedAt: new Date() });
-  } catch (error: any) {
-    await db.set(path, {
-      pushStatus: "failed",
-      pushLastError: String(error?.message ?? error).slice(0, 300),
-      pushUpdatedAt: new Date(),
-    });
-    result.pushMessagesFailed += 1;
   }
   return result;
 }

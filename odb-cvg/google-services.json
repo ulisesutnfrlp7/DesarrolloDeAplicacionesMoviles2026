@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "49861772283",
+    "project_id": "odb-cvg",
+    "storage_bucket": "odb-cvg.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:49861772283:android:eaa79e485514744b81415e",
+        "android_client_info": {
+          "package_name": "com.odvCvg"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "49861772283-brgedu44sh1u5jfq729ikusvcdj0efm3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB94S9cSSDJkKigPAK6_FLlcNw6Ff13Iy4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "49861772283-brgedu44sh1u5jfq729ikusvcdj0efm3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

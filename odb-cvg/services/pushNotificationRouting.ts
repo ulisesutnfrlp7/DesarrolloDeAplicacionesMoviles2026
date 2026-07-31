@@ -1,35 +1,15 @@
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../config/firebaseConfig";
-import type { NotificationTarget } from "../types/notifications";
-import { navigateToNotificationTarget } from "./notificationNavigation";
-
 let configured = false;
 
-async function waitForAuthReady(): Promise<void> {
-  if (auth.currentUser) return;
-  await new Promise<void>((resolve) => {
-    const unsub = onAuthStateChanged(auth, () => {
-      unsub();
-      resolve();
-    });
-  });
-}
-
-async function handleNotificationData(data: Record<string, unknown> | undefined) {
-  const rawTarget = data?.target;
-  if (!rawTarget || typeof rawTarget !== "string") return;
-  try {
-    const target = JSON.parse(rawTarget) as NotificationTarget;
-    await waitForAuthReady();
-    await navigateToNotificationTarget(target);
-  } catch (error) {
-    console.error("handleNotificationData error:", error);
+function pushConfigLog(event: string, payload: Record<string, unknown>) {
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log(event, payload);
   }
 }
 
 export async function configurePushNotificationRouting() {
   if (configured) return;
   configured = true;
+  pushConfigLog("push_routing_initialized", { configured: true, responseNavigation: false });
   try {
     const Notifications = await import("expo-notifications");
     Notifications.setNotificationHandler({
@@ -41,16 +21,10 @@ export async function configurePushNotificationRouting() {
         shouldShowList: true,
       }),
     });
-
-    Notifications.addNotificationResponseReceivedListener((response) => {
-      handleNotificationData(response.notification.request.content.data as Record<string, unknown>);
-    });
-
-    const initial = await Notifications.getLastNotificationResponseAsync();
-    if (initial) {
-      handleNotificationData(initial.notification.request.content.data as Record<string, unknown>);
-    }
-  } catch {
+  } catch (error) {
     configured = false;
+    pushConfigLog("push_routing_configuration_failed", {
+      error: String((error as { message?: string })?.message ?? error).slice(0, 160),
+    });
   }
 }

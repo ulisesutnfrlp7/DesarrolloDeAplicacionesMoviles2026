@@ -15,8 +15,9 @@ import {
 import { FirestoreRest, fieldEquals, fieldLessOrEqual } from "./firestore.js";
 import { compactMetadata, courseMetadata } from "./metadata.js";
 import { emptyNotifyResult, mergeNotifyResult, notifyMany } from "./notifications.js";
+import { sendExpoPush } from "./expo.js";
 import { resolveNotificationAudienceFromPath, resolveRecipientsForAcademicContext, resolveRecipientsForSingleStudent } from "./recipients.js";
-import type { Env, FirebaseToken, NotificationJob, NotificationQueueMessage, NotifyResult } from "./types.js";
+import type { Env, FirebaseToken, NotificationJob, NotificationPayload, NotificationQueueMessage, NotifyResult } from "./types.js";
 
 type JobFeature = "content" | "grades" | "sheets" | "submissions";
 const EXAM_PAGE_SIZE = 200;
@@ -25,6 +26,7 @@ const STAGE_TIMEOUT_MS = 45_000;
 const FINALIZE_TIMEOUT_MS = 12_000;
 const STALE_PROGRESS_MS = 3 * 60_000;
 const RECOVERY_DEBOUNCE_MS = 60_000;
+const PUSH_RECIPIENTS_PER_RUN = 1;
 const SUBMISSION_JOB_TYPES = [
   "submission_grade",
   "submission_grade_updated",
@@ -63,7 +65,15 @@ interface DispatchResult {
   continuationReason?: string;
   completionReason?: string;
   diagnosticContext?: Record<string, unknown>;
+  pushStage?: "pending" | "completed";
+  pushCursor?: number;
+  pushRecipientsProcessed?: number;
+  pushRecipientsRemaining?: number;
+  pushContinuationQueued?: boolean;
+  pushLastAttemptAt?: Date | null;
 }
+
+type PushTask = NotificationPayload;
 
 export async function createJobFromRequest(env: Env, db: FirestoreRest, token: FirebaseToken, body: any): Promise<Response> {
   const type = String(body.type ?? "");
@@ -124,6 +134,11 @@ export async function createJobFromRequest(env: Env, db: FirestoreRest, token: F
       leaseId: null,
       leaseExpiresAt: null,
       internalCreatedAt: null,
+      pushStage: null,
+      pushCursor: null,
+      pushRecipientsProcessed: 0,
+      pushRecipientsRemaining: null,
+      pushContinuationQueued: false,
       pushLastAttemptAt: null,
       deduplicationKey: key,
       eventType: type,
@@ -221,12 +236,15 @@ export async function processDueJobs(env: Env, db: FirestoreRest, now = new Date
 export async function enqueueNotificationJob(env: Env, db: FirestoreRest, message: NotificationQueueMessage, delaySeconds?: number): Promise<boolean> {
   try {
     await env.NOTIFICATION_QUEUE.send(message, delaySeconds ? { delaySeconds } : undefined);
-    await db.set(`notification_jobs/${message.jobId}`, {
+    const update: Record<string, unknown> = {
       queuedAt: new Date(),
       lastQueueReason: message.reason,
       queuePublishAttempts: 0,
-      diagnosticCode: message.reason === "recovery" ? "recovery_enqueued" : "queued",
-    });
+    };
+    if (message.reason !== "retry") {
+      update.diagnosticCode = message.reason === "recovery" ? "recovery_enqueued" : "queued";
+    }
+    await db.set(`notification_jobs/${message.jobId}`, update);
     console.log("job_enqueued", { jobId: message.jobId, reason: message.reason, delaySeconds: delaySeconds ?? 0 });
     return true;
   } catch (error: any) {
@@ -259,6 +277,12 @@ export async function getJobDiagnostic(db: FirestoreRest, jobId: string): Promis
     pushTokensFound: job.pushTokensFound ?? 0,
     pushMessagesAccepted: job.pushMessagesAccepted ?? 0,
     pushMessagesFailed: job.pushMessagesFailed ?? 0,
+    pushStage: job.pushStage ?? null,
+    pushCursor: job.pushCursor ?? job.payload?.pushCursor ?? null,
+    pushRecipientsProcessed: job.pushRecipientsProcessed ?? null,
+    pushRecipientsRemaining: job.pushRecipientsRemaining ?? null,
+    pushContinuationQueued: job.pushContinuationQueued ?? null,
+    pushLastAttemptAt: job.pushLastAttemptAt ?? null,
     diagnosticCode: job.diagnosticCode ?? null,
     completionReason: job.completionReason ?? null,
     continuationReason: job.continuationReason ?? null,
@@ -296,6 +320,7 @@ export async function retryJob(env: Env, db: FirestoreRest, jobId: string): Prom
     lastError: null,
     diagnosticCode: "manual_retry",
     manualRetryAt: new Date(),
+    pushContinuationQueued: false,
   });
   return { ok: true, queued: await enqueueNotificationJob(env, db, { jobId, reason: "retry" }) };
 }
@@ -350,6 +375,12 @@ export async function processJob(env: Env, db: FirestoreRest, job: NotificationJ
         pushTokensFound: result.pushTokensFound,
         pushMessagesAccepted: result.pushMessagesAccepted,
         pushMessagesFailed: result.pushMessagesFailed,
+        pushStage: result.pushStage ?? null,
+        pushCursor: result.pushCursor ?? null,
+        pushRecipientsProcessed: result.pushRecipientsProcessed ?? null,
+        pushRecipientsRemaining: result.pushRecipientsRemaining ?? null,
+        pushContinuationQueued: result.pushContinuationQueued ?? false,
+        pushLastAttemptAt: result.pushLastAttemptAt ?? null,
         skippedRecipients: result.skippedRecipients,
         processingDurationMs: Date.now() - startedAt,
         consumerFinishedAt: new Date(),
@@ -370,7 +401,11 @@ export async function processJob(env: Env, db: FirestoreRest, job: NotificationJ
     }
     if (!result.completed) {
       const nextCursor = result.nextPayload?.cursor;
-      const hasValidContinuation = Number.isFinite(Number(nextCursor)) && Number(nextCursor) > Number(job.payload?.cursor ?? 0);
+      const nextPushCursor = result.nextPayload?.pushCursor;
+      const hasValidContinuation =
+        (Number.isFinite(Number(nextCursor)) && Number(nextCursor) > Number(job.payload?.cursor ?? 0)) ||
+        (Number.isFinite(Number(nextPushCursor)) && Number(nextPushCursor) >= Number(job.payload?.pushCursor ?? 0)) ||
+        (Boolean(result.continuationReason) && Number(result.remainingWork ?? 0) > 0);
       if (!hasValidContinuation && !result.remainingWork) {
         console.log("notification job continuation suppressed", {
           jobId: job.id,
@@ -382,7 +417,7 @@ export async function processJob(env: Env, db: FirestoreRest, job: NotificationJ
         status: "pending",
         payload: result.nextPayload ?? job.payload ?? {},
         updatedAt: new Date(),
-        nextAttemptAt: new Date(Date.now() + 30 * 1000),
+        nextAttemptAt: new Date(),
         lockedAt: null,
         lockedBy: null,
         leaseId: null,
@@ -393,6 +428,12 @@ export async function processJob(env: Env, db: FirestoreRest, job: NotificationJ
         pushTokensFound: result.pushTokensFound,
         pushMessagesAccepted: result.pushMessagesAccepted,
         pushMessagesFailed: result.pushMessagesFailed,
+        pushStage: result.pushStage ?? null,
+        pushCursor: result.pushCursor ?? null,
+        pushRecipientsProcessed: result.pushRecipientsProcessed ?? null,
+        pushRecipientsRemaining: result.pushRecipientsRemaining ?? null,
+        pushContinuationQueued: result.pushContinuationQueued ?? true,
+        pushLastAttemptAt: result.pushLastAttemptAt ?? null,
         skippedRecipients: result.skippedRecipients,
         diagnosticCode: result.diagnosticCode ?? "page_incomplete",
         completionReason: null,
@@ -412,7 +453,12 @@ export async function processJob(env: Env, db: FirestoreRest, job: NotificationJ
         recipientCount: result.recipientsResolved,
         notificationsCreated: result.notificationsCreated,
       });
-      await enqueueNotificationJob(env, db, { jobId: job.id, reason: "retry" }, 5);
+      await enqueueNotificationJob(
+        env,
+        db,
+        { jobId: job.id, reason: "retry" },
+        result.continuationReason?.startsWith("push_") ? undefined : 5,
+      );
       return "pending";
       }
     }
@@ -446,6 +492,12 @@ export async function processJob(env: Env, db: FirestoreRest, job: NotificationJ
       pushTokensFound: result.pushTokensFound,
       pushMessagesAccepted: result.pushMessagesAccepted,
       pushMessagesFailed: result.pushMessagesFailed,
+      pushStage: result.pushStage ?? "completed",
+      pushCursor: result.pushCursor ?? null,
+      pushRecipientsProcessed: result.pushRecipientsProcessed ?? null,
+      pushRecipientsRemaining: result.pushRecipientsRemaining ?? 0,
+      pushContinuationQueued: false,
+      pushLastAttemptAt: result.pushLastAttemptAt ?? null,
       skippedRecipients: result.skippedRecipients,
       processingDurationMs: Date.now() - startedAt,
       consumerFinishedAt: new Date(),
@@ -644,6 +696,18 @@ async function updateProcessingStage(db: FirestoreRest, jobPath: string, leaseId
       recipientsResolved: current?.recipientsResolved ?? 0,
     });
   }
+  if (stageChanged && stage === "processing_push") {
+    console.log("push_phase_started", {
+      jobId: jobPath.split("/").pop(),
+      type: current?.type,
+      processingStage: stage,
+      leaseId,
+      attempt: current?.attempts ?? null,
+      cursor: current?.payload?.pushCursor ?? current?.pushCursor ?? 0,
+      recipientsResolved: current?.recipientsResolved ?? 0,
+      pushTokensFound: current?.pushTokensFound ?? 0,
+    });
+  }
   await db.set(jobPath, {
     processingStage: stage,
     lastProgressAt: new Date(),
@@ -769,6 +833,7 @@ function canCompleteFromExistingMetrics(job: any): boolean {
   return job.remainingWork === 0 &&
     Number(job.recipientsResolved ?? 0) > 0 &&
     Number(job.notificationsCreated ?? 0) + Number(job.notificationsAlreadyExisted ?? 0) > 0 &&
+    job.pushStage === "completed" &&
     hasVerifiableIdentity(job);
 }
 
@@ -786,9 +851,14 @@ async function completeFromExistingMetrics(db: FirestoreRest, job: NotificationJ
       leaseExpiresAt: null,
       lastError: null,
       diagnosticCode: "completed_from_existing_internal_notifications",
-      completionReason: "all_internal_notifications_created_or_existing",
+      completionReason: Number(job.pushTokensFound ?? 0) > 0
+        ? "all_internal_notifications_created_or_existing_push_processed"
+        : "all_internal_notifications_created_or_existing_no_push_tokens",
       continuationReason: null,
       remainingWork: 0,
+      pushStage: "completed",
+      pushRecipientsRemaining: 0,
+      pushContinuationQueued: false,
       consumerFinishedAt: now,
       processingStage: "finalizing",
       lastProgressAt: now,
@@ -842,7 +912,300 @@ async function withTimeout<T>(factory: () => Promise<T>, ms: number, code: strin
   }
 }
 
+function isPushTask(value: unknown): value is PushTask {
+  return Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as PushTask).userId === "string" &&
+    typeof (value as PushTask).type === "string" &&
+    typeof (value as PushTask).title === "string" &&
+    typeof (value as PushTask).body === "string" &&
+    typeof (value as PushTask).deduplicationKey === "string" &&
+    Boolean((value as PushTask).target);
+}
+
+function pushTasksFromPayload(payload: Record<string, unknown> | undefined): PushTask[] {
+  const raw = payload?.pushTasks;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isPushTask);
+}
+
+function buildPushTasks(userIds: string[], base: Omit<NotificationPayload, "userId">): PushTask[] {
+  return [...new Set(userIds)]
+    .filter((userId) => typeof userId === "string" && userId.length > 0)
+    .map((userId) => ({ ...base, userId }));
+}
+
+function addPushContinuation(
+  job: NotificationJob,
+  notify: NotifyResult,
+  tasks: PushTask[],
+  extras: Pick<DispatchResult, "diagnosticCode" | "diagnosticContext" | "completionReason"> = {},
+): DispatchResult {
+  const base = dispatchFromNotify(notify);
+  const uniqueTasks = tasks.filter((task, index, arr) => arr.findIndex((item) => item.userId === task.userId && item.deduplicationKey === task.deduplicationKey) === index);
+  return {
+    ...base,
+    completed: false,
+    nextPayload: {
+      ...(job.payload ?? {}),
+      pushTasks: uniqueTasks,
+      pushCursor: 0,
+    },
+    remainingWork: uniqueTasks.length,
+    continuationReason: "push_phase_pending",
+    diagnosticCode: extras.diagnosticCode ?? "push_phase_pending",
+    diagnosticContext: extras.diagnosticContext,
+    completionReason: extras.completionReason,
+    pushStage: "pending",
+    pushCursor: 0,
+    pushRecipientsProcessed: 0,
+    pushRecipientsRemaining: uniqueTasks.length,
+    pushContinuationQueued: true,
+    pushLastAttemptAt: null,
+  };
+}
+
+async function processPushPhase(env: Env, db: FirestoreRest, job: NotificationJob, jobPath: string, leaseId: string, tasks: PushTask[]): Promise<DispatchResult> {
+  await updateProcessingStage(db, jobPath, leaseId, "processing_push");
+  const startedAt = Date.now();
+  const cursor = Math.max(0, Number(job.payload?.pushCursor ?? (job as any).pushCursor ?? 0));
+  const total = tasks.length;
+  let nextCursor = Math.min(cursor, total);
+  let tokensFound = Number((job as any).pushTokensFound ?? 0);
+  let accepted = Number((job as any).pushMessagesAccepted ?? 0);
+  let failed = Number((job as any).pushMessagesFailed ?? 0);
+  const internalCount = Number((job as any).notificationsCreated ?? 0) + Number((job as any).notificationsAlreadyExisted ?? 0);
+
+  console.log("push_phase_started", {
+    jobId: job.id,
+    type: job.type,
+    cursor,
+    remaining: Math.max(0, total - cursor),
+    processingStage: "processing_push",
+  });
+
+  if (total === 0) {
+    return {
+      recipientsResolved: Number((job as any).recipientsResolved ?? 0),
+      notificationsCreated: Number((job as any).notificationsCreated ?? 0),
+      notificationsAlreadyExisted: Number((job as any).notificationsAlreadyExisted ?? 0),
+      pushTokensFound: tokensFound,
+      pushMessagesAccepted: accepted,
+      pushMessagesFailed: failed,
+      skippedRecipients: Number((job as any).skippedRecipients ?? 0),
+      completed: true,
+      remainingWork: 0,
+      diagnosticCode: "push_no_tasks",
+      completionReason: "all_internal_notifications_created_or_existing_no_push_tasks",
+      pushStage: "completed",
+      pushCursor: 0,
+      pushRecipientsProcessed: 0,
+      pushRecipientsRemaining: 0,
+      pushContinuationQueued: false,
+      pushLastAttemptAt: (job as any).pushLastAttemptAt ? new Date((job as any).pushLastAttemptAt) : null,
+    };
+  }
+
+  const end = Math.min(total, cursor + PUSH_RECIPIENTS_PER_RUN);
+  console.log("push_batch_started", {
+    jobId: job.id,
+    type: job.type,
+    cursor,
+    batchSize: end - cursor,
+    remaining: total - cursor,
+  });
+
+  for (let index = cursor; index < end; index += 1) {
+    const task = tasks[index];
+    const notificationId = await stableDocumentId("notif", task.deduplicationKey);
+    const notificationPath = `usuarios/${task.userId}/notifications/${notificationId}`;
+    const notification = await db.get(notificationPath);
+    if (!notification) {
+      failed += 1;
+      nextCursor = index + 1;
+      console.log("push_recipient_processed", {
+        jobId: job.id,
+        type: job.type,
+        cursor: nextCursor,
+        tokensFound,
+        accepted,
+        failed,
+        diagnosticCode: "internal_notification_missing",
+      });
+      continue;
+    }
+    if (["sent", "no_tokens", "disabled", "invalid_token"].includes(String(notification.pushStatus ?? ""))) {
+      nextCursor = index + 1;
+      console.log("push_recipient_processed", {
+        jobId: job.id,
+        type: job.type,
+        cursor: nextCursor,
+        tokensFound,
+        accepted,
+        failed,
+        diagnosticCode: "push_already_processed",
+      });
+      continue;
+    }
+    try {
+      const push = await sendExpoPush(env, db, task);
+      tokensFound += push.tokensFound;
+      accepted += push.messagesAccepted;
+      failed += push.messagesFailed;
+      const attemptedAt = new Date();
+      await db.set(notificationPath, {
+        pushStatus: push.status,
+        pushUpdatedAt: attemptedAt,
+        pushLastAttemptAt: attemptedAt,
+      });
+      nextCursor = index + 1;
+      await db.set(jobPath, {
+        payload: { ...(job.payload ?? {}), pushTasks: tasks, pushCursor: nextCursor },
+        pushStage: "pending",
+        pushCursor: nextCursor,
+        pushRecipientsProcessed: nextCursor,
+        pushRecipientsRemaining: Math.max(0, total - nextCursor),
+        pushTokensFound: tokensFound,
+        pushMessagesAccepted: accepted,
+        pushMessagesFailed: failed,
+        pushLastAttemptAt: attemptedAt,
+        lastProgressAt: attemptedAt,
+        updatedAt: attemptedAt,
+      });
+      console.log("push_recipient_processed", {
+        jobId: job.id,
+        type: job.type,
+        cursor: nextCursor,
+        tokensFound: push.tokensFound,
+        accepted: push.messagesAccepted,
+        failed: push.messagesFailed,
+        diagnosticCode: push.status,
+      });
+    } catch (error: any) {
+      const message = String(error?.message ?? error);
+      const diagnosticCode = message.includes("subrequests") ? "push_subrequest_budget" : "push_temporary_error";
+      console.log(message.includes("subrequests") ? "push_subrequest_budget_guard" : "push_batch_completed", {
+        jobId: job.id,
+        type: job.type,
+        cursor: nextCursor,
+        processed: Math.max(0, nextCursor - cursor),
+        remaining: Math.max(0, total - nextCursor),
+        tokensFound,
+        accepted,
+        failed,
+        durationMs: Date.now() - startedAt,
+        diagnosticCode,
+        error: message.slice(0, 160),
+      });
+      return {
+        recipientsResolved: Number((job as any).recipientsResolved ?? total),
+        notificationsCreated: Number((job as any).notificationsCreated ?? 0),
+        notificationsAlreadyExisted: Number((job as any).notificationsAlreadyExisted ?? internalCount),
+        pushTokensFound: tokensFound,
+        pushMessagesAccepted: accepted,
+        pushMessagesFailed: failed,
+        skippedRecipients: Number((job as any).skippedRecipients ?? 0),
+        completed: false,
+        nextPayload: { ...(job.payload ?? {}), pushTasks: tasks, pushCursor: nextCursor },
+        remainingWork: Math.max(1, total - nextCursor),
+        continuationReason: diagnosticCode,
+        diagnosticCode,
+        pushStage: "pending",
+        pushCursor: nextCursor,
+        pushRecipientsProcessed: nextCursor,
+        pushRecipientsRemaining: Math.max(1, total - nextCursor),
+        pushContinuationQueued: true,
+        pushLastAttemptAt: (job as any).pushLastAttemptAt ? new Date((job as any).pushLastAttemptAt) : null,
+      };
+    }
+  }
+
+  const remaining = Math.max(0, total - nextCursor);
+  console.log("push_batch_completed", {
+    jobId: job.id,
+    type: job.type,
+    cursor: nextCursor,
+    processed: nextCursor - cursor,
+    remaining,
+    tokensFound,
+    accepted,
+    failed,
+    durationMs: Date.now() - startedAt,
+    diagnosticCode: remaining > 0 ? "push_batch_limit" : "push_phase_completed",
+  });
+
+  if (remaining > 0) {
+    console.log("push_continuation_enqueued", {
+      jobId: job.id,
+      type: job.type,
+      cursor: nextCursor,
+      remaining,
+      reason: "push_batch_limit",
+    });
+    return {
+      recipientsResolved: Number((job as any).recipientsResolved ?? total),
+      notificationsCreated: Number((job as any).notificationsCreated ?? 0),
+      notificationsAlreadyExisted: Number((job as any).notificationsAlreadyExisted ?? internalCount),
+      pushTokensFound: tokensFound,
+      pushMessagesAccepted: accepted,
+      pushMessagesFailed: failed,
+      skippedRecipients: Number((job as any).skippedRecipients ?? 0),
+      completed: false,
+      nextPayload: { ...(job.payload ?? {}), pushTasks: tasks, pushCursor: nextCursor },
+      remainingWork: remaining,
+      continuationReason: "push_batch_limit",
+      diagnosticCode: "push_phase_pending",
+      pushStage: "pending",
+      pushCursor: nextCursor,
+      pushRecipientsProcessed: nextCursor,
+      pushRecipientsRemaining: remaining,
+      pushContinuationQueued: true,
+      pushLastAttemptAt: new Date(),
+    };
+  }
+
+  console.log("push_phase_completed", {
+    jobId: job.id,
+    type: job.type,
+    cursor: nextCursor,
+    processed: nextCursor,
+    tokensFound,
+    accepted,
+    failed,
+    durationMs: Date.now() - startedAt,
+    completionReason: tokensFound > 0
+      ? "all_internal_notifications_created_or_existing_push_processed"
+      : "all_internal_notifications_created_or_existing_no_push_tokens",
+  });
+  return {
+    recipientsResolved: Number((job as any).recipientsResolved ?? total),
+    notificationsCreated: Number((job as any).notificationsCreated ?? 0),
+    notificationsAlreadyExisted: Number((job as any).notificationsAlreadyExisted ?? internalCount),
+    pushTokensFound: tokensFound,
+    pushMessagesAccepted: accepted,
+    pushMessagesFailed: failed,
+    skippedRecipients: Number((job as any).skippedRecipients ?? 0),
+    completed: true,
+    remainingWork: 0,
+    diagnosticCode: "ok",
+    completionReason: tokensFound > 0
+      ? "all_internal_notifications_created_or_existing_push_processed"
+      : "all_internal_notifications_created_or_existing_no_push_tokens",
+    pushStage: "completed",
+    pushCursor: nextCursor,
+    pushRecipientsProcessed: nextCursor,
+    pushRecipientsRemaining: 0,
+    pushContinuationQueued: false,
+    pushLastAttemptAt: new Date(),
+  };
+}
+
 async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jobPath: string, leaseId: string): Promise<DispatchResult> {
+  const existingPushTasks = pushTasksFromPayload(job.payload);
+  if ((job as any).pushStage === "pending" || existingPushTasks.length > 0) {
+    return processPushPhase(env, db, job, jobPath, leaseId, existingPushTasks);
+  }
+
   if (job.type === "exam_grade" || job.type === "exam_grade_updated") {
     await updateProcessingStage(db, jobPath, leaseId, "resolving_recipients");
     const payload = job.payload ?? {};
@@ -860,6 +1223,7 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
     let pages = 0;
     let lastPageCount = 0;
     const total = emptyNotifyResult();
+    const pushTasks: PushTask[] = [];
     for (; pages < EXAM_MAX_PAGES_PER_RUN; pages += 1) {
       const notes = await db.runQuery("notas", filters, [], EXAM_PAGE_SIZE, false, offset);
       lastPageCount = notes.length;
@@ -880,7 +1244,7 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
           publishedAt: note.fechaCarga,
         });
         await updateProcessingStage(db, jobPath, leaseId, "creating_notifications");
-        mergeNotifyResult(total, await notifyMany(env, db, users, {
+        const base = {
           type: job.type,
           title: job.type === "exam_grade_updated" ? "Calificacion actualizada" : "Nueva calificacion",
           body: job.type === "exam_grade_updated" ? `Se actualizo una calificacion de ${note.nombreExamen ?? "un examen"}.` : `Tenes una nueva calificacion de ${note.nombreExamen ?? "un examen"}.`,
@@ -889,7 +1253,9 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
           courseId: note.moduloId ?? note.seccionId,
           deduplicationKey: notificationDeduplicationKey(job),
           metadata,
-        }));
+        };
+        mergeNotifyResult(total, await notifyMany(env, db, users, base));
+        pushTasks.push(...buildPushTasks(users, base));
       }
       offset += notes.length;
       if (notes.length < EXAM_PAGE_SIZE) break;
@@ -906,13 +1272,15 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       notificationsAlreadyExisted: total.alreadyExisted,
       remainingWork: lastPageCount < EXAM_PAGE_SIZE ? 0 : 1,
     });
+    if (lastPageCount < EXAM_PAGE_SIZE) {
+      return addPushContinuation(job, total, pushTasks, { completionReason: "exam_batch_finished" });
+    }
     return {
       ...dispatchFromNotify(total),
-      completed: lastPageCount < EXAM_PAGE_SIZE,
+      completed: false,
       nextPayload: { ...(job.payload ?? {}), cursor: offset },
-      remainingWork: lastPageCount < EXAM_PAGE_SIZE ? 0 : 1,
-      continuationReason: lastPageCount < EXAM_PAGE_SIZE ? undefined : "exam_batch_page_limit",
-      completionReason: lastPageCount < EXAM_PAGE_SIZE ? "exam_batch_finished" : undefined,
+      remainingWork: 1,
+      continuationReason: "exam_batch_page_limit",
     };
   }
 
@@ -945,7 +1313,7 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       description: source.descripcion,
     });
     await updateProcessingStage(db, jobPath, leaseId, "creating_notifications");
-    const notify = await notifyMany(env, db, users, {
+    const base = {
       type: job.type,
       title: job.type === "schedule_event_updated" ? "Evento actualizado" : "Nuevo evento del cronograma",
       body: job.type === "schedule_event_updated" ? `${source.titulo ?? "Un evento"} fue actualizado en el cronograma.` : `${source.titulo ?? "Un evento"} fue agregado al cronograma.`,
@@ -954,9 +1322,12 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       courseId: source.moduloId ?? null,
       deduplicationKey: notificationDeduplicationKey(job),
       metadata,
-    });
+    };
+    const notify = await notifyMany(env, db, users, base);
     await updateProcessingStage(db, jobPath, leaseId, "sending_push");
-    return { ...dispatchFromNotify(notify), completed: true, diagnosticContext: safeDiagnosticContext({ moduloId: source.moduloId, seccionId: source.seccionId }, metadata) };
+    return addPushContinuation(job, notify, buildPushTasks(users, base), {
+      diagnosticContext: safeDiagnosticContext({ moduloId: source.moduloId, seccionId: source.seccionId }, metadata),
+    });
   }
 
   if (job.type === "schedule_reminder") {
@@ -985,7 +1356,7 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       });
       const scheduleVersion = primitiveJobPart(job.payload?.scheduleVersion, 1);
       const offsetMinutes = primitiveJobPart(job.payload?.offsetMinutes, 0);
-      const notify = await notifyMany(env, db, users, {
+      const base = {
         type: "schedule_reminder",
         title: reminderTitle(source.titulo ?? "Evento", source.tipo, eventDate),
         body: `${source.titulo ?? "Evento"} esta programado en el cronograma.`,
@@ -994,8 +1365,11 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
         courseId: source.moduloId ?? null,
         deduplicationKey: notificationDeduplicationKey(job),
         metadata,
+      };
+      const notify = await notifyMany(env, db, users, base);
+      return addPushContinuation(job, notify, buildPushTasks(users, base), {
+        diagnosticContext: safeDiagnosticContext({ moduloId: source.moduloId, seccionId: source.seccionId }, metadata),
       });
-      return { ...dispatchFromNotify(notify), completed: true, diagnosticContext: safeDiagnosticContext({ moduloId: source.moduloId, seccionId: source.seccionId }, metadata) };
     }
 
     const scope = scopeFromItemPath(job.sourcePath);
@@ -1043,7 +1417,7 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
     });
     const scheduleVersion = primitiveJobPart(job.payload?.scheduleVersion, 1);
     const offsetMinutes = primitiveJobPart(job.payload?.offsetMinutes, 0);
-    const notify = await notifyMany(env, db, users, {
+    const base = {
       type: "schedule_reminder",
       title: reminderTitle(source.titulo ?? "Entrega", "entrega", deadline),
       body: `${source.titulo ?? "Entrega"} tiene una fecha limite en el cronograma.`,
@@ -1052,7 +1426,8 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       courseId: scope.moduloId,
       deduplicationKey: notificationDeduplicationKey(job),
       metadata,
-    });
+    };
+    const notify = await notifyMany(env, db, users, base);
     console.log("delivery_reminder_internal_created", {
       jobId: job.id,
       createdByRole: await roleForCreator(db, source),
@@ -1070,7 +1445,9 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       duration: Date.now() - deliveryReminderStartedAt,
       diagnosticCode: jobDiagnosticCode,
     });
-    return { ...dispatchFromNotify(notify), completed: true, diagnosticContext: safeDiagnosticContext(scope, metadata) };
+    return addPushContinuation(job, notify, buildPushTasks(users, base), {
+      diagnosticContext: safeDiagnosticContext(scope, metadata),
+    });
   }
 
   if (["new_content", "content_updated", "delivery_space_created", "delivery_space_updated"].includes(job.type)) {
@@ -1096,7 +1473,7 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       ? (job.type === "delivery_space_updated" || job.type === "content_updated" ? "delivery_space_updated" : "delivery_space_created")
       : (job.type === "content_updated" ? "content_updated" : "new_content");
     await updateProcessingStage(db, jobPath, leaseId, "creating_notifications");
-    const notify = await notifyMany(env, db, users, {
+    const base = {
       type: notificationType,
       title: isDelivery
         ? notificationType === "delivery_space_updated" ? "Entrega actualizada" : "Nuevo espacio de entrega"
@@ -1111,14 +1488,13 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       courseId: scope.moduloId,
       deduplicationKey: notificationDeduplicationKey(job),
       metadata,
-    });
+    };
+    const notify = await notifyMany(env, db, users, base);
     await updateProcessingStage(db, jobPath, leaseId, "sending_push");
-    return {
-      ...dispatchFromNotify(notify),
-      completed: true,
+    return addPushContinuation(job, notify, buildPushTasks(users, base), {
       diagnosticCode: audience.diagnosticReason,
       diagnosticContext: safeDiagnosticContext({ ...scope, audienceType: audience.audienceType, restrictedPath: audience.restrictedPath }, metadata),
-    };
+    });
   }
 
   if (SUBMISSION_JOB_TYPES.includes(job.type)) {
@@ -1138,7 +1514,7 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       deadline: item?.fechaLimiteAt ?? item?.fechaLimite ?? null,
     });
     await updateProcessingStage(db, jobPath, leaseId, "creating_notifications");
-    const notify = await notifyMany(env, db, users, {
+    const base = {
       type: job.type,
       title,
       body,
@@ -1149,9 +1525,12 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       courseId: scope.moduloId,
       deduplicationKey: notificationDeduplicationKey(job),
       metadata,
-    });
+    };
+    const notify = await notifyMany(env, db, users, base);
     await updateProcessingStage(db, jobPath, leaseId, "sending_push");
-    return { ...dispatchFromNotify(notify), completed: true, diagnosticContext: safeDiagnosticContext(scope, metadata) };
+    return addPushContinuation(job, notify, buildPushTasks(users, base), {
+      diagnosticContext: safeDiagnosticContext(scope, metadata),
+    });
   }
 
   if (job.type === "tp_sheet_created" || job.type === "tp_sheet_updated") {
@@ -1162,7 +1541,7 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       sheetTitle: source.titulo,
       publishedAt: source.fechaActualizacion ?? source.fechaCreacion,
     });
-    const notify = await notifyMany(env, db, users, {
+    const base = {
       type: job.type,
       title: job.type === "tp_sheet_created" ? "Nueva planilla de TP" : "Planilla actualizada",
       body: job.type === "tp_sheet_created" ? "Tenes una nueva planilla de trabajos practicos." : "Tu planilla de trabajos practicos fue actualizada.",
@@ -1171,8 +1550,11 @@ async function dispatchJob(env: Env, db: FirestoreRest, job: NotificationJob, jo
       courseId: source.moduloId ?? source.seccionId,
       deduplicationKey: notificationDeduplicationKey(job),
       metadata,
+    };
+    const notify = await notifyMany(env, db, users, base);
+    return addPushContinuation(job, notify, buildPushTasks(users, base), {
+      diagnosticContext: safeDiagnosticContext({ moduloId: source.moduloId, seccionId: source.seccionId, subseccionPath: source.subseccionPath }, metadata),
     });
-    return { ...dispatchFromNotify(notify), completed: true, diagnosticContext: safeDiagnosticContext({ moduloId: source.moduloId, seccionId: source.seccionId, subseccionPath: source.subseccionPath }, metadata) };
   }
 
   throw new Error(`unsupported_job_${job.type}`);
@@ -1356,6 +1738,11 @@ export async function createScheduleReminderJob(env: Env, db: FirestoreRest, par
       lockedBy: null,
       leaseId: null,
       leaseExpiresAt: null,
+      pushStage: null,
+      pushCursor: null,
+      pushRecipientsProcessed: 0,
+      pushRecipientsRemaining: null,
+      pushContinuationQueued: false,
       deduplicationKey: key,
       eventType: "schedule_reminder",
       changeVersion: `${params.dueAt ?? "schedule"}:${params.scheduleVersion}:${params.offsetMinutes}`,
