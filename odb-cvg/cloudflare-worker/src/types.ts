@@ -55,6 +55,14 @@ export interface NotificationJob {
   leaseId?: string;
   leaseExpiresAt?: string;
   internalCreatedAt?: string;
+  pushStage?: "pending" | "completed" | null;
+  pushCursor?: number | null;
+  pushRecipientsProcessed?: number;
+  pushRecipientsRemaining?: number | null;
+  pushContinuationQueued?: boolean;
+  pushTokensFound?: number;
+  pushMessagesAccepted?: number;
+  pushMessagesFailed?: number;
   pushLastAttemptAt?: string;
   deduplicationKey: string;
   createdBy: string;

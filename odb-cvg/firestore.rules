@@ -71,7 +71,9 @@ service cloud.firestore {
       }
 
       match /notificationPreferences/{preferenceId} {
-        allow read, create, update: if request.auth != null
+        allow read: if request.auth != null
+          && request.auth.uid == userId;
+        allow create, update: if request.auth != null
           && request.auth.uid == userId
           && request.resource.data.enabled is bool;
         allow delete: if false;

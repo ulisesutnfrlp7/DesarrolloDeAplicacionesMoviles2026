@@ -1,12 +1,12 @@
 //app/(tabs)/perfil.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,} from "react-native";
 import ModalAlerta from "../../components/ui/ModalAlerta";
 import ModalConfirmacion from "../../components/ui/ModalConfirmacion";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { useUserRole } from "../../hooks/useUserRole";
 import ModalCambiarPassword from "../../components/ui/ModalCambiarPassword";
-import { getPushDiagnostics, getPushPreference, registerCurrentDeviceForPush, setPushEnabled, type PushDiagnostics } from "../../hooks/usePushNotifications";
+import { getPushPreference, registerCurrentDeviceForPush, setPushEnabled } from "../../hooks/usePushNotifications";
 
 export default function PerfilScreen() {
   const { rol, loading: loadingRol } = useUserRole();
@@ -46,7 +46,7 @@ export default function PerfilScreen() {
   const [pushEnabled, setPushEnabledState] = useState(true);
   const [guardandoPush, setGuardandoPush] = useState(false);
   const [pushError, setPushError] = useState("");
-  const [pushDiagnostics, setPushDiagnostics] = useState<PushDiagnostics | null>(null);
+  const autoPushRegistrationAttempted = useRef(false);
 
   useEffect(() => {
     setNombre(perfil.nombre ?? "");
@@ -54,17 +54,23 @@ export default function PerfilScreen() {
   }, [perfil]);
 
   useEffect(() => {
-    getPushPreference().then((pref) => {
+    if (loadingRol || rol !== "alumno") return;
+    getPushPreference().then(async (pref) => {
       setPushEnabledState(pref.enabled);
       if (pref.error) setPushError(pref.error);
+      if (pref.enabled && !autoPushRegistrationAttempted.current) {
+        autoPushRegistrationAttempted.current = true;
+        try {
+          await registerCurrentDeviceForPush();
+        } catch (error: any) {
+          setPushError(error.message ?? "No se pudo registrar este dispositivo para push.");
+          if (error.code === "permission_denied" || error.code === "physical_device_required") {
+            setPushEnabledState(false);
+          }
+        }
+      }
     });
-  }, []);
-
-  useEffect(() => {
-    if (rol === "admin") {
-      getPushDiagnostics().then(setPushDiagnostics).catch(() => setPushDiagnostics(null));
-    }
-  }, [rol]);
+  }, [loadingRol, rol]);
 
   const esAlumno = rol === "alumno";
 
@@ -115,17 +121,25 @@ export default function PerfilScreen() {
 
   const handleTogglePush = async () => {
     setPushError("");
+    if (rol !== "alumno") {
+      setPushError("Las notificaciones push estan disponibles para alumnos.");
+      return;
+    }
     setGuardandoPush(true);
     try {
       if (pushEnabled) {
         await setPushEnabled(false);
         setPushEnabledState(false);
       } else {
+        await setPushEnabled(true);
         await registerCurrentDeviceForPush();
         setPushEnabledState(true);
       }
     } catch (e: any) {
       setPushError(e.message ?? "No se pudo actualizar la configuracion de push.");
+      if (e.code === "permission_denied" || e.code === "physical_device_required") {
+        setPushEnabledState(false);
+      }
     } finally {
       setGuardandoPush(false);
     }
@@ -191,36 +205,30 @@ export default function PerfilScreen() {
         <Text style={styles.botonSecundarioTexto}>Actualizar contraseña</Text>
       </TouchableOpacity>
 
-      <View style={styles.separador} />
-      <Text style={styles.subtituloSeccion}>Notificaciones</Text>
-      <View style={styles.pushBox}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.pushTitle}>Push del dispositivo</Text>
-          <Text style={styles.pushText}>
-            {pushEnabled
-              ? "Activadas para avisos remotos. Las internas siguen disponibles siempre."
-              : "Desactivadas. Vas a seguir viendo las notificaciones dentro de la app."}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.pushSwitch, pushEnabled && styles.pushSwitchOn, guardandoPush && { opacity: 0.6 }]}
-          onPress={handleTogglePush}
-          disabled={guardandoPush}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.pushKnob, pushEnabled && styles.pushKnobOn]} />
-        </TouchableOpacity>
-      </View>
-      {pushError ? <Text style={styles.error}>{pushError}</Text> : null}
-
-      {rol === "admin" && pushDiagnostics ? (
-        <View style={styles.diagnosticsBox}>
-          <Text style={styles.pushTitle}>Diagnostico push</Text>
-          <Text style={styles.pushText}>Permiso local: {pushDiagnostics.permissionStatus}</Text>
-          <Text style={styles.pushText}>ExpoPushToken: {pushDiagnostics.hasExpoPushToken ? `configurado (*${pushDiagnostics.tokenSuffix})` : "no disponible"}</Text>
-          <Text style={styles.pushText}>Guardado en Firestore: {pushDiagnostics.storedInFirestore ? "si" : "no"}</Text>
-          <Text style={styles.pushText}>Preferencia push: {pushDiagnostics.pushEnabled ? "habilitada" : "deshabilitada"}</Text>
-        </View>
+      {esAlumno ? (
+        <>
+          <View style={styles.separador} />
+          <Text style={styles.subtituloSeccion}>Notificaciones</Text>
+          <View style={styles.pushBox}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pushTitle}>Push del dispositivo</Text>
+              <Text style={styles.pushText}>
+                {pushEnabled
+                  ? "Activadas para avisos remotos. Las internas siguen disponibles siempre."
+                  : "Desactivadas. Vas a seguir viendo las notificaciones dentro de la app."}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.pushSwitch, pushEnabled && styles.pushSwitchOn, guardandoPush && { opacity: 0.6 }]}
+              onPress={handleTogglePush}
+              disabled={guardandoPush}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.pushKnob, pushEnabled && styles.pushKnobOn]} />
+            </TouchableOpacity>
+          </View>
+          {pushError ? <Text style={styles.error}>{pushError}</Text> : null}
+        </>
       ) : null}
 
       {esAlumno && (
